@@ -37,6 +37,9 @@ struct RecipeDetailView: View {
     @State private var showsSpecialtySetup = false
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
+    /// The large title's bottom edge in the scroll view, so the bar's title shows only once the
+    /// large one has gone under the bar: one title at a time.
+    @State private var titleBottom: CGFloat = .infinity
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// The page's safe area, which shows iPhone Duo's cover-screen button column.
@@ -138,11 +141,11 @@ struct RecipeDetailView: View {
                             .padding(.horizontal, DS.Space.l)
                     }
                     RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
-                        .stickyBelowTop(pinTop)
+                        .stickyBelowTop(barBottom)
                         .zIndex(1)
                     sectionContent
                         .padding(.horizontal, DS.Space.l)
-                        .padding(.top, -16)
+                        .padding(.top, -DS.Space.l)
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
@@ -163,6 +166,18 @@ struct RecipeDetailView: View {
             }
         }
         .ignoresSafeArea(edges: .top)
+        // Once the photo has scrolled away, a solid bar with a hairline under it: nothing that
+        // scrolls under the buttons shows through as a blurred ghost or gets cut mid-line.
+        .overlay(alignment: .top) {
+            if showsNavigationBar {
+                DS.Colors.barBackground
+                    .frame(height: barBottom)
+                    .overlay(alignment: .bottom) { Divider() }
+                    .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         // The page has nothing to type in.
         .ignoresSafeArea(.keyboard)
         .background(DS.Colors.background)
@@ -177,9 +192,10 @@ struct RecipeDetailView: View {
             let shows = RecipeDetailHeader.showsBar(offset: offset, heroHeight: heroHeight, showing: showsNavigationBar)
             if shows != showsNavigationBar { showsNavigationBar = shows }
         }
-        .navigationTitle(showsNavigationBar ? name : "")
+        .navigationTitle(showsBarTitle ? name : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(showsNavigationBar ? .visible : .hidden, for: .navigationBar)
+        .modifier(RecipeScrollEdge())
         .toolbar {
             // One group, so Start Cooking and the ⋯ menu share a pill.
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -195,10 +211,9 @@ struct RecipeDetailView: View {
                             Image(systemName: "frying.pan")
                             Text("Start Cooking")
                         }
-                        .font(.subheadline.weight(.semibold))
                         .padding(.horizontal, DS.Space.xxs)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                     .accessibilityLabel("Start Cooking")
                 }
                 if hasMoreMenu {
@@ -241,7 +256,7 @@ struct RecipeDetailView: View {
         .sheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {
             SpecialtyIngredientsSheet()
         }
-        .alert("Couldn't Change That", isPresented: Binding(presenting: $leaveOutError)) {
+        .alert("Couldn’t Change That", isPresented: Binding(presenting: $leaveOutError)) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(leaveOutError ?? "")
@@ -306,11 +321,14 @@ struct RecipeDetailView: View {
             .frame(width: geometry.size.width, height: geometry.size.height + stretch)
             .clipped()
             .overlay(alignment: .top) {
-                // Keeps the back and share buttons legible over a bright photo.
+                // A wash of the page's own background behind the status bar and the buttons, so
+                // the clock and the bar's glyphs (dark in light mode, light in dark) read over any
+                // photo.
                 LinearGradient(
-                    colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom
+                    colors: [DS.Colors.background.opacity(RecipeDetailHeader.scrimOpacity), .clear],
+                    startPoint: .top, endPoint: .bottom
                 )
-                .frame(height: 120)
+                .frame(height: RecipeDetailHeader.scrimHeight)
                 .allowsHitTesting(false)
             }
             .overlay(alignment: .bottomLeading) {
@@ -327,8 +345,26 @@ struct RecipeDetailView: View {
             proxy.size.width
         } action: { width in
             // About 45% of the screen's height, from the width the screen gives us.
-            heroHeight = max(240, min(width * 1.1, 420))
+            heroHeight = RecipeDetailHeader.heroHeight(width: width, isWide: isWideScreen)
         }
+    }
+
+    /// An iPad, or a phone on its side: the photo stops at `DS.Size.heroMaxHeight`.
+    private var isWideScreen: Bool {
+        horizontalSizeClass == .regular || verticalSizeClass == .compact
+    }
+
+    /// Where the bar ends: the scroll view's top inset, or the page's top safe area when the
+    /// scroll view, drawn under the bar, reports none.
+    private var barBottom: CGFloat {
+        max(pinTop, safeArea.top)
+    }
+
+    /// The bar's small title, once the large one has scrolled under the bar. Not when Start
+    /// Cooking fills the middle of the bar: the title showed through behind it.
+    private var showsBarTitle: Bool {
+        let cookInTopBar = recipe?.steps.isEmpty == false && startCookingPlacement == .topBar
+        return !cookInTopBar && showsNavigationBar && titleBottom < barBottom
     }
 
     /// "Autopilot pick" or "Make Again" from the card this recipe was opened from.
@@ -355,7 +391,9 @@ struct RecipeDetailView: View {
             }
             if recipe != nil, canEditRecipe {
                 Button("Edit Recipe", systemImage: "pencil") { showsEditor = true }
-                Button("Delete Recipe", systemImage: "trash", role: .destructive) {
+                // Not red here: red on the menu's glass over a photo didn't read, and the
+                // confirmation that follows is the red, destructive step.
+                Button("Delete Recipe", systemImage: "trash") {
                     deleting = summary
                 }
             }
@@ -376,26 +414,32 @@ struct RecipeDetailView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
             Text(name)
-                .font(.largeTitle.bold())
+                .font(DS.Typography.largeTitle)
                 .foregroundStyle(Color.primary)
+                .accessibilityAddTraits(.isHeader)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .scrollView).maxY
+                } action: { bottom in
+                    titleBottom = bottom
+                }
             if let headline = recipe?.headline ?? summary.headline, !headline.isEmpty {
                 Text(headline)
-                    .font(.title3)
-                    .foregroundStyle(Color.secondary)
+                    .font(DS.Typography.subtitle)
+                    .foregroundStyle(DS.Colors.secondaryText)
             }
             RecipeStatsRow(stats: stats)
                 .padding(.top, DS.Space.xxs)
             if let cuisine = cuisineText {
                 Label(cuisine, systemImage: "globe")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
                     .accessibilityLabel("Cuisine: \(cuisine)")
                     .accessibilityIdentifier("RecipeCuisineShown")
             }
             if !tags.isEmpty {
                 ChipFlowLayout(spacing: DS.Space.xs) {
                     ForEach(tags, id: \.self) { tag in
-                        MenuChip(text: tag)
+                        RecipeTagChip(text: tag)
                     }
                 }
             }
@@ -695,6 +739,9 @@ struct RecipeDetailTabPicker: View {
 }
 
 /// The recipe screen's four numbers: time, calories, protein, and difficulty.
+///
+/// One row when every value fits on one line; otherwise two rows of two (a narrow phone, the
+/// Duo's cover screen, large text). A value never wraps or breaks mid-word.
 struct RecipeStatsRow: View {
     let stats: [MenuFormat.Stat]
 
@@ -702,26 +749,92 @@ struct RecipeStatsRow: View {
 
     var body: some View {
         if !stats.isEmpty {
-            let columns = Array(
-                repeating: GridItem(.flexible(), alignment: .topLeading),
-                count: dynamicTypeSize.isAccessibilitySize ? 2 : min(stats.count, 4))
-            LazyVGrid(columns: columns, alignment: .leading, spacing: DS.Space.m) {
-                ForEach(stats) { stat in
-                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                        Text(stat.title)
-                            .font(.caption2)
-                            .foregroundStyle(Color.secondary)
-                        Label(stat.value, systemImage: stat.systemImage)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.primary)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    grid(columns: RecipeStatsLayout.fallbackColumns(count: stats.count))
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: DS.Space.m) {
+                            ForEach(stats) { stat in
+                                cell(stat).frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        grid(columns: RecipeStatsLayout.fallbackColumns(count: stats.count))
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(stat.title)
-                    .accessibilityValue(stat.accessibilityValue)
                 }
             }
             .padding(.vertical, DS.Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func grid(columns: Int) -> some View {
+        Grid(alignment: .topLeading, horizontalSpacing: DS.Space.m, verticalSpacing: DS.Space.m) {
+            ForEach(Array(stride(from: 0, to: stats.count, by: columns)), id: \.self) { start in
+                GridRow {
+                    ForEach(stats[start..<min(start + columns, stats.count)]) { stat in
+                        cell(stat).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private func cell(_ stat: MenuFormat.Stat) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            Text(stat.title)
+                .font(DS.Typography.caption)
+                .foregroundStyle(DS.Colors.secondaryText)
+                .lineLimit(1)
+            HStack(spacing: DS.Space.xxs) {
+                Image(systemName: stat.systemImage)
+                    .foregroundStyle(DS.Colors.badge)
+                    .accessibilityHidden(true)
+                Text(stat.value)
+                    .foregroundStyle(Color.primary)
+            }
+            .font(DS.Typography.subheadline.weight(.semibold))
+            .lineLimit(1)
+            // Its whole width, so a word like "Medium" is never hyphenated.
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stat.title)
+        .accessibilityValue(stat.accessibilityValue)
+    }
+}
+
+/// How the recipe screen's stats wrap when one row is too narrow.
+enum RecipeStatsLayout {
+    /// Two columns, so four stats make two even rows; a single stat keeps one.
+    static func fallbackColumns(count: Int) -> Int {
+        min(max(count, 1), 2)
+    }
+}
+
+/// A tag under the recipe's title: primary text on a gray capsule, so it reads in light and dark
+/// (the plain menu chip's gray on gray was too faint here).
+struct RecipeTagChip: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(DS.Typography.caption.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, DS.Space.xxs)
+            .background(DS.Colors.fill, in: .capsule)
+    }
+}
+
+/// No system scroll edge at the top: its blur showed the large title and chips as a ghost under
+/// the bar. The page draws its own solid bar instead.
+private struct RecipeScrollEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            content
         }
     }
 }
@@ -802,6 +915,17 @@ enum RecipeDetailHeader {
     /// nothing while it's still below that line.
     nonisolated static func stickyOffset(minY: CGFloat, top: CGFloat) -> CGFloat {
         max(0, top - minY)
+    }
+
+    /// The background wash at the top of the photo, behind the status bar and the buttons.
+    static let scrimHeight: CGFloat = 140
+    static let scrimOpacity: Double = 0.7
+
+    /// The photo's height for a screen `width` wide: about 45% of a phone's height, and never
+    /// taller than `DS.Size.heroMaxHeight` on an iPad or a phone on its side.
+    static func heroHeight(width: CGFloat, isWide: Bool) -> CGFloat {
+        let natural = max(240, min(width * 1.1, 420))
+        return isWide ? min(natural, DS.Size.heroMaxHeight) : natural
     }
 
     /// Shows once the page is scrolled close to the end of the header, and hides again only

@@ -193,7 +193,7 @@ final class GroceryExportController {
         case is CancellationError:
             return
         default:
-            report(error: String(localized: "Couldn't add to Reminders. Try again."))
+            report(error: String(localized: "Couldn’t add to Reminders. Try again."))
         }
     }
 
@@ -458,7 +458,7 @@ struct ListAppGuideSheet: View {
                         .foregroundStyle(.secondary)
                     if app == .anyList {
                         Label(
-                            "Don't use AnyList Recipe Import from the share sheet. It reads your list as a recipe.",
+                            "Don’t use AnyList Recipe Import from the share sheet. It reads your list as a recipe.",
                             systemImage: "exclamationmark.triangle"
                         )
                         .font(.subheadline)
@@ -473,7 +473,7 @@ struct ListAppGuideSheet: View {
                 .frame(maxWidth: 560)
                 .frame(maxWidth: .infinity)
             }
-            .navigationTitle("Add your list to \(app.name)")
+            .navigationTitle("Add Your List to \(app.name)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -497,7 +497,9 @@ struct ListAppGuideSheet: View {
                     .disabled(copied || handoff.drafts.isEmpty)
                 }
                 .padding(DS.Space.l)
-                .background(.bar)
+                .dsReadableWidth()
+                .background(DS.Colors.barBackground)
+                .overlay(alignment: .top) { Divider() }
             }
         }
     }
@@ -534,9 +536,9 @@ private struct ListAppGuideStepView: View {
             HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                 Text("\(number)")
                     .font(.headline)
-                    .foregroundStyle(Color("OnAccent"))
-                    .frame(minWidth: 28, minHeight: 28)
-                    .background(Circle().fill(.tint))
+                    .foregroundStyle(DS.Colors.onAccent)
+                    .frame(minWidth: DS.Size.iconColumn, minHeight: DS.Size.iconColumn)
+                    .background(Circle().fill(DS.Colors.accent))
                     .accessibilityHidden(true)
                 Text(step.text)
                     .font(.body.weight(.medium))
@@ -569,6 +571,7 @@ extension View {
             controller: GroceryExportController(remindersStore: PreviewRemindersStore()),
             model: .preview(session: session, list: PlanPreviewData.groceryList, checked: ["garlic"]))
     }
+    .dsReadableForm()
 }
 
 /// A Reminders store that does nothing, so previews never touch the real database.

@@ -63,6 +63,7 @@ struct ChangeCodeView: View {
                 }
             }
         }
+        .dsReadableForm()
         .navigationTitle("Change Your Code")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

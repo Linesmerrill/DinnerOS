@@ -21,6 +21,14 @@ enum BuildChannel: Equatable, Sendable {
         }
     }
 
+    /// Whether a comp's Plus line may thank the household for testing: in development builds,
+    /// and in TestFlight for a household with the beta comp. Never in an App Store build, and
+    /// never while the channel is unknown (`nil`), which counts as the App Store (build 121).
+    static func showsTesterThanks(_ channel: BuildChannel?, comp: PlusComp?) -> Bool {
+        guard let channel, let comp else { return false }
+        return channel.showsBetaFeedback(testedTheBeta: comp.isBeta)
+    }
+
     /// The channel from what StoreKit says, falling back to the receipt's file name when
     /// StoreKit can't answer (offline on first launch). Unknown counts as the App Store, so a
     /// reviewer never sees beta wording.

@@ -43,13 +43,13 @@ const (
 
 // What a member is told when a page can't be read (decision 726).
 const (
-	msgNoRecipe   = "We couldn't find a recipe on that page."
-	msgBlocked    = "That site didn't let us read the page."
-	msgNotLoaded  = "That page didn't load. Check the link and try again."
+	msgNoRecipe   = "We couldn’t find a recipe on that page."
+	msgBlocked    = "That site didn’t let us read the page."
+	msgNotLoaded  = "That page didn’t load. Check the link and try again."
 	msgNeedsPhone = "That site only shows its recipes in a web browser."
-	msgNotAddress = "That doesn't look like a web address."
-	msgNotPublic  = "That address isn't on the public internet."
-	msgNotPage    = "That link isn't a web page."
+	msgNotAddress = "That doesn’t look like a web address."
+	msgNotPublic  = "That address isn’t on the public internet."
+	msgNotPage    = "That link isn’t a web page."
 )
 
 // FetchError is why a page couldn't be read: a code for the app and a
@@ -261,7 +261,7 @@ func parseLooseURL(raw string) (*url.URL, error) {
 		return nil, fetchErr("Only links that start with http or https can be read.")
 	}
 	if u.User != nil {
-		return nil, fetchErr("Links with a username or password in them can't be read.")
+		return nil, fetchErr("Links with a username or password in them can’t be read.")
 	}
 	if u.Hostname() == "" {
 		return nil, fetchErr(msgNotAddress)

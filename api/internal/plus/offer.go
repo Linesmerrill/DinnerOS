@@ -78,7 +78,7 @@ func DefaultOffer() Offer {
 		Title:    "DinnerOS Plus",
 		Subtitle: "Let DinnerOS plan your week and track what you spend.",
 		Benefits: []string{
-			"Autopilot plans the week's dinners for you.",
+			"Autopilot plans the week’s dinners for you.",
 			"See what each week costs and how much you save.",
 			"One plan covers everyone in your household.",
 		},
@@ -87,10 +87,10 @@ func DefaultOffer() Offer {
 			{ProductID: ProductMonthly, Name: "Monthly", PriceText: "$4.99 a month"},
 		},
 		TrialDays:   TrialDays,
-		TrialText:   "Try it free for 14 days",
+		TrialText:   "Try It Free for 14 Days",
 		BuyText:     "Get DinnerOS Plus",
 		Terms:       "Payment goes through your Apple account. Plus renews automatically until you cancel. Cancel in your Apple account settings at least 24 hours before the free trial or the current period ends.",
-		RestoreText: "Restore purchases",
+		RestoreText: "Restore Purchases",
 		FreeText:    "Sending your list to a store is always free.",
 		Links: []Link{
 			{Title: "Privacy Policy", URL: PrivacyURL},

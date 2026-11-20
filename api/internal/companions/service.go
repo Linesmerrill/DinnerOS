@@ -292,12 +292,12 @@ func (s *Service) build(ctx context.Context, householdID string, in Input) (Comp
 	}
 	for _, id := range n.RecipeIDs {
 		if !hexID.MatchString(id) {
-			return Companion{}, invalid("One of those recipes isn't in your recipes anymore.")
+			return Companion{}, invalid("One of those recipes isn’t in your recipes anymore.")
 		}
 		r, err := s.opts.Recipes.Get(ctx, householdID, id)
 		switch {
 		case errors.Is(err, recipes.ErrNotFound):
-			return Companion{}, invalid("One of those recipes isn't in your recipes anymore.")
+			return Companion{}, invalid("One of those recipes isn’t in your recipes anymore.")
 		case err != nil:
 			return Companion{}, fmt.Errorf("load recipe: %w", err)
 		}

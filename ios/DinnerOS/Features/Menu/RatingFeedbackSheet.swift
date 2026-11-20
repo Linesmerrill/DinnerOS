@@ -35,7 +35,7 @@ struct RatingFeedbackSheet: View {
                         content(questions, feedback)
                     } else if let loadError {
                         ContentUnavailableView(
-                            "Couldn't Load the Questions", systemImage: "wifi.slash", description: Text(loadError))
+                            "Couldn’t Load the Questions", systemImage: "wifi.slash", description: Text(loadError))
                     } else {
                         ProgressView().frame(maxWidth: .infinity)
                     }
@@ -65,7 +65,7 @@ struct RatingFeedbackSheet: View {
         VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Text(
                 score == 5
-                    ? String(localized: "Anything you'd change?")
+                    ? String(localized: "Anything you’d change?")
                     : questions?.title ?? String(localized: "What could have been better?")
             )
             .font(.title3.weight(.semibold))

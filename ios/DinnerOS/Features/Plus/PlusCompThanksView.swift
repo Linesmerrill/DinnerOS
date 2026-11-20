@@ -46,11 +46,11 @@ struct PlusCompThanksView: View {
                         .padding(DS.Space.l)
                         .background(.background.secondary, in: .rect(cornerRadius: DS.Radius.large))
                     }
-                    Label("Founding member", systemImage: "star.fill")
+                    Label("Founding Member", systemImage: "star.fill")
                         .font(.subheadline.bold())
                         .padding(.horizontal, DS.Space.m)
                         .padding(.vertical, DS.Space.xs)
-                        .background(.tint.opacity(0.15), in: .capsule)
+                        .background(DS.Colors.badge.opacity(0.15), in: .capsule)
                     Button {
                         dismiss()
                     } label: {

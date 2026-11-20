@@ -109,7 +109,7 @@ struct PlanEntryEditor: View {
         } catch is CancellationError {
             return
         } catch {
-            optionsError = String(localized: "Couldn't load this recipe's serving sizes.")
+            optionsError = String(localized: "Couldn’t load this recipe’s serving sizes.")
         }
     }
 

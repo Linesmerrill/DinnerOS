@@ -139,7 +139,7 @@ func (w *Walmart) ParseProduct(input string) (ProductRef, error) {
 		return ProductRef{}, invalid("%s", walmartLinkHelp)
 	}
 	if u.User != nil || u.Port() != "" || !walmartHosts[strings.ToLower(u.Hostname())] {
-		return ProductRef{}, invalid("That isn't a Walmart link. %s", walmartLinkHelp)
+		return ProductRef{}, invalid("That isn’t a Walmart link. %s", walmartLinkHelp)
 	}
 	segments := strings.Split(strings.TrimSuffix(strings.TrimPrefix(u.Path, "/"), "/"), "/")
 	var id, slug string
@@ -149,7 +149,7 @@ func (w *Walmart) ParseProduct(input string) (ProductRef, error) {
 	case len(segments) == 3 && segments[0] == "ip" && segments[1] != "":
 		id, slug = segments[2], segments[1]
 	default:
-		return ProductRef{}, invalid("That Walmart link isn't a product page. %s", walmartLinkHelp)
+		return ProductRef{}, invalid("That Walmart link isn’t a product page. %s", walmartLinkHelp)
 	}
 	if !walmartItemID.MatchString(id) {
 		return ProductRef{}, invalid("That Walmart link is missing the item number. %s", walmartLinkHelp)

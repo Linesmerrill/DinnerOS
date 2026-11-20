@@ -170,7 +170,7 @@ func (m *model) score(s *slot, it *item) cand {
 	if n := st.cooked + st.skipped - st.skippedAside; n > 0 {
 		conversion = 2*(float64(st.cooked)+1)/(float64(n)+2) - 1
 		if conversion >= 0.3 {
-			conversionText = "You usually cook it when it's planned"
+			conversionText = "You usually cook it when it’s planned"
 		}
 	}
 	explain("conversion", conversionText, add(SignalConversion, conversion, w.Conversion), false)
@@ -192,7 +192,7 @@ func (m *model) score(s *slot, it *item) cand {
 		recency = -0.1
 	case d >= 10 && historyCount >= 2 && (st.ratingCount == 0 || float64(st.ratingSum)/float64(st.ratingCount) >= 3.5):
 		recency = 0.3
-		recencyText = fmt.Sprintf("Haven't had it in %d weeks", d)
+		recencyText = fmt.Sprintf("Haven’t had it in %d weeks", d)
 	}
 	explain("notRecently", recencyText, add(SignalRecency, recency, w.Recency), false)
 

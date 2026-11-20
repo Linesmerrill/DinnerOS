@@ -41,9 +41,9 @@ struct GroceryListView: View {
                 GroceryListContent(model: model)
             } else if couldNotStart {
                 ContentUnavailableView {
-                    Label("Couldn't Build the List", systemImage: "exclamationmark.triangle")
+                    Label("Couldn’t Build the List", systemImage: "exclamationmark.triangle")
                 } description: {
-                    Text("Couldn't load your household. Try again in a moment.")
+                    Text("Couldn’t load your household. Try again in a moment.")
                 } actions: {
                     Button("Try Again") {
                         Task { await start() }
@@ -211,7 +211,7 @@ struct GroceryListContent: View {
             .sheet(item: $picker) { specialty in
                 SpecialtyQuickPicker(specialty: specialty, model: model)
             }
-            .alert("Couldn't Remove That", isPresented: Binding(presenting: $removeError)) {
+            .alert("Couldn’t Remove That", isPresented: Binding(presenting: $removeError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(removeError ?? "")
@@ -278,7 +278,7 @@ struct GroceryListContent: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Build the List", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Build the List", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -376,7 +376,7 @@ struct GroceryListContent: View {
                 } header: {
                     Text("Added Offline")
                 } footer: {
-                    Text("These go on the list when you're back online.")
+                    Text("These go on the list when you’re back online.")
                 }
             }
             ForEach(layout.categories) { category in
@@ -423,7 +423,7 @@ struct GroceryListContent: View {
                 } header: {
                     Text("Skipped")
                 } footer: {
-                    Text("The recipes still call for these. You're just not buying them.")
+                    Text("The recipes still call for these. You’re just not buying them.")
                 }
             }
         }
@@ -770,8 +770,8 @@ private struct SkippedEntriesNotice: View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
             Label(
                 skipped.count == 1
-                    ? String(localized: "1 recipe isn't included")
-                    : String(localized: "\(skipped.count) recipes aren't included"),
+                    ? String(localized: "1 recipe isn’t included")
+                    : String(localized: "\(skipped.count) recipes aren’t included"),
                 systemImage: "exclamationmark.triangle.fill"
             )
             .symbolRenderingMode(.multicolor)

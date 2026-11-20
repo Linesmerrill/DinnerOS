@@ -194,7 +194,7 @@ func TestRateValidation(t *testing.T) {
 		{"comment too long", RateInput{Score: 3, Comment: strings.Repeat("é", 501)}, "comment must be at most 500 characters"},
 		{"unknown tag", RateInput{Score: 3, Tags: []string{"yummy"}}, `tag "yummy" is not allowed; tags must be from: make-again, never-again`},
 		{"tag case matters", RateInput{Score: 3, Tags: []string{"Make-Again"}}, "is not allowed"},
-		{"contradictory tags", RateInput{Score: 3, Tags: []string{"never-again", "make-again"}}, "can't be used together"},
+		{"contradictory tags", RateInput{Score: 3, Tags: []string{"never-again", "make-again"}}, "can’t be used together"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

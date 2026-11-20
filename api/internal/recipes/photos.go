@@ -154,7 +154,7 @@ func (h *Handler) uploadPhoto(w http.ResponseWriter, r *http.Request) {
 		ct = ct[:i]
 	}
 	if !photoContentTypes[ct] {
-		validationFailed(w, r, "That file isn't a photo.")
+		validationFailed(w, r, "That file isn’t a photo.")
 		return
 	}
 	data, err := io.ReadAll(r.Body)
@@ -164,14 +164,14 @@ func (h *Handler) uploadPhoto(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "payload_too_large", "That photo is too big.")
 		return
 	case err != nil:
-		validationFailed(w, r, "That photo didn't upload. Try again.")
+		validationFailed(w, r, "That photo didn’t upload. Try again.")
 		return
 	}
 	actor, _ := households.MembershipFromContext(r.Context())
 	id, err := h.opts.Service.SavePhoto(r.Context(), actor.HouseholdID, data)
 	switch {
 	case errors.Is(err, errNotAPhoto):
-		validationFailed(w, r, "That file isn't a photo.")
+		validationFailed(w, r, "That file isn’t a photo.")
 		return
 	case err != nil:
 		h.internalError(w, r, "save recipe photo failed", err)

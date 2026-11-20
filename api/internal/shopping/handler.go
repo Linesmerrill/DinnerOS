@@ -1048,17 +1048,17 @@ func (v *responseView) exclusionText(provider providers.Key, reason ExclusionRea
 	case ExcludedNoProduct:
 		return "Choose a " + v.providerName(provider) + " product"
 	case ExcludedNotOnList:
-		return "No longer on this week's list"
+		return "No longer on this week’s list"
 	case ExcludedOrdered:
 		return "Ordered this week"
 	case ExcludedProductGone:
 		return "No longer on " + v.providerName(provider) + ". Choose another or skip it."
 	case ExcludedProductUnverified:
-		return "Couldn't check it on " + v.providerName(provider) + "."
+		return "Couldn’t check it on " + v.providerName(provider) + "."
 	case ExcludedLeftOutGone:
 		return "Skipped. No longer on " + v.providerName(provider) + "."
 	case ExcludedLeftOutUnverified:
-		return "Skipped. Couldn't check it on " + v.providerName(provider) + "."
+		return "Skipped. Couldn’t check it on " + v.providerName(provider) + "."
 	}
 	return ""
 }
@@ -1829,7 +1829,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "That sign-in expired. Try again.")
 	case errors.Is(err, ErrSearchUnavailable), errors.Is(err, ErrCartUnavailable):
 		h.logger.WarnContext(r.Context(), msg, "error", err)
-		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_error", "The store isn't answering. Try again in a minute.")
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_error", "The store isn’t answering. Try again in a minute.")
 	case errors.Is(err, ErrEverythingLeftOut):
 		httpx.WriteError(w, r, http.StatusConflict, "nothing_to_send",
 			"Nothing to add to your cart. You skipped every item that has a product.")
@@ -1847,7 +1847,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.Is(err, ErrUnknownProvider):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "unknown shopping provider")
 	case errors.Is(err, ErrProviderUnavailable):
-		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_unavailable", "That store isn't available yet.")
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_unavailable", "That store isn’t available yet.")
 	case errors.Is(err, ErrNotFound), errors.Is(err, pantry.ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "saved product or handoff not found")
 	case errors.Is(err, ErrForbidden), errors.Is(err, pantry.ErrForbidden):

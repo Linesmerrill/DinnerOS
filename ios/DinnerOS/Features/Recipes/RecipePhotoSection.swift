@@ -40,7 +40,7 @@ final class RecipePhotoModel {
     /// Sends a photo from the camera or the library.
     func send(_ image: UIImage, to imageURL: Binding<String?>, source: RecipePhotoSource) async {
         guard let jpeg = RecipePhotoPrep.jpeg(from: image) else {
-            errorMessage = String(localized: "Couldn't open that photo. Try another one.")
+            errorMessage = String(localized: "Couldn’t open that photo. Try another one.")
             return
         }
         await replace(imageURL, showing: image) { (try await source.upload(jpeg), nil) }
@@ -74,7 +74,7 @@ final class RecipePhotoModel {
             errorMessage =
                 image == nil
                 ? HouseholdStore.message(for: error)
-                : String(localized: "Couldn't add the photo. Check your connection and try again.")
+                : String(localized: "Couldn’t add the photo. Check your connection and try again.")
         }
     }
 }

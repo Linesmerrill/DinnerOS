@@ -124,7 +124,7 @@ struct AddRecipeForm: View {
                 } header: {
                     Text("Paste the Recipe")
                 } footer: {
-                    Text("Headings like \"Ingredients\" and \"Steps\" help us split it up. You'll review it next.")
+                    Text("Headings like \"Ingredients\" and \"Steps\" help us split it up. You’ll review it next.")
                 }
             case .link:
                 Section {
@@ -165,7 +165,7 @@ struct AddRecipeForm: View {
                     }
                     .accessibilityIdentifier("ImportFailedPasteText")
                 } footer: {
-                    Text("Type the recipe in and we'll keep the link with it, or paste the recipe's text.")
+                    Text("Type the recipe in and we’ll keep the link with it, or paste the recipe’s text.")
                 }
             } else if !fromChooser {
                 Section {
@@ -312,7 +312,7 @@ struct RecipeDraftReviewForm: View {
                         store.draft.sourceURL = nil
                     }
                 } footer: {
-                    Text("We'll save this link with your recipe.")
+                    Text("We’ll save this link with your recipe.")
                 }
             }
             if !warnings.isEmpty {

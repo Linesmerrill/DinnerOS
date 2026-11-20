@@ -14,6 +14,9 @@ struct GetStartedSection: View {
     var dismissals: any FirstRunDismissalStorage
     /// Opens the Add a Recipe choices, which the Menu holds. Without one there's no button.
     var onAddOwnRecipe: (() -> Void)?
+    /// Told whether the card is showing, so the Menu can leave out its own Shared Recipes row
+    /// while this card already offers it (one way in, not three).
+    var onShownChange: ((Bool) -> Void)?
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(HouseholdStore.self) private var households
@@ -23,10 +26,12 @@ struct GetStartedSection: View {
 
     init(
         dismissals: any FirstRunDismissalStorage = UserDefaultsFirstRunDismissals(),
-        onAddOwnRecipe: (() -> Void)? = nil
+        onAddOwnRecipe: (() -> Void)? = nil,
+        onShownChange: ((Bool) -> Void)? = nil
     ) {
         self.dismissals = dismissals
         self.onAddOwnRecipe = onAddOwnRecipe
+        self.onShownChange = onShownChange
     }
 
     private var householdID: String? { households.current?.household.id }
@@ -53,6 +58,9 @@ struct GetStartedSection: View {
             guard let userID = key.userID, let householdID = key.householdID else { return }
             isDismissed = dismissals.isDismissed(userID: userID, householdID: householdID)
         }
+        .onChange(of: isShown, initial: true) { _, shown in
+            onShownChange?(shown)
+        }
     }
 
     private var card: some View {
@@ -63,13 +71,13 @@ struct GetStartedSection: View {
         .padding(DS.Space.l)
         .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Get started"))
+        .accessibilityLabel(Text("Get Started"))
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
             VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                Text("Let's Fill Your Library")
+                Text("Let’s Fill Your Library")
                     .font(.title3.bold())
                     .accessibilityAddTraits(.isHeader)
                 Text("Add recipes to start planning.")
@@ -77,7 +85,7 @@ struct GetStartedSection: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             Button {
                 dismiss()
             } label: {
@@ -86,7 +94,7 @@ struct GetStartedSection: View {
                     .padding(DS.Space.xs)
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Dismiss")
+            .accessibilityLabel("Close")
             .accessibilityHint("Hides this until you add recipes.")
         }
     }
@@ -117,6 +125,15 @@ struct GetStartedSection: View {
     private struct DismissalKey: Equatable {
         let userID: String?
         let householdID: String?
+    }
+}
+
+/// Where the Menu offers Shared Recipes. A new household saw three ways in at once (the Get
+/// Started card, the Shared Recipes row, and the empty All Meals), so there is one at a time.
+nonisolated enum MenuEntryPoints {
+    /// The Shared Recipes row under Your Meals shows only while the Get Started card doesn't.
+    static func showsSharedRecipesRow(getStartedShown: Bool) -> Bool {
+        !getStartedShown
     }
 }
 

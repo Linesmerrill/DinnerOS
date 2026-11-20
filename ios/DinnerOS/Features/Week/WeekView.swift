@@ -39,7 +39,7 @@ struct WeekView: View {
             .sheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
             }
-            .alert("Couldn't Change the Week", isPresented: Binding(presenting: $actionError)) {
+            .alert("Couldn’t Change the Week", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(actionError ?? "")
@@ -54,7 +54,7 @@ struct WeekView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load This Week", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load This Week", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -149,7 +149,7 @@ struct WeekView: View {
                 Label("Nothing Planned", systemImage: "calendar")
             } description: {
                 if canEditEntries {
-                    Text("Add recipes from your library to plan this week's dinners.")
+                    Text("Add recipes from your library to plan this week’s dinners.")
                 } else {
                     Text("Nobody has planned this week yet.")
                 }
@@ -186,7 +186,7 @@ struct WeekView: View {
                 markCooked(entry)
             }
             .tint(.green)
-            Button("Didn't Make It", systemImage: "xmark") {
+            Button("Didn’t Make It", systemImage: "xmark") {
                 markNotMade(entry, reason: nil)
             }
             .tint(.orange)
@@ -204,7 +204,7 @@ struct WeekView: View {
                     markCooked(entry)
                 }
                 .disabled(outcome == .cooked)
-                Menu("Didn't Make It", systemImage: "xmark.circle") {
+                Menu("Didn’t Make It", systemImage: "xmark.circle") {
                     ForEach(SkipReason.allCases) { reason in
                         Button(reason.title) { markNotMade(entry, reason: reason) }
                     }

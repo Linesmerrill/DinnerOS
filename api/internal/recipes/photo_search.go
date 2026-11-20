@@ -174,7 +174,7 @@ func (h *Handler) mountPhotoSearch(r chi.Router, edit func(http.Handler) http.Ha
 }
 
 func photoSearchOff(w http.ResponseWriter, r *http.Request) {
-	httpx.WriteError(w, r, http.StatusServiceUnavailable, "photo_search_off", "Photo search isn't available right now.")
+	httpx.WriteError(w, r, http.StatusServiceUnavailable, "photo_search_off", "Photo search isn’t available right now.")
 }
 
 func (h *Handler) photoSearchStatus(w http.ResponseWriter, _ *http.Request) {
@@ -191,7 +191,7 @@ func (h *Handler) searchPhotos(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("page"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 {
-			validationFailed(w, r, "That page doesn't exist.")
+			validationFailed(w, r, "That page doesn’t exist.")
 			return
 		}
 		page = n
@@ -209,7 +209,7 @@ func (h *Handler) searchPhotos(w http.ResponseWriter, r *http.Request) {
 		return
 	case err != nil:
 		h.logger.WarnContext(r.Context(), "photo search failed", "error", err)
-		httpx.WriteError(w, r, http.StatusBadGateway, "photo_search_failed", "Couldn't search for photos. Try again.")
+		httpx.WriteError(w, r, http.StatusBadGateway, "photo_search_failed", "Couldn’t search for photos. Try again.")
 		return
 	}
 	out := PhotoSearchResponse{
@@ -240,11 +240,11 @@ func (h *Handler) photoFromSearch(w http.ResponseWriter, r *http.Request) {
 		photoSearchOff(w, r)
 		return
 	case errors.Is(err, photosearch.ErrNotFound):
-		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That photo isn't there anymore. Pick another one.")
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That photo isn’t there anymore. Pick another one.")
 		return
 	case err != nil:
 		h.logger.WarnContext(r.Context(), "photo pick failed", "error", err)
-		httpx.WriteError(w, r, http.StatusBadGateway, "photo_search_failed", "Couldn't add that photo. Try again.")
+		httpx.WriteError(w, r, http.StatusBadGateway, "photo_search_failed", "Couldn’t add that photo. Try again.")
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, PhotoPickResponse{ImageURL: picked.ImageURL, Credit: NewImageCreditResponse(&picked.Credit)})

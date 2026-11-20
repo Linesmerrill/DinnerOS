@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
@@ -265,6 +267,9 @@ type NutrientResponse struct {
 	Name   string  `json:"name"`
 	Amount float64 `json:"amount"`
 	Unit   string  `json:"unit"`
+	// Text is the value as the app shows it ("640 Cal", "39 g"). Sent, never
+	// read: a request's text is ignored.
+	Text string `json:"text,omitempty"`
 }
 
 // StepResponse is one instruction.
@@ -365,7 +370,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		resp.Deleted, resp.InCatalog = true, false
 	}
 	for _, n := range r.Nutrition {
-		resp.Nutrition = append(resp.Nutrition, NutrientResponse(n))
+		resp.Nutrition = append(resp.Nutrition, NewNutrientResponse(n))
 	}
 	for _, s := range r.Steps {
 		s.Text = CleanStepText(s.Text)
@@ -682,8 +687,16 @@ func validationFailed(w http.ResponseWriter, r *http.Request, message string) {
 	httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", message)
 }
 
-// publicMessage strips the package prefix from a sentinel-wrapped error whose
-// details are safe to show clients.
+// publicMessage is the part of a sentinel-wrapped error whose details are
+// safe to show people: without the package prefix or the sentinel's own words
+// ("invalid recipe: "), starting with a capital.
 func publicMessage(err error) string {
-	return strings.TrimPrefix(err.Error(), "recipes: ")
+	msg := strings.TrimPrefix(err.Error(), "recipes: ")
+	for _, sentinel := range []error{ErrInvalidDraft, ErrInvalidImport} {
+		msg = strings.TrimPrefix(msg, strings.TrimPrefix(sentinel.Error(), "recipes: ")+": ")
+	}
+	if r, size := utf8.DecodeRuneInString(msg); r != utf8.RuneError {
+		msg = string(unicode.ToUpper(r)) + msg[size:]
+	}
+	return msg
 }

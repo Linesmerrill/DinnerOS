@@ -79,10 +79,10 @@ struct SpecialtyDetailView: View {
                 Button("Delete \(option.name)", role: .destructive) { delete(option) }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("If it's the household's choice, the choice is cleared too and grocery lists ask again.")
+                Text("If it’s the household’s choice, the choice is cleared too and grocery lists ask again.")
             }
             .alert(
-                "Couldn't Update \(ingredient?.name ?? String(localized: "Specialty Ingredient"))",
+                "Couldn’t Update \(ingredient?.name ?? String(localized: "Specialty Ingredient"))",
                 isPresented: Binding(presenting: $actionError),
                 presenting: actionError
             ) { _ in
@@ -108,7 +108,7 @@ struct SpecialtyDetailView: View {
 
     private func unavailable(_ message: String) -> some View {
         ContentUnavailableView {
-            Label("Couldn't Load This Ingredient", systemImage: "exclamationmark.triangle")
+            Label("Couldn’t Load This Ingredient", systemImage: "exclamationmark.triangle")
         } description: {
             Text(message)
         } actions: {
@@ -264,7 +264,7 @@ struct SpecialtyDetailView: View {
             Text("Keep as Is")
         } footer: {
             Text(
-                "Keeps \(ingredient.name) on grocery lists by its own name and stops asking. Choose this if you buy it somewhere or don't want to be asked."
+                "Keeps \(ingredient.name) on grocery lists by its own name and stops asking. Choose this if you buy it somewhere or don’t want to be asked."
             )
         }
     }
@@ -368,7 +368,7 @@ struct SpecialtyOptionCard: View {
         if isChosen { tags.append(String(localized: "Chosen")) }
         if isStrategyPick { tags.append(String(localized: "Your Default")) }
         if option.isDefault { tags.append(String(localized: "Suggested")) }
-        if option.isHousehold { tags.append(String(localized: "Your Household's")) }
+        if option.isHousehold { tags.append(String(localized: "Your Household’s")) }
         return tags
     }
 
@@ -459,10 +459,11 @@ struct SpecialtyBatchSheet: View {
                     Text(option.name)
                 } footer: {
                     Text(
-                        "We'll add \(ingredient.name) to the pantry with this amount and count it down as you cook."
+                        "We’ll add \(ingredient.name) to the pantry with this amount and count it down as you cook."
                     )
                 }
             }
+            .dsReadableForm()
             .navigationTitle("Made a Batch")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

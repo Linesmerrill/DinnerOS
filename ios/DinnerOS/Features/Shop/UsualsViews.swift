@@ -66,12 +66,13 @@ struct AddItemSheet: View {
                                 }
                                 .contentShape(.rect)
                             }
-                            .accessibilityHint("Adds it to this week's list.")
+                            .accessibilityHint("Adds it to this week’s list.")
                             .disabled(isAdding)
                         }
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle("Add Item")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -99,7 +100,7 @@ struct AddItemSheet: View {
                 case .added:
                     status = String(localized: "Added \(UsualsText.nameAndCount(item.name, count: item.count)).")
                 case .queued:
-                    status = String(localized: "Saved. It goes on the list when you're back online.")
+                    status = String(localized: "Saved. It goes on the list when you’re back online.")
                 }
                 if item.name == cleanName {
                     name = ""
@@ -167,7 +168,7 @@ struct UsualsPromptSheet: View {
                     if let errorMessage {
                         FormErrorLabel(message: errorMessage)
                     } else {
-                        Text("Uncheck anything you don't need this week.")
+                        Text("Uncheck anything you don’t need this week.")
                     }
                 }
             }
@@ -286,7 +287,7 @@ struct YourUsualsView: View {
                     } header: {
                         Text("Not Usuals")
                     } footer: {
-                        Text("These aren't offered, however often you add them.")
+                        Text("These aren’t offered, however often you add them.")
                     }
                 }
             } else {

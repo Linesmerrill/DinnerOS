@@ -75,7 +75,7 @@ var (
 	NoveltyOptions = []Option{
 		{Value: "favorites", Label: "Mostly favorites", Description: "Stick to meals we know we like"},
 		{Value: "balanced", Label: "A mix", Description: "Favorites with something new now and then"},
-		{Value: "adventurous", Label: "Try new things", Description: "Lean toward meals we haven't had"},
+		{Value: "adventurous", Label: "Try new things", Description: "Lean toward meals we haven’t had"},
 	}
 	TimeBandOptions = []Option{
 		{Value: "quick", Label: "Quick", Description: "Up to the quick limit (20 min by default)"},

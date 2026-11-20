@@ -38,6 +38,11 @@ nonisolated enum BiometryKind: String, Equatable, Sendable {
         String(localized: "Use \(name) to sign in next time?")
     }
 
+    /// The sign-in buttons' title, in sentence case like "Sign in with email" (build 121).
+    var signInTitle: String {
+        String(localized: "Sign in with \(name)")
+    }
+
     var toggleTitle: String {
         String(localized: "Sign In with \(name)")
     }

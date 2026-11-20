@@ -113,7 +113,7 @@ struct YourPlusView: View {
                     .foregroundStyle(.secondary)
             }
         } footer: {
-            Text("Change your plan or cancel in Apple's own menu. Refunds are up to Apple.")
+            Text("Change your plan or cancel in Apple’s own menu. Refunds are up to Apple.")
         }
     }
 
@@ -161,7 +161,7 @@ struct YourPlusView: View {
                 restoreMessage =
                     try await plus.restore()
                     ? String(localized: "Your purchases are restored.")
-                    : String(localized: "We didn't find a Plus purchase on this Apple account.")
+                    : String(localized: "We didn’t find a Plus purchase on this Apple account.")
                 await load()
             } catch {
                 restoreMessage = error.localizedDescription
@@ -229,7 +229,8 @@ private struct PlusHeaderCard: View {
             .font(.subheadline)
             .opacity(0.9)
         }
-        .foregroundStyle(.white)
+        // On the accent fill: white in light mode, near-black on dark mode's lighter green.
+        .foregroundStyle(DS.Colors.onAccent)
         .padding(DS.Space.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(

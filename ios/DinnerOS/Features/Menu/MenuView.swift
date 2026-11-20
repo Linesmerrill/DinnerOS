@@ -35,6 +35,9 @@ struct MenuView: View {
     @State private var welcomeChoice: Welcome.Choice?
     private let welcomeStorage: any WelcomeStorage = UserDefaultsWelcomeStorage()
     @State private var actionError: String?
+    /// Whether the Get Started card is up. It offers Shared Recipes itself, so the Menu's own
+    /// Shared Recipes row waits until it's gone.
+    @State private var isGetStartedShown = false
 
     /// Whether the week strip is showing its pills, and where the menu is scrolled to.
     @State private var collapse = MenuChromeCollapse()
@@ -111,8 +114,7 @@ struct MenuView: View {
 
     var body: some View {
         followingTheWeek(content)
-            .navigationTitle(mode == .menu ? "Menu" : "By Day")
-            .navigationBarTitleDisplayMode(.inline)
+            .tabHeader(mode == .menu ? String(localized: "Menu") : String(localized: "By Day"))
             .safeAreaInset(edge: .top, spacing: 0) {
                 WeekStrip(isExpanded: isStripExpanded) {
                     changeStrip { collapse.expand(offset: scrollOffset) }
@@ -184,12 +186,12 @@ struct MenuView: View {
                 tabs?.addMealsRequested = false
                 if canAddMeals { isAddingRecipes = true }
             }
-            .alert("Couldn't Change the Week", isPresented: Binding(presenting: $actionError)) {
+            .alert("Couldn’t Change the Week", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(actionError ?? "")
             }
-            .alert("Couldn't Change Your Meals", isPresented: plannerError) {
+            .alert("Couldn’t Change Your Meals", isPresented: plannerError) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(planner.errorMessage ?? "")
@@ -199,7 +201,7 @@ struct MenuView: View {
             .sheet(item: swapTarget) { target in
                 MealSwapSheet(target: target)
             }
-            .alert("Couldn't Swap That Meal", isPresented: swapError) {
+            .alert("Couldn’t Swap That Meal", isPresented: swapError) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(swaps.errorMessage ?? "")
@@ -266,7 +268,7 @@ struct MenuView: View {
     private var menuContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 28) {
+                LazyVStack(alignment: .leading, spacing: DS.Space.xxl) {
                     if let refreshError = menu.refreshError {
                         FormErrorLabel(message: refreshError)
                             .padding(.horizontal, DS.Space.l)
@@ -275,25 +277,28 @@ struct MenuView: View {
                     // library has nothing to plan, so getting recipes in comes first (#530).
                     // A new household's free month checklist, until it's done or hidden.
                     ReferralMenuCard()
-                    GetStartedSection { isAddingOwnRecipe = true }
+                    GetStartedSection(
+                        onAddOwnRecipe: { isAddingOwnRecipe = true },
+                        onShownChange: { isGetStartedShown = $0 })
                     YourMealsSection(flow: autopilotFlow)
-                    // Always shown, so recipes other households shared are never hidden in a menu.
-                    SharedRecipesEntry()
+                    // Shown whenever the Get Started card isn't, so recipes other households
+                    // shared are never hidden in a menu, and never offered twice.
+                    if MenuEntryPoints.showsSharedRecipesRow(getStartedShown: isGetStartedShown) {
+                        SharedRecipesEntry()
+                    }
                     PairingSuggestionsSection()
                     sections
                     if menu.selectedTiming != .past {
-                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals) {
-                            isAddingOwnRecipe = true
-                        }
-                        // A search or filter can leave All Meals one card long at the bottom of
-                        // the menu. Closing the keyboard then left too little page to stay
-                        // scrolled there, and the results slid away (seen on iPad). Filling a
-                        // screen keeps them in place.
-                        .frame(
-                            minHeight: menu.allMeals.query.isNarrowed ? viewportHeight : nil,
-                            alignment: .top
-                        )
-                        .id(Self.allMealsAnchor)
+                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals)
+                            // A search or filter can leave All Meals one card long at the bottom of
+                            // the menu. Closing the keyboard then left too little page to stay
+                            // scrolled there, and the results slid away (seen on iPad). Filling a
+                            // screen keeps them in place.
+                            .frame(
+                                minHeight: menu.allMeals.query.isNarrowed ? viewportHeight : nil,
+                                alignment: .top
+                            )
+                            .id(Self.allMealsAnchor)
                     }
                 }
                 .padding(.top, DS.Space.m)
@@ -439,21 +444,23 @@ struct MenuView: View {
                 }
             }
             .pickerStyle(.segmented)
-            // A leading item is sized to its content, and a segmented picker reports almost none.
-            .frame(width: horizontalSizeClass == .regular ? 180 : nil)
-            .frame(maxWidth: 220)
+            // Its own size, so the toolbar's capsule hugs the switch instead of drawing a second,
+            // offset outline around a wider frame (iPad).
+            .fixedSize()
         }
+        // Every tab's toolbar reads bell, +, more (`TabHeader`): the bell comes from
+        // `.notificationsToolbar()`, outside this one.
         ToolbarItemGroup(placement: .topBarTrailing) {
             if plans.isSaving {
                 ProgressView()
             }
-            weekMenu
             if canEdit {
-                Button("Add Recipes", systemImage: "plus") {
+                Button("Add Recipes", systemImage: TabHeader.addSystemImage) {
                     isAddingRecipes = true
                 }
                 .disabled(!canAddMeals)
             }
+            weekMenu
         }
     }
 
@@ -494,7 +501,7 @@ struct MenuView: View {
                 }
             }
         } label: {
-            Label("Week Menu", systemImage: "ellipsis.circle")
+            Label("Week Menu", systemImage: TabHeader.moreSystemImage)
         }
     }
 

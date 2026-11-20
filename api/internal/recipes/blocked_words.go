@@ -20,7 +20,7 @@ var blockedWordsFile string
 var ErrObjectionable = errors.New("recipes: objectionable words")
 
 // ObjectionableMessage is what the app shows when sharing is refused.
-const ObjectionableMessage = "Shared Recipes can't take some of the words in this recipe. Change them, or keep it just for your household."
+const ObjectionableMessage = "Shared Recipes can’t take some of the words in this recipe. Change them, or keep it just for your household."
 
 var blockedExact, blockedPrefixes = loadBlockedWords(blockedWordsFile)
 

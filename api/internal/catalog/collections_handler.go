@@ -119,7 +119,7 @@ func (h *Handler) deleteCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	err := h.opts.Service.DeleteCollection(r.Context(), chi.URLParam(r, "collectionId"))
 	if errors.Is(err, ErrNotFound) {
-		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "There's no saved row with that ID.")
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "There’s no saved row with that ID.")
 		return
 	}
 	if err != nil {
@@ -161,5 +161,5 @@ func collectionMessage(err error) string {
 	if _, rest, ok := strings.Cut(err.Error(), "invalid collection: "); ok {
 		return rest
 	}
-	return "That row isn't valid."
+	return "That row isn’t valid."
 }

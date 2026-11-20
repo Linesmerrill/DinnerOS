@@ -63,9 +63,9 @@ private struct StoreTallyRow: View {
                 if tally.custom {
                     tag("Typed, not matched", color: .orange)
                 } else if tally.status == .researched {
-                    tag("Looking into it", color: .blue)
+                    tag("Looking into it", color: DS.Colors.badge)
                 } else if tally.status == .available {
-                    tag("Available now", color: .green)
+                    tag("Available now", color: DS.Colors.success)
                 }
                 if !tally.sourceSummary.isEmpty {
                     Text(tally.sourceSummary)

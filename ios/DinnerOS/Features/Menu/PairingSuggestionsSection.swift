@@ -31,7 +31,7 @@ struct PairingSuggestionsSection: View {
             VStack(alignment: .leading, spacing: DS.Space.m) {
                 MenuSectionHeader(
                     title: String(localized: "Goes well with your meals"),
-                    subtitle: String(localized: "Sides and extras for this week's dinners")
+                    subtitle: String(localized: "Sides and extras for this week’s dinners")
                 )
                 .padding(.horizontal, DS.Space.l)
                 VStack(spacing: 0) {
@@ -46,7 +46,7 @@ struct PairingSuggestionsSection: View {
                 .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
                 .padding(.horizontal, DS.Space.l)
             }
-            .alert("Couldn't Change Your Week", isPresented: Binding(presenting: $actionError)) {
+            .alert("Couldn’t Change Your Week", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(actionError ?? "")

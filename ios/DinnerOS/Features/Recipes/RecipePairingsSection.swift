@@ -59,7 +59,7 @@ struct RecipePairingsSection: View {
                 footnote
             }
             .animation(.default, value: ruleMessage)
-            .alert("Couldn't Change Your Week", isPresented: Binding(presenting: $actionError)) {
+            .alert("Couldn’t Change Your Week", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(actionError ?? "")

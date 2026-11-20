@@ -303,7 +303,7 @@ const inviteScript = `
 
   const showPreview = (preview) => {
     $("title").textContent = "Join " + preview.householdName + " on " + appName;
-    let lead = (preview.inviterName ? preview.inviterName + " invited you" : "You're invited") +
+    let lead = (preview.inviterName ? preview.inviterName + " invited you" : "You’re invited") +
       " to join as " + roleNoun(preview.role) + ".";
     const expires = new Date(preview.expiresAt);
     if (!Number.isNaN(expires.getTime())) {

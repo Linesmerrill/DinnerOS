@@ -376,7 +376,7 @@ struct PlusStoreTests {
         #expect(PlusText.trialDays(offerDays: 14, product: unknown) == 14)
         let week = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: true, trialDays: 7)
         #expect(PlusText.trialDays(offerDays: 14, product: week) == 7)
-        #expect(PlusText.buyTitle(offer, product: week) == "Try it free for 7 days")
+        #expect(PlusText.buyTitle(offer, product: week) == "Try It Free for 7 Days")
         #expect(PlusText.buyTitle(offer, product: unknown) == offer.trialText)
         let used = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: false, trialDays: 14)
         #expect(PlusText.trialDays(offerDays: 14, product: used) == 0)
@@ -401,7 +401,15 @@ struct PlusStoreTests {
         let store = PlusStore(
             session: session, api: PlusAPI(client: client), purchaser: FakePurchaser(), defaults: defaults)
         store.compThanksDelay = .milliseconds(1)
+        // Tester copy: an App Store build never offers it (build 121).
+        store.buildChannel = { .appStore }
         await store.activate(householdID: "household-1")
+        #expect(store.compThanks == nil)
+        store.buildChannel = { nil }
+        await store.reload()
+        #expect(store.compThanks == nil)
+        store.buildChannel = { .testFlight }
+        await store.reload()
         let thanks = try #require(store.compThanks)
         #expect(thanks.thanksTitle == "Thanks for testing DinnerOS")
         #expect(thanks.benefits?.count == 2 && thanks.benefitsTitle == "What you get")
@@ -418,6 +426,7 @@ struct PlusStoreTests {
         let again = PlusStore(
             session: session, api: PlusAPI(client: client), purchaser: FakePurchaser(), defaults: defaults)
         again.compThanksDelay = .milliseconds(1)
+        again.buildChannel = { .testFlight }
         await again.activate(householdID: "household-1")
         #expect(again.compThanks == nil)
     }
@@ -494,7 +503,7 @@ struct PlusStoreTests {
         let billing = try decoder.decode(
             PlusStatus.self,
             from: Data(#"{"enabled":true,"active":true,"trial":false,"willRenew":true,"billingIssue":true}"#.utf8))
-        #expect(PlusText.status(billing, now: now).hasPrefix("Apple couldn't charge"))
+        #expect(PlusText.status(billing, now: now).hasPrefix("Apple couldn’t charge"))
         for line in [trial, ending, free, billing].map({ PlusText.status($0, now: now) }) {
             #expect(!line.contains("\u{2014}"))
         }

@@ -42,7 +42,7 @@ struct GroceryPurchaseBanner: View {
             VStack(alignment: .leading, spacing: DS.Space.s) {
                 Label {
                     VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                        Text("Couldn't add \(failure.prompt.item.name) to the pantry")
+                        Text("Couldn’t add \(failure.prompt.item.name) to the pantry")
                             .font(.subheadline.weight(.semibold))
                         Text(failure.message)
                             .font(.footnote)
@@ -66,7 +66,7 @@ struct GroceryPurchaseBanner: View {
             }
             .onAppear {
                 AccessibilityNotification.Announcement(
-                    String(localized: "Couldn't add \(failure.prompt.item.name) to the pantry")
+                    String(localized: "Couldn’t add \(failure.prompt.item.name) to the pantry")
                 ).post()
             }
         }
@@ -150,7 +150,7 @@ private struct GroceryPurchasePromptCard: View {
                             model.skipPurchase()
                         }
                         .buttonStyle(.dsSecondary(.small))
-                        .accessibilityHint("Doesn't add it to the pantry.")
+                        .accessibilityHint("Doesn’t add it to the pantry.")
                         Button("Add") {
                             isAmountFocused = false
                             Task { await model.confirmPurchase() }
@@ -182,7 +182,7 @@ private struct GroceryPurchasePromptCard: View {
                     }
                 }
             }
-            Button("Don't Ask During This Trip", systemImage: "bell.slash") {
+            Button("Don’t Ask During This Trip", systemImage: "bell.slash") {
                 isAmountFocused = false
                 model.stopAskingThisTrip()
             }

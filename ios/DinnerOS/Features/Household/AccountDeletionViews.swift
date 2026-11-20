@@ -22,11 +22,14 @@ struct DeleteAccountButton: View {
         Button(role: .destructive) {
             isConfirming = true
         } label: {
-            HStack {
-                Text("Delete Account")
-                if isDeleting {
-                    Spacer()
-                    ProgressView()
+            // In the icon column like the rows above it, so its text lines up with theirs.
+            DSIconRow(systemImage: "trash", tint: DS.Colors.destructive) {
+                HStack {
+                    Text("Delete Account")
+                    if isDeleting {
+                        Spacer()
+                        ProgressView()
+                    }
                 }
             }
         }
@@ -43,16 +46,16 @@ struct DeleteAccountButton: View {
         } message: {
             if usesApple {
                 Text(
-                    "This permanently deletes your account and ratings, and any household where you're the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you're a household's only admin, its longest-standing member becomes admin. This can't be undone.\n\nNext, confirm with Apple to delete your account."
+                    "This permanently deletes your account and ratings, and any household where you’re the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you’re a household’s only admin, its longest-standing member becomes admin. This can’t be undone.\n\nNext, confirm with Apple to delete your account."
                 )
             } else {
                 Text(
-                    "This permanently deletes your account and ratings, and any household where you're the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you're a household's only admin, its longest-standing member becomes admin. This can't be undone."
+                    "This permanently deletes your account and ratings, and any household where you’re the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you’re a household’s only admin, its longest-standing member becomes admin. This can’t be undone."
                 )
             }
         }
         .alert(
-            "Couldn't Delete Your Account",
+            "Couldn’t Delete Your Account",
             isPresented: Binding(presenting: $errorMessage),
             presenting: errorMessage
         ) { _ in
@@ -85,7 +88,7 @@ struct PrivacyPolicyLink: View {
     var body: some View {
         if let url = configuration.privacyPolicyURL {
             Link(destination: url) {
-                Label("Privacy Policy", systemImage: "hand.raised")
+                DSIconRow(systemImage: "hand.raised") { Text("Privacy Policy") }
             }
         }
     }

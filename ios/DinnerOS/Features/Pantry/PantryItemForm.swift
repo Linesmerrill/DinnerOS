@@ -7,6 +7,8 @@ struct PantryItemFields: View {
     /// The food, for its recommended best-by date.
     var name: String = ""
     var category: String? = nil
+    /// Focus for the Amount field, so the add sheet can move there from the name.
+    var amountFocus: FocusState<Bool>.Binding?
 
     @Environment(PantryStore.self) private var pantry
     @State private var suggestion: ShelfLifeSuggestion?
@@ -33,6 +35,7 @@ struct PantryItemFields: View {
             )
             .keyboardType(.numbersAndPunctuation)
             .autocorrectionDisabled()
+            .modifier(OptionalFocus(binding: amountFocus))
             Picker("Unit", selection: $draft.unit) {
                 ForEach(PantryUnit.options(including: draft.unit), id: \.self) { code in
                     Text(PantryUnit.pickerLabel(code)).tag(code)
@@ -45,9 +48,9 @@ struct PantryItemFields: View {
             Text("Amount")
         } footer: {
             if draft.allowsAmount {
-                Text("Optional. Leave it empty if you have some but didn't measure.")
+                Text("Optional. Leave it empty if you have some but didn’t measure.")
             } else {
-                Text("Out. Type an amount and it's back in stock.")
+                Text("Out. Type an amount and it’s back in stock.")
             }
         }
 
@@ -75,7 +78,7 @@ struct PantryItemFields: View {
                         Text(date.formatted(date: .abbreviated, time: .omitted))
                     } else {
                         Text(name.isEmpty ? "Add a name first" : "…")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DS.Colors.secondaryText)
                     }
                 }
             }
@@ -135,14 +138,27 @@ struct PantryItemFields: View {
     }
 }
 
+/// Focuses a field when the caller passed a binding; does nothing otherwise.
+private struct OptionalFocus: ViewModifier {
+    let binding: FocusState<Bool>.Binding?
+
+    func body(content: Content) -> some View {
+        if let binding {
+            content.focused(binding)
+        } else {
+            content
+        }
+    }
+}
+
 /// "These are recommended best-by dates. Use your best judgment."
 struct PantryBestByDisclaimer: View {
     var body: some View {
         Text(
             "These are recommended best-by dates from USDA FoodKeeper. Use your best judgment."
         )
-        .font(.footnote)
-        .foregroundStyle(.secondary)
+        .font(DS.Typography.footnote)
+        .foregroundStyle(DS.Colors.secondaryText)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -183,8 +199,10 @@ struct PantryEditSheet: View {
                     }
                 }
                 Section {
-                    Button("Restock / I Bought This", systemImage: "cart.badge.plus") {
+                    Button {
                         isRestocking = true
+                    } label: {
+                        DSIconRow(systemImage: "cart.badge.plus") { Text("Restock / I Bought This") }
                     }
                 } footer: {
                     Text("Records a purchase. The estimate starts over from the amount you bought.")
@@ -199,6 +217,8 @@ struct PantryEditSheet: View {
                     }
                 }
             }
+            .keyboardDismissal()
+            .dsReadableForm()
             .task {
                 if pantry.settings == nil {
                     _ = try? await pantry.loadSettings()
@@ -244,6 +264,7 @@ struct PantryEditSheet: View {
                 Text("Grocery lists will stop treating it as at home.")
             }
         }
+        .presentationSizing(.page)
     }
 
     private func save() {
@@ -330,6 +351,7 @@ struct PantryAddSheet: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @FocusState private var isNameFocused: Bool
+    @FocusState private var isAmountFocused: Bool
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -366,9 +388,11 @@ struct PantryAddSheet: View {
                     TextField("Name", text: $name, prompt: Text("For example, olive oil"))
                         .focused($isNameFocused)
                         .textInputAutocapitalization(.words)
-                        .submitLabel(.done)
+                        .submitLabel(.next)
                         .onSubmit {
                             if selectedIngredient == nil { confirmedName = trimmedName }
+                            // On to the amount, which the form scrolls above the keyboard.
+                            isAmountFocused = true
                         }
                 } header: {
                     Text("Ingredient")
@@ -379,8 +403,11 @@ struct PantryAddSheet: View {
                     suggestionsSection
                 }
                 PantryItemFields(
-                    draft: $draft, name: nameIsSettled ? trimmedName : "", category: selectedIngredient?.category)
+                    draft: $draft, name: nameIsSettled ? trimmedName : "", category: selectedIngredient?.category,
+                    amountFocus: $isAmountFocused)
             }
+            .keyboardDismissal()
+            .dsReadableForm()
             .navigationTitle("Add to Pantry")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -394,7 +421,9 @@ struct PantryAddSheet: View {
             }
             .disabled(isSaving)
             .interactiveDismissDisabled(isSaving)
-            .onAppear { isNameFocused = true }
+            // No keyboard on open: it covered the Amount field on a small iPhone and shrank the
+            // iPad sheet until it cut the Storage picker in half (build 121). Tapping the name
+            // brings it up.
             .task(id: name) {
                 let model =
                     suggestions
@@ -406,6 +435,9 @@ struct PantryAddSheet: View {
                 await model.update(for: showsSuggestions ? name : "")
             }
         }
+        // A page-sized sheet on iPad, so the form's sections aren't cut off at a short sheet's
+        // bottom edge (build 121).
+        .presentationSizing(.page)
     }
 
     @ViewBuilder
@@ -428,8 +460,8 @@ struct PantryAddSheet: View {
                             Text(ingredient.name)
                                 .foregroundStyle(.primary)
                             Text(PantryCategory.title(ingredient.category))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(DS.Typography.subheadline)
+                                .foregroundStyle(DS.Colors.secondaryText)
                         }
                         .contentShape(.rect)
                     }
@@ -439,13 +471,13 @@ struct PantryAddSheet: View {
                     HStack {
                         ProgressView()
                         Text("Searching…")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DS.Colors.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                 }
                 if let message = suggestions.errorMessage {
                     Text(message)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
             }
             let hasExactMatch =
@@ -457,7 +489,7 @@ struct PantryAddSheet: View {
                     confirmedName = trimmedName
                     isNameFocused = false
                 } label: {
-                    Label("Add “\(trimmedName)” as Typed", systemImage: "text.cursor")
+                    DSIconRow(systemImage: "text.cursor") { Text("Add “\(trimmedName)” as Typed") }
                 }
             }
         }

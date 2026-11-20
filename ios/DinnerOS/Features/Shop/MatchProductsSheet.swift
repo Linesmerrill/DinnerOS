@@ -16,7 +16,7 @@ struct MatchProductsSheet: View {
             List {
                 Section {
                     Text(
-                        "We picked a \(storeName) product for each item you buy at Walmart. Uncheck any you don't want, or tap one to choose another."
+                        "We picked a \(storeName) product for each item you buy at Walmart. Uncheck any you don’t want, or tap one to choose another."
                     )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -103,7 +103,9 @@ struct MatchProductsSheet: View {
             .disabled(model.selectedCount == 0 || model.isSaving)
         }
         .padding(DS.Space.l)
-        .background(.bar)
+        .dsReadableWidth()
+        .background(DS.Colors.groupedBackground)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func load() async {

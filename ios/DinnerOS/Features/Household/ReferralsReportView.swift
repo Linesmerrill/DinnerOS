@@ -7,9 +7,9 @@ struct ReferralsReportView: View {
     var body: some View {
         List {
             Section {
-                LabeledContent("Codes used", value: summary.codesUsed.formatted())
-                LabeledContent("Joined in the last 7 days", value: summary.joinedThisWeek.formatted())
-                LabeledContent("Joined in all", value: summary.joinedAllTime.formatted())
+                LabeledContent("Codes Used", value: summary.codesUsed.formatted())
+                LabeledContent("Joined in the Last 7 Days", value: summary.joinedThisWeek.formatted())
+                LabeledContent("Joined in All", value: summary.joinedAllTime.formatted())
                 if let pending = summary.pending, let qualified = summary.qualified, let expired = summary.expired {
                     LabeledContent("Pending", value: pending.formatted())
                     LabeledContent("Qualified", value: qualified.formatted())

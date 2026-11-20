@@ -296,7 +296,7 @@ func TestReferralMonthsAreCapped(t *testing.T) {
 	if info.MonthsLeft != 0 || info.Rewarded != MaxReferralMonths {
 		t.Errorf("info = %+v", info)
 	}
-	if _, explainer := ReferralText(info.Code, info.Rewarded, info.MonthsLeft); !strings.Contains(explainer, "every free month") {
+	if _, explainer := ReferralText(info.Code, info.Rewarded, info.MonthsLeft); !strings.Contains(explainer, FreeMonthLimitText) {
 		t.Errorf("explainer = %q", explainer)
 	}
 }
@@ -363,7 +363,7 @@ func TestReferralRoutes(t *testing.T) {
 		t.Errorf("own code = %d %s", rec.Code, rec.Body.String())
 	}
 	rec = do(http.MethodPost, "/households/"+hhB+"/plus/referral/redeem", "u2", `{"code":"ZZZZZZZZ"}`)
-	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "couldn't find that code") {
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "couldn’t find that code") {
 		t.Errorf("unknown = %d %s", rec.Code, rec.Body.String())
 	}
 	rec = do(http.MethodPost, "/households/"+hhB+"/plus/referral/redeem", "u2",

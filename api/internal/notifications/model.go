@@ -121,6 +121,9 @@ type Notification struct {
 	Banner    bool
 	Push      Push
 	CreatedAt time.Time
+	// GroupIDs, set only on a read, are the IDs of every notification this
+	// one stands for when repeats are shown as one (group.go), newest first.
+	GroupIDs []string
 }
 
 // ReadByUser reports whether userID has read n.

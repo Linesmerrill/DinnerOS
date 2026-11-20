@@ -380,7 +380,7 @@ func (s *Service) changeSettings(ctx context.Context, actor households.Membershi
 // not answering.
 func storeBannerError(err error) error {
 	if errors.Is(err, providers.ErrStoreNotOffered) {
-		return invalid("That store isn't available in DinnerOS yet. Pick another store.")
+		return invalid("That store isn’t available in DinnerOS yet. Pick another store.")
 	}
 	return fmt.Errorf("%w: %w", ErrSearchUnavailable, err)
 }
@@ -437,7 +437,7 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 	case (productURL == "") == (productID == ""):
 		return Preference{}, false, invalid("send productUrl or productId, not both")
 	case productID != "" && strings.Trim(productID, "0123456789") != "":
-		return Preference{}, false, invalid("productId must be the product's numeric ID; send a link as productUrl")
+		return Preference{}, false, invalid("productId must be the product’s numeric ID; send a link as productUrl")
 	}
 	ref, err := p.ParseProduct(productURL + productID)
 	if err != nil {
@@ -486,7 +486,7 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 			return Preference{}, false, fmt.Errorf("look up catalog ingredient: %w", err)
 		}
 		if len(found) == 0 {
-			return Preference{}, false, invalid("ingredientKey doesn't match a catalog ingredient")
+			return Preference{}, false, invalid("ingredientKey doesn’t match a catalog ingredient")
 		}
 		if pref.IngredientName == "" {
 			pref.IngredientName = found[0].Name
@@ -706,7 +706,7 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 			return Handoff{}, false, ErrEverythingLeftOut
 		}
 		if len(proposal.Lines) == 0 && p.HandoffKind() == providers.HandoffListPage {
-			return Handoff{}, false, invalid("There's nothing left on your list to send.")
+			return Handoff{}, false, invalid("There’s nothing left on your list to send.")
 		}
 		if len(proposal.Lines) == 0 {
 			return Handoff{}, false, invalid("Nothing on your list has a saved product to add to the cart.")
@@ -1166,7 +1166,7 @@ func confirmTargets(h Handoff, in ConfirmInput) ([]ConfirmLine, error) {
 			return nil, invalid("lines lists %s more than once", l.LineID)
 		}
 		if _, ok := h.Line(l.LineID); !ok {
-			return nil, invalid("line %q isn't in this handoff", l.LineID)
+			return nil, invalid("line %q isn’t in this handoff", l.LineID)
 		}
 		if l.Packages < 0 || l.Packages > providers.MaxPackages {
 			return nil, invalid("packages must be between 1 and %d", providers.MaxPackages)

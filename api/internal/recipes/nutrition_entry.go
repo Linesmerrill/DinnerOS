@@ -76,19 +76,19 @@ func cleanTypedNutrition(in []Nutrient) ([]Nutrient, string) {
 	for _, n := range in {
 		t, ok := typedNutrientNamed(n.Name)
 		if !ok {
-			return nil, fmt.Sprintf("%q isn't a nutrition value DinnerOS knows. Use calories, fat, saturated fat, carbohydrate, sugar, dietary fiber, protein, cholesterol, or sodium.", strings.TrimSpace(n.Name))
+			return nil, fmt.Sprintf("%q isn’t a nutrition value DinnerOS knows. Use calories, fat, saturated fat, carbohydrate, sugar, dietary fiber, protein, cholesterol, or sodium.", strings.TrimSpace(n.Name))
 		}
 		if _, dup := byName[t.name]; dup {
 			return nil, "You listed " + strings.ToLower(t.name) + " twice."
 		}
 		if u := normalizeNutrient(n.Unit); u != "" && u != t.unit {
-			return nil, fmt.Sprintf("Enter %s in %s.", strings.ToLower(t.name), t.unit)
+			return nil, fmt.Sprintf("Enter %s in %s.", strings.ToLower(t.name), NutrientUnitLabel(t.unit))
 		}
 		switch {
 		case math.IsNaN(n.Amount) || math.IsInf(n.Amount, 0) || n.Amount < 0:
-			return nil, t.name + " can't be less than zero."
+			return nil, t.name + " can’t be less than zero."
 		case n.Amount > t.max:
-			return nil, fmt.Sprintf("%s can be up to %s %s.", t.name, strconv.FormatFloat(t.max, 'f', -1, 64), t.unit)
+			return nil, fmt.Sprintf("%s can be up to %s %s.", t.name, strconv.FormatFloat(t.max, 'f', -1, 64), NutrientUnitLabel(t.unit))
 		}
 		// One decimal place is as precise as a label gets.
 		byName[t.name] = Nutrient{Name: t.name, Amount: math.Round(n.Amount*10) / 10, Unit: t.unit}
@@ -113,7 +113,7 @@ func importNutrients(in []Nutrient) []ImportNutrient {
 func nutrientResponses(in []Nutrient) []NutrientResponse {
 	out := make([]NutrientResponse, 0, len(in))
 	for _, n := range in {
-		out = append(out, NutrientResponse(n))
+		out = append(out, NewNutrientResponse(n))
 	}
 	return out
 }
@@ -121,7 +121,7 @@ func nutrientResponses(in []Nutrient) []NutrientResponse {
 func nutrientsFromWire(in []NutrientResponse) []Nutrient {
 	out := make([]Nutrient, 0, len(in))
 	for _, n := range in {
-		out = append(out, Nutrient(n))
+		out = append(out, Nutrient{Name: n.Name, Amount: n.Amount, Unit: n.Unit})
 	}
 	return out
 }

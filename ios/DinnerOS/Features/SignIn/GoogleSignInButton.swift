@@ -20,7 +20,7 @@ struct GoogleSignInButton: View {
         }
         .buttonStyle(
             DSOutlineButtonStyle(
-                size: .large, fullWidth: true, font: DS.Typography.signInButton(height: height),
+                size: .large, fullWidth: true,
                 palette: { $0 == .dark ? Self.dark : Self.light })
         )
         .accessibilityIdentifier("signIn.google")
@@ -48,7 +48,11 @@ struct SignInButtonLabel<Icon: View>: View {
             icon()
                 .frame(width: Self.iconSize(height), height: Self.iconSize(height))
                 .accessibilityHidden(true)
+            // The font is set here, on the title itself, so no button style can change it: all
+            // three sign-in buttons get the same size and weight.
             title
+                .font(DS.Typography.signInButton(height: height))
+                .accessibilityIdentifier("signIn.title")
         }
     }
 

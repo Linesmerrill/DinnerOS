@@ -33,7 +33,7 @@ struct HouseholdRatingsView: View {
             .refreshable { await load() }
         } else if let loadError {
             ContentUnavailableView {
-                Label("Couldn't Load Ratings", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Ratings", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(loadError)
             } actions: {
@@ -75,7 +75,7 @@ struct HouseholdRatingsList: View {
                 VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text(recipeName)
                         .font(.headline)
-                    Text(RatingFormat.summary(response.householdRating) ?? String(localized: "No ratings yet"))
+                    Text(RatingFormat.summary(response.householdRating) ?? String(localized: "No Ratings Yet"))
                         .foregroundStyle(.secondary)
                         .accessibilityLabel(RatingFormat.accessibilitySummary(response.householdRating))
                 }

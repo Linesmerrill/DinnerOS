@@ -253,7 +253,7 @@ func rejectSupported(e CatalogEntry, enabled []providers.GroceryProvider) error 
 func newStoreRequest(actor households.Membership, in StoreRequestInput, enabled []providers.GroceryProvider) (StoreRequest, error) {
 	key, name := strings.TrimSpace(in.Key), strings.TrimSpace(in.Name)
 	if (key == "") == (name == "") {
-		return StoreRequest{}, invalid("send key for a store in the catalog, or name for one that isn't, not both")
+		return StoreRequest{}, invalid("send key for a store in the catalog, or name for one that isn’t, not both")
 	}
 	source := in.Source
 	switch {
@@ -269,7 +269,7 @@ func newStoreRequest(actor households.Membership, in StoreRequestInput, enabled 
 	case key != "":
 		e, ok := CatalogEntryByKey(key)
 		if !ok {
-			return StoreRequest{}, invalid("key isn't a store in the catalog; send the name instead")
+			return StoreRequest{}, invalid("key isn’t a store in the catalog; send the name instead")
 		}
 		if err := rejectSupported(e, enabled); err != nil {
 			return StoreRequest{}, err
@@ -300,7 +300,7 @@ func newStoreRequest(actor households.Membership, in StoreRequestInput, enabled 
 	if p := in.Place; p != nil {
 		place := StorePlace{Name: strings.TrimSpace(p.Name), Address: strings.TrimSpace(p.Address)}
 		if utf8.RuneCountInString(place.Name) > MaxStoreNameLength || utf8.RuneCountInString(place.Address) > maxStorePlaceAddress {
-			return StoreRequest{}, invalid("That store's name or address is too long.")
+			return StoreRequest{}, invalid("That store’s name or address is too long.")
 		}
 		if place.Name != "" || place.Address != "" {
 			req.Place = &place

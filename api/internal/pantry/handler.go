@@ -349,7 +349,7 @@ func nonNull[T any](n Nullable[T], field string) (*T, error) {
 	case !n.Set:
 		return nil, nil
 	case n.Null:
-		return nil, invalid("%s can't be null", field)
+		return nil, invalid("%s can’t be null", field)
 	}
 	v := n.Value
 	return &v, nil

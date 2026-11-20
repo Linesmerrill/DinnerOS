@@ -59,7 +59,7 @@ struct SpecialtyOptionEditor: View {
                     Text(draft.type.title)
                 } footer: {
                     if isCustomizing {
-                        Text("Your household's own copy. It's chosen when you save, and the original stays.")
+                        Text("Your household’s own copy. It’s chosen when you save, and the original stays.")
                     }
                 }
                 if draft.isStoreAlternative {
@@ -90,6 +90,7 @@ struct SpecialtyOptionEditor: View {
                     stepsSection
                 }
             }
+            .dsReadableForm()
             .navigationTitle(isCustomizing ? String(localized: "Customize") : String(localized: "Edit Option"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

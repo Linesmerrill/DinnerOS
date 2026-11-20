@@ -629,6 +629,10 @@ func (s *Service) settle(ctx context.Context, ref Referral) error {
 	return err
 }
 
+// FreeMonthLimitText says a household already has every free month invites
+// can give (MaxReferralMonths).
+const FreeMonthLimitText = "You’ve reached the free-month limit."
+
 // ReferrerTitle is the sharer's notification title.
 const ReferrerTitle = "Your invite counted"
 
@@ -656,7 +660,7 @@ func ReferrerBody(referredName string, atCap, ready bool) string {
 	joined := nameOr(referredName, "A household") + " joined from your invite. "
 	switch {
 	case atCap:
-		return joined + "You've already earned the most free months."
+		return joined + FreeMonthLimitText
 	case ready:
 		return joined + FreeMonthReadyTitle + "."
 	default:
@@ -674,9 +678,9 @@ func nameOr(name, fallback string) string {
 func possessive(name string) string {
 	n := strings.TrimSpace(name)
 	if n == "" {
-		return "a friend's"
+		return "a friend’s"
 	}
-	return n + "'s"
+	return n + "’s"
 }
 
 func (s *Service) householdName(ctx context.Context, id string) string {

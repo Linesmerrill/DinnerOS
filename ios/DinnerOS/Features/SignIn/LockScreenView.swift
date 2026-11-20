@@ -34,16 +34,14 @@ struct LockScreenView: View {
                         Button {
                             Task { await lock.ask() }
                         } label: {
-                            SignInButtonLabel(title: Text(kind.toggleTitle), height: buttonHeight) {
+                            SignInButtonLabel(title: Text(kind.signInTitle), height: buttonHeight) {
                                 Image(systemName: kind.systemImage)
                                     .resizable()
                                     .scaledToFit()
                                     .fontWeight(.medium)
                             }
                         }
-                        .buttonStyle(
-                            .dsPrimary(fullWidth: true, font: DS.Typography.signInButton(height: buttonHeight))
-                        )
+                        .buttonStyle(.dsSignInPrimary)
                         .accessibilityIdentifier("lock.unlock")
                         Button("Sign in another way") {
                             Task { await lock.signInAnotherWay() }

@@ -35,6 +35,32 @@ struct ReviewReadinessTests {
         #expect(beta.isBeta && !qa.isBeta)
     }
 
+    /// "Plus is on the house. Thank you for testing." is tester copy: an App Store build, or a
+    /// build whose channel isn't known yet, says only "Plus is on the house." (build 121).
+    @Test func theTesterThanksNeverShowsInAnAppStoreBuild() throws {
+        let beta = PlusComp(reason: "beta", since: .now, thanksTitle: "", thanksText: "")
+        let qa = PlusComp(reason: "qa", since: .now, thanksTitle: "", thanksText: "")
+        for comp in [beta, qa] {
+            #expect(!BuildChannel.showsTesterThanks(.appStore, comp: comp))
+            #expect(!BuildChannel.showsTesterThanks(nil, comp: comp))
+        }
+        #expect(BuildChannel.showsTesterThanks(.testFlight, comp: beta))
+        #expect(!BuildChannel.showsTesterThanks(.testFlight, comp: qa))
+        #expect(BuildChannel.showsTesterThanks(.development, comp: qa))
+        #expect(!BuildChannel.showsTesterThanks(.development, comp: nil))
+
+        let status = try JSONCoding.makeDecoder().decode(
+            PlusStatus.self,
+            from: Data(
+                #"{"enabled":true,"active":true,"trial":false,"willRenew":false,"billingIssue":false,"comp":{"reason":"beta","since":"2026-11-13T23:00:00Z","thanksTitle":"t","thanksText":"t"}}"#
+                    .utf8))
+        let thanks = BuildChannel.showsTesterThanks(.appStore, comp: status.comp)
+        let appStore = PlusText.status(status, testerThanks: thanks)
+        #expect(appStore == "Plus is on the house.")
+        #expect(PlusText.status(status) == "Plus is on the house.")
+        #expect(PlusText.status(status, testerThanks: true) == "Plus is on the house. Thank you for testing.")
+    }
+
     @Test func withoutStoreKitTheReceiptDecidesAndUnknownMeansTheAppStore() {
         #expect(BuildChannel.from(environment: nil, receiptName: "sandboxReceipt", debug: false) == .testFlight)
         #expect(BuildChannel.from(environment: nil, receiptName: "receipt", debug: false) == .appStore)

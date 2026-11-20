@@ -106,12 +106,9 @@ struct YourMealsSection: View {
         try? await autopilot.generate(week: week, prompted: false)
     }
 
-    private var subtitle: String {
-        let counts = menu.mealCounts(of: entries)
-        if menu.selectedTiming == .past {
-            return MenuFormat.mealsPlanned(counts.meals)
-        }
-        return MenuFormat.yourMealsSubtitle(counts: counts)
+    private var subtitle: String? {
+        MenuFormat.yourMealsHeaderSubtitle(
+            counts: menu.mealCounts(of: entries), isPast: menu.selectedTiming == .past)
     }
 
     @ViewBuilder
@@ -179,6 +176,7 @@ struct YourMealsSection: View {
                 .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
+            .carouselInSafeArea()
             .scrollTargetBehavior(.viewAligned)
         }
     }
@@ -211,14 +209,10 @@ struct YourMealsSection: View {
     @ViewBuilder
     private var fullEmptyState: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            Label(
-                menu.selectedTiming == .past
-                    ? String(localized: "Nothing was planned this week")
-                    : String(localized: "Nothing planned yet"), systemImage: "calendar"
-            )
-            .font(.headline)
+            Label(MenuFormat.emptyWeekTitle(isPast: menu.selectedTiming == .past), systemImage: "calendar")
+                .font(DS.Typography.headline)
             if isEditable {
-                Text("Let Autopilot suggest this week's dinners, or pick meals yourself.")
+                Text("Let Autopilot suggest this week’s dinners, or pick meals yourself.")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
                 Button {
@@ -264,7 +258,7 @@ struct ReviewPicksCard: View {
             Text("Review, swap, and add them to your week.")
                 .font(.subheadline)
                 .foregroundStyle(Color.secondary)
-            Button("Review Autopilot's Picks", action: review)
+            Button("Review Autopilot’s Picks", action: review)
                 .buttonStyle(.dsPrimary(.small))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -277,7 +271,7 @@ struct ReviewPicksCard: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 44, minHeight: 44)
-                    .accessibilityLabel("Dismiss Autopilot's Picks")
+                    .accessibilityLabel("Dismiss Autopilot’s Picks")
             }
         }
         .offset(x: dragX)
@@ -428,9 +422,12 @@ struct MealCard: View {
     /// and a customization or note would make this card a different height from its neighbours.
     /// Both still reach VoiceOver through `accessibilityLabel`.
     private var text: some View {
-        CardTitle(name: entry.recipe.name)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityLabel)
+        CardTitle(
+            name: entry.recipe.name,
+            reservesHeight: MenuCardMetrics.reservesTitleHeight(hasRowBelow: true)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private var dayLabel: String {
@@ -495,7 +492,7 @@ struct MealCard: View {
                 markCooked()
             }
             .disabled(outcome == .cooked)
-            Menu("Didn't Make It", systemImage: "xmark.circle") {
+            Menu("Didn’t Make It", systemImage: "xmark.circle") {
                 ForEach(SkipReason.allCases) { reason in
                     Button(reason.title) { markNotMade(reason) }
                 }

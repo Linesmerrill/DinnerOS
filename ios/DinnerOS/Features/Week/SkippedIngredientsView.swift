@@ -41,7 +41,7 @@ struct SkippedIngredientsView: View {
         content
             .navigationTitle("Skipped Items")
             .navigationBarTitleDisplayMode(.inline)
-            .alert("Couldn't Change That", isPresented: Binding(presenting: $actionError)) {
+            .alert("Couldn’t Change That", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(actionError ?? "")
@@ -56,7 +56,7 @@ struct SkippedIngredientsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load These", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load These", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -91,7 +91,7 @@ struct SkippedIngredientsView: View {
                 footer: String(localized: "Back on the list next week, with nothing to do."))
             section(
                 skips.inRecipes, title: String(localized: "Skipped in One Dish"),
-                footer: String(localized: "Skipped in that recipe every time it's planned. Other dishes still use it.")
+                footer: String(localized: "Skipped in that recipe every time it’s planned. Other dishes still use it.")
             )
         }
         .refreshable {

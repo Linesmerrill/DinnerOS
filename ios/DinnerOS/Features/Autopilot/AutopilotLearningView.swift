@@ -22,7 +22,7 @@ struct AutopilotLearningView: View {
                 list(learning)
             } else if let loadError {
                 ContentUnavailableView {
-                    Label("Couldn't Load What Autopilot Learned", systemImage: "exclamationmark.triangle")
+                    Label("Couldn’t Load What Autopilot Learned", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(loadError)
                 } actions: {
@@ -128,7 +128,7 @@ private struct LearnedAdjustmentRow: View {
             }
         } icon: {
             Image(systemName: adjustment.isAway ? "arrow.down.circle" : "arrow.up.circle")
-                .foregroundStyle(adjustment.isAway ? Color.orange : Color.green)
+                .foregroundStyle(adjustment.isAway ? DS.Colors.warning : DS.Colors.success)
                 .accessibilityLabel(adjustment.isAway ? "Less often" : "More often")
         }
         .accessibilityElement(children: .combine)

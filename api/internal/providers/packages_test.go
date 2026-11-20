@@ -79,7 +79,7 @@ func TestCountPackages(t *testing.T) {
 func TestPackageTexts(t *testing.T) {
 	c := CountPackages([]ingredients.Amount{amount(t, "4", "clove")}, &ingredients.Amount{Quantity: ingredients.NewQuantity(3, 1), Unit: mustUnit(t, "count")})
 	size := amount(t, "3", "count")
-	if got := ReasonText(c, &size); got != "Check amount: 4 cloves doesn't convert to a 3 ct package" {
+	if got := ReasonText(c, &size); got != "Check amount: 4 cloves doesn’t convert to a 3 ct package" {
 		t.Errorf("ReasonText() = %q", got)
 	}
 	if got := CoverageText(PackageCount{Packages: 3, Reason: ReasonNoPackageSize}, nil); got != "3 packages" {

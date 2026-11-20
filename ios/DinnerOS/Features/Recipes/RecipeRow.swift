@@ -70,19 +70,29 @@ struct RecipeImage: View {
     var title: String? = nil
 
     @Environment(\.displayScale) private var displayScale
+    /// The width it's actually drawn at, so a full-width photo (a shared recipe's page) asks
+    /// for a full-width image instead of stretching a thumbnail.
+    @State private var measuredWidth: CGFloat?
 
     var body: some View {
+        let width = max(pointWidth, measuredWidth ?? 0)
         Rectangle()
             .fill(.quaternary)
             .aspectRatio(4.0 / 3.0, contentMode: .fit)
             .overlay {
-                CachedImage(key: ImageKey(url: url, pointWidth: pointWidth, scale: displayScale)) {
+                CachedImage(key: ImageKey(url: url, pointWidth: width, scale: displayScale, maxBucket: nil)) {
                     Color.clear
                 } fallback: {
-                    RecipePlaceholderArt(title: title, showsTitle: pointWidth >= 200)
+                    RecipePlaceholderArt(title: title, showsTitle: width >= 200)
                 }
             }
             .clipped()
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: { width in
+                guard width > 0 else { return }
+                measuredWidth = width
+            }
             .accessibilityHidden(true)
     }
 }

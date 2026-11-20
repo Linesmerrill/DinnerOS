@@ -251,12 +251,23 @@ nonisolated enum MenuCardMetrics {
     static func titleLines(for size: DynamicTypeSize) -> Int? {
         size.isAccessibilitySize ? nil : 2
     }
+
+    /// Whether a card's name keeps its second line's height when it fits on one.
+    ///
+    /// Only where nothing comes under the name (carousel cards), so neighbours line up. A card
+    /// with a row under its name (servings, Add) takes the name's real height: the empty line
+    /// left a gap above that row that read as a layout bug (build 121).
+    static func reservesTitleHeight(hasRowBelow: Bool) -> Bool {
+        !hasRowBelow
+    }
 }
 
 /// A card's name, clamped and given a fixed height so cards line up — until accessibility sizes,
 /// where it wraps freely instead.
 struct CardTitle: View {
     let name: String
+    /// Keep two lines' height for a one-line name (`MenuCardMetrics.reservesTitleHeight`).
+    var reservesHeight = true
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// One line of `.headline`, with room to spare.
@@ -278,7 +289,7 @@ struct CardTitle: View {
             // the height the reserved box offers — `lineLimit` is what bounds it, not the frame.
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: lines.map { lineHeight * CGFloat($0) }, alignment: .topLeading)
+            .frame(height: reservesHeight ? lines.map { lineHeight * CGFloat($0) } : nil, alignment: .topLeading)
     }
 }
 

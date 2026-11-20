@@ -50,7 +50,7 @@ struct MealRatingRow: View {
                 .padding(.top, DS.Space.hairline)
             }
             if failed {
-                Text("Couldn't save that rating. Tap a star to try again.")
+                Text("Couldn’t save that rating. Tap a star to try again.")
                     .font(.caption)
                     .foregroundStyle(.red)
             }
@@ -65,7 +65,7 @@ struct MealRatingRow: View {
     private var followUpTitle: LocalizedStringKey {
         let answered = recipe.myRating?.misses?.isEmpty == false || hasFollowUpTags
         switch (score == 5, answered) {
-        case (true, true): return "Edit What You'd Change"
+        case (true, true): return "Edit What You’d Change"
         case (true, false): return "Anything to Change?"
         case (false, true): return "Edit What Could Be Better"
         case (false, false): return "What Could Be Better?"

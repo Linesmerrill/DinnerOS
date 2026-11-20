@@ -43,14 +43,14 @@ func TestCleanTypedNutritionSaysWhatsWrong(t *testing.T) {
 		in   []Nutrient
 		want string
 	}{
-		{[]Nutrient{{Name: "Calories", Amount: 5001}}, "Calories can be up to 5000 kcal."},
+		{[]Nutrient{{Name: "Calories", Amount: 5001}}, "Calories can be up to 5000 Cal."},
 		{[]Nutrient{{Name: "Protein", Amount: 1001}}, "Protein can be up to 1000 g."},
 		{[]Nutrient{{Name: "Sodium", Amount: 20001}}, "Sodium can be up to 20000 mg."},
-		{[]Nutrient{{Name: "Fat", Amount: -1}}, "Fat can't be less than zero."},
-		{[]Nutrient{{Name: "Fat", Amount: math.NaN()}}, "Fat can't be less than zero."},
+		{[]Nutrient{{Name: "Fat", Amount: -1}}, "Fat can’t be less than zero."},
+		{[]Nutrient{{Name: "Fat", Amount: math.NaN()}}, "Fat can’t be less than zero."},
 		{[]Nutrient{{Name: "Sodium", Amount: 1, Unit: "g"}}, "Enter sodium in mg."},
 		{[]Nutrient{{Name: "Protein", Amount: 1}, {Name: "protein", Amount: 2}}, "You listed protein twice."},
-		{[]Nutrient{{Name: "Vitamin C", Amount: 1}}, `"Vitamin C" isn't a nutrition value DinnerOS knows.`},
+		{[]Nutrient{{Name: "Vitamin C", Amount: 1}}, `"Vitamin C" isn’t a nutrition value DinnerOS knows.`},
 		{make([]Nutrient, 10), "A recipe can list at most 9 nutrition values."},
 	} {
 		if _, problem := cleanTypedNutrition(tc.in); !strings.HasPrefix(problem, tc.want) {
@@ -68,7 +68,7 @@ func TestDraftSavesNutrition(t *testing.T) {
 		t.Fatalf("create = %d %s", rec.Code, rec.Body.String())
 	}
 	got := decodeBody[RecipeResponse](t, rec)
-	want := []NutrientResponse{{Name: "Calories", Amount: 610, Unit: "kcal"}, {Name: "Protein", Amount: 30, Unit: "g"}}
+	want := []NutrientResponse{{Name: "Calories", Amount: 610, Unit: "kcal", Text: "610 Cal"}, {Name: "Protein", Amount: 30, Unit: "g", Text: "30 g"}}
 	if !reflect.DeepEqual(got.Nutrition, want) || got.Calories == nil || *got.Calories != 610 || *got.ProteinGrams != 30 {
 		t.Errorf("nutrition = %+v, calories %v, protein %v", got.Nutrition, got.Calories, got.ProteinGrams)
 	}
@@ -80,7 +80,7 @@ func TestDraftSavesNutrition(t *testing.T) {
 	rec = srv.do(t, http.MethodPost, recipesPath(hhAda), `{"name":"Too Much","nutritionPerServing":[{"name":"Calories","amount":9000}],
 		"ingredients":[{"name":"salt"}],"steps":["Wait."]}`, userAda)
 	wantError(t, rec, http.StatusBadRequest, "validation_failed")
-	if !strings.Contains(rec.Body.String(), "Calories can be up to 5000 kcal.") {
+	if !strings.Contains(rec.Body.String(), "Calories can be up to 5000 Cal.") {
 		t.Errorf("body = %s", rec.Body.String())
 	}
 }

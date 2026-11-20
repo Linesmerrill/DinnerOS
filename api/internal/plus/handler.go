@@ -474,11 +474,11 @@ func ReferralText(code string, rewarded, monthsLeft int) (share, explainer strin
 	share = ShareMessage(code) + " " + InviteURL(code)
 	switch {
 	case monthsLeft == 0:
-		explainer = "Thanks for sharing DinnerOS. You've earned every free month this code can give."
+		explainer = "Thanks for sharing DinnerOS. " + FreeMonthLimitText
 	case rewarded == 1:
-		explainer = "Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus. You've earned 1 month so far."
+		explainer = "Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus. You’ve earned 1 month so far."
 	case rewarded > 1:
-		explainer = fmt.Sprintf("Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus. You've earned %d months so far.", rewarded)
+		explainer = fmt.Sprintf("Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus. You’ve earned %d months so far.", rewarded)
 	default:
 		explainer = "Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus."
 	}
@@ -625,7 +625,7 @@ type InviteNoticeResponse struct {
 }
 
 // InvitesOffText is shown for an invite link while invites are off.
-const InvitesOffText = "Invites aren't available right now."
+const InvitesOffText = "Invites aren’t available right now."
 
 func (h *Handler) invitePreview(w http.ResponseWriter, r *http.Request) {
 	p, err := h.opts.Service.PreviewInvite(r.Context(), chi.URLParam(r, "code"))

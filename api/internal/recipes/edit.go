@@ -180,7 +180,7 @@ func editedPhoto(r Recipe, raw string) (string, error) {
 	}
 	raw = strings.TrimSpace(raw)
 	if raw != "" && !IsPickablePhotoURL(raw) {
-		return "", invalidEdit("that photo can't be used. Add it again from your phone")
+		return "", invalidEdit("that photo can’t be used. Add it again from your phone")
 	}
 	return raw, nil
 }
@@ -267,7 +267,7 @@ func editedAmounts(name string, servings []int, in []EditAmount) ([]Amount, erro
 	var out []Amount
 	for _, a := range in {
 		if !slices.Contains(servings, a.Servings) {
-			return nil, invalidEdit(fmt.Sprintf("%s has an amount for %d servings, which the recipe doesn't make", name, a.Servings))
+			return nil, invalidEdit(fmt.Sprintf("%s has an amount for %d servings, which the recipe doesn’t make", name, a.Servings))
 		}
 		if slices.ContainsFunc(out, func(o Amount) bool { return o.Servings == a.Servings }) {
 			return nil, invalidEdit(fmt.Sprintf("%s has two amounts for %d servings", name, a.Servings))
@@ -277,13 +277,13 @@ func editedAmounts(name string, servings []int, in []EditAmount) ([]Amount, erro
 		if q != "" {
 			parsed, err := ingredients.ParseQuantity(q)
 			if err != nil || parsed.IsZero() {
-				return nil, invalidEdit(fmt.Sprintf("the amount for %s isn't a number", name))
+				return nil, invalidEdit(fmt.Sprintf("the amount for %s isn’t a number", name))
 			}
 			amount.Quantity = parsed.String()
 		}
 		if unit != "" {
 			if _, err := ingredients.LookupUnit(unit); err != nil {
-				return nil, invalidEdit(fmt.Sprintf("%s has a unit we don't know", name))
+				return nil, invalidEdit(fmt.Sprintf("%s has a unit we don’t know", name))
 			}
 		}
 		out = append(out, amount)

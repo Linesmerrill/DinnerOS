@@ -159,7 +159,7 @@ func TestReviewSignInWrongEmailOrPasswordGetsOneMessage(t *testing.T) {
 		"too long":        {testReviewEmail, strings.Repeat("a", 300)},
 	} {
 		rec := srv.signIn(t, "10.0.0."+fmt.Sprint(len(name)), try[0], try[1])
-		wantReviewMessage(t, rec, http.StatusUnauthorized, "sign_in_failed", "That email and password didn't work.")
+		wantReviewMessage(t, rec, http.StatusUnauthorized, "sign_in_failed", "That email and password didn’t work.")
 	}
 	if len(srv.users.users) != 0 || len(srv.seeder.calls) != 0 {
 		t.Errorf("a failed sign-in made a user (%d) or seeded (%d)", len(srv.users.users), len(srv.seeder.calls))

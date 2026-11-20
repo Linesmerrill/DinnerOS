@@ -24,10 +24,10 @@ struct ProposalReviewView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Autopilot's Picks")
+                .navigationTitle("Autopilot’s Picks")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbar }
-                .alert("Couldn't Change the Suggestions", isPresented: Binding(presenting: $actionError)) {
+                .alert("Couldn’t Change the Suggestions", isPresented: Binding(presenting: $actionError)) {
                     Button("OK", role: .cancel) {}
                 } message: {
                     Text(actionError ?? "")
@@ -126,7 +126,7 @@ struct ProposalReviewView: View {
                 Text(week.weekOf(weekStartsOn: households.weekStartsOn))
             } footer: {
                 if canEdit {
-                    Text("Switch off meals you don't want. Nothing is added to your week until you add them.")
+                    Text("Switch off meals you don’t want. Nothing is added to your week until you add them.")
                 } else {
                     Text("Someone who can plan meals can add these to the week.")
                 }
@@ -158,7 +158,10 @@ struct ProposalReviewView: View {
             .disabled(count == 0 || autopilot.isSaving)
         }
         .padding(DS.Space.l)
-        .background(.bar)
+        .dsReadableWidth()
+        // The list's own gray, edge to edge, so the footer isn't a second shade (build 121).
+        .background(DS.Colors.groupedBackground)
+        .overlay(alignment: .top) { Divider() }
     }
 
     // MARK: - Actions
@@ -297,7 +300,7 @@ struct ProposalSlotRow: View {
                 Button("Swap", action: swap)
                 ForEach(slot.pairings) { pairing in
                     let isChosen = isPairingChosen(pairing.id)
-                    Button(isChosen ? "Don't Add \(pairing.name)" : "Add \(pairing.name)") {
+                    Button(isChosen ? "Don’t Add \(pairing.name)" : "Add \(pairing.name)") {
                         setPairing(pairing.id, !isChosen)
                     }
                 }

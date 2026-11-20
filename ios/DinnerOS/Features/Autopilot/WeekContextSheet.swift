@@ -41,7 +41,7 @@ struct WeekContextSheet: View {
     /// One short line under the tiles, saying what the week is now.
     private var presetFooter: String {
         if draft.skip {
-            return String(localized: "Autopilot won't plan anything, and the week shows you're away.")
+            return String(localized: "Autopilot won’t plan anything, and the week shows you’re away.")
         }
         var parts: [String] = []
         if draft.busy {
@@ -50,13 +50,13 @@ struct WeekContextSheet: View {
         if draft.isOn(.guests) {
             parts.append(String(localized: "Bigger servings, and a bigger grocery list."))
         }
-        return parts.isEmpty ? String(localized: "Tap what's different about this week.") : parts.joined(separator: " ")
+        return parts.isEmpty ? String(localized: "Tap what’s different about this week.") : parts.joined(separator: " ")
     }
 
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("This Week's Plans")
+                .navigationTitle("This Week’s Plans")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -74,7 +74,7 @@ struct WeekContextSheet: View {
                     }
                 }
                 .confirmationDialog(
-                    "Clear this week's plans?", isPresented: $isConfirmingClear, titleVisibility: .visible
+                    "Clear this week’s plans?", isPresented: $isConfirmingClear, titleVisibility: .visible
                 ) {
                     Button("Clear", role: .destructive, action: clear)
                 } message: {
@@ -91,7 +91,7 @@ struct WeekContextSheet: View {
             form
         } else if let loadError {
             ContentUnavailableView {
-                Label("Couldn't Load This Week", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load This Week", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(loadError)
             } actions: {
@@ -169,7 +169,7 @@ struct WeekContextSheet: View {
                     Text("Notes can be up to \(limits.maxNoteLength) characters.")
                         .foregroundStyle(.red)
                 } else {
-                    Text("Kept for your household. Autopilot doesn't read notes yet.")
+                    Text("Kept for your household. Autopilot doesn’t read notes yet.")
                 }
             }
             if let errorMessage {
@@ -179,7 +179,7 @@ struct WeekContextSheet: View {
             }
             if canEdit, original?.configured == true {
                 Section {
-                    Button("Clear This Week's Plans", role: .destructive) {
+                    Button("Clear This Week’s Plans", role: .destructive) {
                         isConfirmingClear = true
                     }
                 } footer: {
@@ -192,6 +192,7 @@ struct WeekContextSheet: View {
                 }
             }
         }
+        .dsReadableForm()
         .disabled(!canEdit || isSaving)
     }
 
@@ -334,7 +335,7 @@ private struct DayOverrideForm: View {
             Section {
                 Toggle("Skip This Day", isOn: $override.skip)
             } footer: {
-                Text("Autopilot won't plan a meal this day.")
+                Text("Autopilot won’t plan a meal this day.")
             }
             if !override.skip {
                 Section {
@@ -350,6 +351,7 @@ private struct DayOverrideForm: View {
                 }
             }
         }
+        .dsReadableForm()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }

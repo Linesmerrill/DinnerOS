@@ -45,7 +45,7 @@ struct ProductChoice: Identifiable {
     private static func reason(for gone: Bool) -> String {
         gone
             ? String(localized: "This product is no longer on Walmart.")
-            : String(localized: "We couldn't check this product on Walmart.")
+            : String(localized: "We couldn’t check this product on Walmart.")
     }
 
     init(excluded line: ShoppingExcludedLine) {
@@ -162,6 +162,7 @@ struct ChooseProductSheet: View {
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -193,7 +194,7 @@ struct ChooseProductSheet: View {
                 Button("Remove", role: .destructive, action: remove)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You'll be asked to choose a product for it again the next time it's on your list.")
+                Text("You’ll be asked to choose a product for it again the next time it’s on your list.")
             }
         }
     }
@@ -346,7 +347,7 @@ struct ChooseProductSheet: View {
         } header: {
             Text("Price per Package")
         } footer: {
-            Text("What one package costs at Walmart. It's used to work out your cost per meal.")
+            Text("What one package costs at Walmart. It’s used to work out your cost per meal.")
         }
     }
 

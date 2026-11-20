@@ -128,7 +128,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.As(err, &validation):
 		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", validation.Message)
 	case errors.Is(err, ErrNotFound):
-		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "Those items aren't linked anymore.")
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "Those items aren’t linked anymore.")
 	case errors.Is(err, ErrForbidden):
 		httpx.WriteError(w, r, http.StatusForbidden, "forbidden", "your role in this household does not allow this action")
 	default:

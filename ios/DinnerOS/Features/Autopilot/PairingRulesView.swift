@@ -49,7 +49,7 @@ struct PairingRulesView: View {
                     Text("Rules")
                 } footer: {
                     Text(
-                        "A rule adds something to every matching meal. “Always” includes it with Autopilot's picks; “Suggest” offers it."
+                        "A rule adds something to every matching meal. “Always” includes it with Autopilot’s picks; “Suggest” offers it."
                     )
                 }
                 if canEdit {
@@ -233,6 +233,7 @@ struct PairingRuleEditor: View {
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle(rule.id == nil ? "New Rule" : "Edit Rule")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -345,7 +346,7 @@ struct PairingRuleEditor: View {
             Text(
                 addKind == .recipe
                     ? String(localized: "An add-on from your recipes, planned on the same day as the meal.")
-                    : String(localized: "A plain line on the week's grocery list. An amount is optional.")
+                    : String(localized: "A plain line on the week’s grocery list. An amount is optional.")
             )
         }
     }
@@ -358,7 +359,7 @@ struct PairingRuleEditor: View {
                 }
             }
         } footer: {
-            Text("“Always” is added with Autopilot's picks unless you take it out. “Suggest” is offered.")
+            Text("“Always” is added with Autopilot’s picks unless you take it out. “Suggest” is offered.")
         }
     }
 

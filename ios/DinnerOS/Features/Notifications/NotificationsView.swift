@@ -13,7 +13,7 @@ struct NotificationsView: View {
     @Environment(TabRouter.self) private var tabs: TabRouter?
 
     @State private var actionError: String?
-    @State private var actionTitle = String(localized: "Couldn't Mark Notifications Read")
+    @State private var actionTitle = String(localized: "Couldn’t Mark Notifications Read")
 
     var body: some View {
         NavigationStack {
@@ -21,9 +21,11 @@ struct NotificationsView: View {
                 .navigationTitle("Notifications")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Mark All Read") { markAllRead() }
-                            .disabled(notifications.unreadCount == 0 && notifications.items.allSatisfy(\.read))
+                    // Only when there's something to mark: a grayed-out button read as broken.
+                    if notifications.unreadCount > 0 || !notifications.items.allSatisfy(\.read) {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Mark All Read") { markAllRead() }
+                        }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { dismiss() }
@@ -50,7 +52,7 @@ struct NotificationsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Notifications", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Notifications", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -69,8 +71,8 @@ struct NotificationsView: View {
             if let refreshError = notifications.refreshError {
                 FormErrorLabel(message: refreshError)
             }
-            ForEach(notifications.items) { notification in
-                row(notification)
+            ForEach(NotificationGrouping.groups(notifications.items)) { group in
+                row(group)
             }
             if notifications.hasMore {
                 nextPageRow
@@ -80,7 +82,7 @@ struct NotificationsView: View {
             if notifications.items.isEmpty {
                 ContentUnavailableView(
                     "No Notifications", systemImage: "bell",
-                    description: Text("Alerts such as a pantry item running low appear here."))
+                    description: Text("Things like a pantry item running low show up here."))
             }
         }
         .refreshable {
@@ -88,24 +90,35 @@ struct NotificationsView: View {
         }
     }
 
-    private func row(_ notification: AppNotification) -> some View {
+    /// One row for a notification and any repeats of it (`NotificationGrouping`); its actions
+    /// apply to all of them.
+    private func row(_ group: NotificationGroup) -> some View {
         Button {
-            open(notification)
+            open(group)
         } label: {
-            NotificationRow(notification: notification)
+            NotificationRow(notification: group.latest, isRead: group.isRead, moreCount: group.moreCount)
         }
-        .accessibilityHint(hint(for: notification))
+        .accessibilityHint(hint(for: group.latest))
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", systemImage: "trash", role: .destructive) {
-                delete(notification)
+                delete(group)
             }
         }
         .swipeActions(edge: .leading) {
-            if !notification.read {
+            if !group.isRead {
                 Button("Mark Read", systemImage: "envelope.open") {
-                    Task { await notifications.markRead(notification) }
+                    markRead(group)
                 }
-                .tint(.blue)
+                .tint(DS.Colors.accent)
+            }
+        }
+    }
+
+    private func markRead(_ group: NotificationGroup) {
+        let unread = group.unread
+        Task {
+            for notification in unread {
+                await notifications.markRead(notification)
             }
         }
     }
@@ -123,7 +136,7 @@ struct NotificationsView: View {
             HStack {
                 Spacer()
                 ProgressView()
-                    .accessibilityLabel("Loading more notifications")
+                    .accessibilityLabel("Loading More Notifications")
                 Spacer()
             }
             // Loads when the row scrolls into view.
@@ -140,22 +153,25 @@ struct NotificationsView: View {
     }
 
     /// Gone from this member's list only; the rest of the household still sees it.
-    private func delete(_ notification: AppNotification) {
+    private func delete(_ group: NotificationGroup) {
+        let items = group.items
         Task {
             do {
-                try await notifications.dismiss(notification)
+                for notification in items {
+                    try await notifications.dismiss(notification)
+                }
             } catch is CancellationError {
                 return
             } catch {
-                actionTitle = String(localized: "Couldn't Delete Notification")
+                actionTitle = String(localized: "Couldn’t Delete Notification")
                 actionError = HouseholdStore.message(for: error)
             }
         }
     }
 
-    private func open(_ notification: AppNotification) {
-        Task { await notifications.markRead(notification) }
-        let destination = NotificationRouting.destination(for: notification)
+    private func open(_ group: NotificationGroup) {
+        markRead(group)
+        let destination = NotificationRouting.destination(for: group.latest)
         guard let tabs, destination != .notifications else { return }
         // The bell is a sheet over a tab, so it closes before the tab changes.
         dismiss()
@@ -169,16 +185,25 @@ struct NotificationsView: View {
             } catch is CancellationError {
                 // Nothing to report.
             } catch {
-                actionTitle = String(localized: "Couldn't Mark Notifications Read")
+                actionTitle = String(localized: "Couldn’t Mark Notifications Read")
                 actionError = HouseholdStore.message(for: error)
             }
         }
     }
 }
 
-/// One notification: an icon for its type, title, body, age, and an unread dot.
+/// One notification: an icon for its type, title, body, age, and an unread dot. A row standing
+/// for repeats says how many more there are.
 struct NotificationRow: View {
     let notification: AppNotification
+    var isRead: Bool
+    var moreCount = 0
+
+    init(notification: AppNotification, isRead: Bool? = nil, moreCount: Int = 0) {
+        self.notification = notification
+        self.isRead = isRead ?? notification.read
+        self.moreCount = moreCount
+    }
 
     private var icon: String {
         switch notification.type {
@@ -191,8 +216,8 @@ struct NotificationRow: View {
 
     private var iconStyle: AnyShapeStyle {
         switch notification.type {
-        case .pantryLow: AnyShapeStyle(.orange)
-        default: AnyShapeStyle(.tint)
+        case .pantryLow: AnyShapeStyle(DS.Colors.warning)
+        default: AnyShapeStyle(DS.Colors.accent)
         }
     }
 
@@ -201,25 +226,32 @@ struct NotificationRow: View {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(iconStyle)
-                .frame(minWidth: 28)
+                .dsIconColumn()
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 // A concrete color: `.primary` inside a list Button resolves to the tint.
                 Text(notification.title)
-                    .font(notification.read ? .body : .body.weight(.semibold))
+                    .font(isRead ? DS.Typography.body : DS.Typography.body.weight(.semibold))
                     .foregroundStyle(Color.primary)
                 Text(notification.body)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(notification.createdAt, format: .relative(presentation: .named))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
+                HStack(spacing: DS.Space.xs) {
+                    Text(notification.createdAt, format: .relative(presentation: .named))
+                    if let more = NotificationGrouping.moreText(moreCount) {
+                        Text(verbatim: "·")
+                            .accessibilityHidden(true)
+                        Text(more)
+                    }
+                }
+                .font(DS.Typography.caption)
+                .foregroundStyle(DS.Colors.secondaryText)
             }
             Spacer(minLength: 0)
-            if !notification.read {
+            if !isRead {
                 Circle()
-                    .fill(.tint)
-                    .frame(width: 10, height: 10)
+                    .fill(DS.Colors.accent)
+                    .frame(width: DS.Space.sm, height: DS.Space.sm)
                     .padding(.top, DS.Space.xs)
                     .accessibilityHidden(true)
             }
@@ -228,7 +260,7 @@ struct NotificationRow: View {
         .foregroundStyle(Color.primary)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(notification.read ? Text("") : Text("Unread"))
+        .accessibilityValue(isRead ? Text("") : Text("Unread"))
     }
 }
 

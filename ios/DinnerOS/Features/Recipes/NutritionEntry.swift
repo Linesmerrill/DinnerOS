@@ -45,6 +45,11 @@ nonisolated enum NutritionField: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The unit as shown beside the field: "Cal", never the server's "kcal".
+    var displayUnit: String {
+        RecipeFormat.abbreviatedUnit(unit)
+    }
+
     /// The server's name, however an import spelled it.
     static func matching(_ name: String) -> NutritionField? {
         let key = name.lowercased().filter(\.isLetter)
@@ -190,7 +195,7 @@ private struct NutritionRow: View {
                 .monospacedDigit()
                 .frame(maxWidth: 110, minHeight: 40)
                 .accessibilityLabel(Text(field.label))
-            Text(field.unit)
+            Text(field.displayUnit)
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 34, alignment: .leading)
                 .accessibilityHidden(true)

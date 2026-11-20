@@ -27,7 +27,7 @@ struct OfflineBanner: View {
     }
 
     private func text(_ offline: OfflineStatus) -> String {
-        guard let saved = offline.savedAt else { return String(localized: "Offline. Showing what's saved.") }
+        guard let saved = offline.savedAt else { return String(localized: "Offline. Showing what’s saved.") }
         let when =
             Calendar.current.isDateInToday(saved)
             ? saved.formatted(date: .omitted, time: .shortened)

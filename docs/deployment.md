@@ -469,7 +469,15 @@ Nothing goes to TestFlight until Hark has reviewed that build's screenshots.
    sheet from the sweeps and screen tests, the sign-in screen with and without Face ID, and Start
    Cooking on a scrolled recipe, in light and dark, on the small and large iPhone, the iPhone Duo
    cover screen, and the iPad upright and on its side. `manifest.json` lists each `file`,
-   `screen`, `config`, `device` and `state` (appearance and orientation).
+   `screen`, `config`, `device`, `state` (appearance and orientation) and `size`.
+   Since build 121 (Hark's first review): the matrix has 10 configs (the Duo in dark too), and
+   every config runs every screenshot test. `snap()` waits for the screen to settle (no keyboard
+   tip, system banner or spinner) and keeps upright PNGs (an iPad on its side had come out
+   sideways with an EXIF rotation). The script strips EXIF, refuses a landscape PNG that's taller
+   than wide, and refuses to publish when a config or a required screen (sign-in with and
+   without Face ID, each tab, the Plus paywall, Start Cooking) is missing. The sign-in shots
+   hide the Debug build's developer sign-in (`QA_HIDE_DEVELOPER_SIGN_IN`), so they show the
+   Release screen.
 3. The script attaches the zip to a temporary draft release and runs the `QA screenshots`
    workflow (`.github/workflows/qa-screenshots.yml`), which publishes the GitHub Actions artifact
    **`qa-screenshots-<build>`** on Linesmerrill/DinnerOS (kept 30 days) and deletes the draft. The

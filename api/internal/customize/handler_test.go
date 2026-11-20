@@ -111,17 +111,17 @@ func TestGetCustomizations(t *testing.T) {
 		t.Fatalf("response = %+v", resp)
 	}
 	g := resp.Groups[0]
-	if g.IngredientKey != ingPork || g.IngredientName != "Ground Pork" || g.AmountText != "10 ounce" || g.Quantity != "10" || g.Unit != "oz" {
+	if g.IngredientKey != ingPork || g.IngredientName != "Ground Pork" || g.AmountText != "10 oz" || g.Quantity != "10" || g.Unit != "oz" {
 		t.Errorf("group = %+v", g)
 	}
 	if g.ImageURL == nil || *g.ImageURL != "https://img.example.com/pork.png" || g.SelectedChoiceID != nil {
 		t.Errorf("group image/selection = %+v", g)
 	}
 	original, double := g.Choices[0], g.Choices[1]
-	if original.ID != "original" || original.Label != "Ground Pork" || original.AmountText != "10 ounce" || original.Kind != KindOriginal || original.Badge != nil {
+	if original.ID != "original" || original.Label != "Ground Pork" || original.AmountText != "10 oz" || original.Kind != KindOriginal || original.Badge != nil {
 		t.Errorf("original = %+v", original)
 	}
-	if double.ID != "double" || double.Label != "2x Ground Pork" || double.AmountText != "20 ounce" || double.Kind != KindDouble ||
+	if double.ID != "double" || double.Label != "2x Ground Pork" || double.AmountText != "20 oz" || double.Kind != KindDouble ||
 		double.Badge == nil || *double.Badge != BadgeDouble {
 		t.Errorf("double = %+v", double)
 	}
@@ -129,7 +129,7 @@ func TestGetCustomizations(t *testing.T) {
 	if i < 0 {
 		t.Fatalf("no beef swap in %+v", g.Choices)
 	}
-	if beef := g.Choices[i]; beef.Label != "2x Ground Beef" || beef.IngredientName != "Ground Beef" || beef.AmountText != "20 ounce" || beef.Kind != KindSwapDouble {
+	if beef := g.Choices[i]; beef.Label != "2x Ground Beef" || beef.IngredientName != "Ground Beef" || beef.AmountText != "20 oz" || beef.Kind != KindSwapDouble {
 		t.Errorf("beef double = %+v", beef)
 	}
 
@@ -143,7 +143,7 @@ func TestGetCustomizations(t *testing.T) {
 	if resp.Servings != 4 || resp.Groups[0].SelectedChoiceID == nil || *resp.Groups[0].SelectedChoiceID != "double" {
 		t.Errorf("entry response = %+v", resp.Groups[0])
 	}
-	if resp.Groups[0].AmountText != "20 ounce" {
+	if resp.Groups[0].AmountText != "20 oz" {
 		t.Errorf("entry amount = %q", resp.Groups[0].AmountText)
 	}
 

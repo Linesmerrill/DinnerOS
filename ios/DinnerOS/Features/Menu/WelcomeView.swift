@@ -13,18 +13,19 @@ struct WelcomeView: View {
             VStack(alignment: .leading, spacing: DS.Space.xxl) {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
                     Image(systemName: "fork.knife.circle.fill")
-                        .font(.system(size: 52))
-                        .foregroundStyle(.tint)
+                        .font(DS.Typography.largeTitle)
+                        .imageScale(.large)
+                        .foregroundStyle(DS.Colors.accent)
                         .accessibilityHidden(true)
                     Text("Welcome to DinnerOS")
-                        .font(.largeTitle.bold())
+                        .font(DS.Typography.largeTitle)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text(
-                        hasRecipes ? "Your recipe library is ready." : "Let's get some recipes in."
+                        hasRecipes ? "Your recipe library is ready." : "Let’s get some recipes in."
                     )
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subtitle)
+                    .foregroundStyle(DS.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 VStack(alignment: .leading, spacing: DS.Space.ml) {
@@ -44,28 +45,28 @@ struct WelcomeView: View {
                 }
             }
             .padding(DS.Space.xxl)
+            .dsReadableWidth()
         }
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                choose(.startPlanning)
-            } label: {
-                Text("Start Planning")
+        // The footer matches the sheet and spans its full width (build 121).
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DSBottomBar {
+                Button {
+                    choose(.startPlanning)
+                } label: {
+                    Text("Start Planning")
+                }
+                .buttonStyle(.dsPrimary(fullWidth: true))
             }
-            .buttonStyle(.dsPrimary(fullWidth: true))
-            .padding(.horizontal, DS.Space.xxl)
-            .padding(.bottom, DS.Space.m)
-            .background(.bar)
         }
         .interactiveDismissDisabled(false)
     }
 
+    /// A line with its icon in the shared icon column, so the three lines start together.
     private func point(_ symbol: String, _ text: LocalizedStringKey) -> some View {
-        Label {
+        DSIconRow(systemImage: symbol) {
             Text(text).fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: symbol).foregroundStyle(.tint)
         }
-        .font(.body)
+        .font(DS.Typography.body)
     }
 
     private func option(
@@ -74,20 +75,20 @@ struct WelcomeView: View {
         Button {
             choose(choice)
         } label: {
-            HStack(spacing: DS.Space.ml) {
+            HStack(spacing: DS.Space.m) {
                 Image(systemName: systemImage)
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 32)
+                    .font(DS.Typography.subtitle)
+                    .foregroundStyle(DS.Colors.accent)
+                    .dsIconColumn()
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                    Text(title).font(.headline).foregroundStyle(Color.primary)
-                    Text(detail).font(.subheadline).foregroundStyle(.secondary)
+                    Text(title).font(DS.Typography.headline).foregroundStyle(Color.primary)
+                    Text(detail).font(DS.Typography.subheadline).foregroundStyle(DS.Colors.secondaryText)
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .font(DS.Typography.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }

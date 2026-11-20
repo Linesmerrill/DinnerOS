@@ -74,7 +74,7 @@ func (h *Handler) importOfferCodes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	b := OfferBatch{Offer: strings.TrimSpace(q.Get("offer")), Batch: strings.TrimSpace(q.Get("batch"))}
 	if b.Offer == "" || b.Batch == "" || len(b.Offer) > 100 || len(b.Batch) > 100 {
-		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "Give the offer's reference name and a batch name.")
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "Give the offer’s reference name and a batch name.")
 		return
 	}
 	expires, err := parseExpiry(q.Get("expiresAt"))
@@ -94,7 +94,7 @@ func (h *Handler) importOfferCodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "We couldn't read that file.")
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "We couldn’t read that file.")
 		return
 	}
 	codes, skipped := ParseOfferCodes(string(body))

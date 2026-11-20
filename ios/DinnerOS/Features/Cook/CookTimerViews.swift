@@ -77,7 +77,7 @@ struct CookTimerChip: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(spoken(remaining: remaining)))
-                .accessibilityHint(Text(isFinished ? "Stops the timer" : "Shows the timer's controls"))
+                .accessibilityHint(Text(isFinished ? "Stops the timer" : "Shows the timer’s controls"))
                 if isFinished {
                     finishedControls
                         .transition(.opacity.combined(with: .move(edge: .top)))

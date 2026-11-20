@@ -91,8 +91,8 @@ func RenderHouseholdInvitation(appName string, e HouseholdInvitationEmail) (Rend
 		subject = fmt.Sprintf("%s invited you to %s on %s", inviter, household, appName)
 		intro = fmt.Sprintf("%s invited you to join %s on %s as %s.", inviter, household, appName, roleNoun(e.Role))
 	} else {
-		subject = fmt.Sprintf("You're invited to %s on %s", household, appName)
-		intro = fmt.Sprintf("You've been invited to join %s on %s as %s.", household, appName, roleNoun(e.Role))
+		subject = fmt.Sprintf("You’re invited to %s on %s", household, appName)
+		intro = fmt.Sprintf("You’ve been invited to join %s on %s as %s.", household, appName, roleNoun(e.Role))
 	}
 	expires := e.ExpiresAt.UTC().Format("January 2, 2006")
 
@@ -113,7 +113,7 @@ func RenderHouseholdInvitation(appName string, e HouseholdInvitationEmail) (Rend
 		return RenderedEmail{}, fmt.Errorf("invitations: render email: %w", err)
 	}
 
-	text := fmt.Sprintf("%s\n\nYour invite code: %s\n\nOpen in the app: %s\n\nOr open %s, choose to join a household, and enter the code.\n\nThis invitation expires on %s. If you weren't expecting it, you can ignore this email.\n",
+	text := fmt.Sprintf("%s\n\nYour invite code: %s\n\nOpen in the app: %s\n\nOr open %s, choose to join a household, and enter the code.\n\nThis invitation expires on %s. If you weren’t expecting it, you can ignore this email.\n",
 		intro, e.Code, e.AcceptURL, appName, expires)
 
 	return RenderedEmail{Subject: subject, HTML: html.String(), Text: text}, nil

@@ -355,6 +355,18 @@ func top(items []*item, keep func(*item) bool, order func(a, b *item) int) []*it
 		}
 		return byName(a, b)
 	})
+	// A meal kit sells the same dish under a new ID now and then (three
+	// "Garlic Bread" add-ons), so a section shows each name once: the copy
+	// that ranks first.
+	seen := map[string]bool{}
+	out = slices.DeleteFunc(out, func(it *item) bool {
+		key := strings.Join(strings.Fields(strings.ToLower(it.recipe.Name)), " ")
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
+		return false
+	})
 	return out[:min(len(out), sectionLimit)]
 }
 

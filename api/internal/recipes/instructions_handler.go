@@ -397,7 +397,7 @@ func (h *Handler) instructions(w http.ResponseWriter, r *http.Request) {
 	}
 	servings, ok := instructionServings(recipe, r.URL.Query().Get("servings"))
 	if !ok {
-		validationFailed(w, r, "servings must be one of the recipe's serving sizes")
+		validationFailed(w, r, "servings must be one of the recipe’s serving sizes")
 		return
 	}
 	specs, applied, err := h.recipeSpecialties(r.Context(), actor.HouseholdID, recipe, servings)

@@ -285,7 +285,7 @@ func (s *Service) validateAddition(ctx context.Context, in AddInput) (addition, 
 		return addition{}, err
 	}
 	if a.status == StatusOut && a.quantity != "" {
-		return addition{}, invalid("an item that is out can't have a quantity")
+		return addition{}, invalid("an item that is out can’t have a quantity")
 	}
 	if a.expiresOn, err = normalizeDate(in.ExpiresOn); err != nil {
 		return addition{}, err
@@ -485,7 +485,7 @@ func applyUpdate(item Item, in UpdateInput) (Item, error) {
 	}
 	if item.Status == StatusOut {
 		if (in.Quantity != nil && strings.TrimSpace(*in.Quantity) != "") || (in.Unit != nil && strings.TrimSpace(*in.Unit) != "") {
-			return Item{}, invalid("an item that is out can't have a quantity")
+			return Item{}, invalid("an item that is out can’t have a quantity")
 		}
 		quantity, unit = "", ""
 	}

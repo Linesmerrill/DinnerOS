@@ -77,7 +77,7 @@ struct RecipePhotoChooser: View {
                 if let data, let image = UIImage(data: data) {
                     onPicked(image)
                 } else {
-                    libraryError = String(localized: "Couldn't open that photo. Try another one.")
+                    libraryError = String(localized: "Couldn’t open that photo. Try another one.")
                 }
             }
         }
@@ -149,7 +149,7 @@ struct RecipePhotoSearchView: View {
                         systemImage: "photo.on.rectangle", retry: false)
                 } else if photos.isEmpty, !isLoading {
                     message(
-                        String(localized: "Type what's in the dish, like brownies or chicken tacos."),
+                        String(localized: "Type what’s in the dish, like brownies or chicken tacos."),
                         systemImage: "magnifyingglass", retry: false)
                 }
                 LazyVGrid(columns: columns, spacing: DS.Space.xxs) {

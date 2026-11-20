@@ -214,7 +214,7 @@ struct WeekAutopilotSection: View {
     private var skippingRow: some View {
         row(
             systemImage: "beach.umbrella", title: String(localized: "Skipping this week"),
-            subtitle: String(localized: "Autopilot won't plan or suggest anything."))
+            subtitle: String(localized: "Autopilot won’t plan or suggest anything."))
     }
 
     private func suggestionsRow(_ proposal: AutopilotProposal) -> some View {
@@ -239,8 +239,8 @@ struct WeekAutopilotSection: View {
             row(
                 systemImage: "sparkles", title: String(localized: "Plan with Autopilot"),
                 subtitle: autopilot.isConfigured
-                    ? String(localized: "Suggests dinners for this week's open days. You review them first.")
-                    : String(localized: "Answer a few questions, then Autopilot suggests this week's dinners."),
+                    ? String(localized: "Suggests dinners for this week’s open days. You review them first.")
+                    : String(localized: "Answer a few questions, then Autopilot suggests this week’s dinners."),
                 isWorking: autopilot.isGenerating)
         }
         .disabled(autopilot.isGenerating)
@@ -251,7 +251,7 @@ struct WeekAutopilotSection: View {
             flow.sheet = .context
         } label: {
             row(
-                systemImage: "calendar.badge.clock", title: String(localized: "This Week's Plans…"),
+                systemImage: "calendar.badge.clock", title: String(localized: "This Week’s Plans…"),
                 subtitle: contextSummary ?? String(localized: "Vacation, a busy week, or guests"))
         }
     }
@@ -315,7 +315,7 @@ struct WeekAutopilotMenuItems: View {
                     // Nothing to plan on a week the household is away for.
                     .disabled(!plans.isDraft || autopilot.isGenerating || isSkipping)
                 }
-                Button("This Week's Plans…", systemImage: "calendar.badge.clock") { flow.sheet = .context }
+                Button("This Week’s Plans…", systemImage: "calendar.badge.clock") { flow.sheet = .context }
                 if autopilot.phase == .loaded {
                     Button(
                         autopilot.isConfigured
@@ -437,7 +437,7 @@ struct WeekAutopilotModifier: ViewModifier {
         case .accepted(let result):
             result.added.count == 1
                 ? String(localized: "Added 1 Meal") : String(localized: "Added \(result.added.count) Meals")
-        case .error: String(localized: "Autopilot Couldn't Do That")
+        case .error: String(localized: "Autopilot Couldn’t Do That")
         case nil: ""
         }
     }
@@ -470,14 +470,14 @@ struct WeekAutopilotModifier: ViewModifier {
                     "Its recipes are locked so the grocery list stays put. Reopen the week to plan with Autopilot.")
         case .contextChanged(let hasSuggestions):
             hasSuggestions
-                ? String(localized: "Autopilot can suggest this week's meals again with your changes.")
-                : String(localized: "Autopilot can suggest this week's meals with your changes.")
+                ? String(localized: "Autopilot can suggest this week’s meals again with your changes.")
+                : String(localized: "Autopilot can suggest this week’s meals with your changes.")
         case .accepted(let result):
             [
                 result.skipped.isEmpty
                     ? nil
                     : result.skipped.map(\.explanation).joined(separator: " ") + " "
-                        + String(localized: "Those meals weren't added, and nothing was replaced."),
+                        + String(localized: "Those meals weren’t added, and nothing was replaced."),
                 PairingFormat.acceptSummary(result),
             ]
             .compactMap { $0 }

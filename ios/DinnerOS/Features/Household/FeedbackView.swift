@@ -22,12 +22,12 @@ struct FeedbackView: View {
             Section {
                 if let testFlight = Self.testFlightURL {
                     Link(destination: testFlight) {
-                        Label("Open TestFlight", systemImage: "airplane")
+                        DSIconRow(systemImage: "airplane") { Text("Open TestFlight") }
                     }
                 }
                 Text("In TestFlight, open DinnerOS and tap Send Beta Feedback.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
                 Text("No Screenshot Needed")
@@ -51,10 +51,8 @@ struct FeedbackView: View {
     }
 
     private func step(_ number: Int, _ text: LocalizedStringKey) -> some View {
-        Label {
+        DSIconRow(systemImage: "\(number).circle.fill") {
             Text(text).fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: "\(number).circle.fill").foregroundStyle(.tint)
         }
     }
 
@@ -81,7 +79,9 @@ struct FeedbackLink: View {
             NavigationLink {
                 FeedbackView()
             } label: {
-                Label("Feedback & Bugs", systemImage: "bubble.left.and.exclamationmark.bubble.right")
+                DSIconRow(systemImage: "bubble.left.and.exclamationmark.bubble.right") {
+                    Text("Feedback & Bugs")
+                }
             }
         }
     }
@@ -95,7 +95,7 @@ struct ContactUsLink: View {
     var body: some View {
         if let url = Self.supportURL {
             Link(destination: url) {
-                Label("Contact Us", systemImage: "envelope")
+                DSIconRow(systemImage: "envelope") { Text("Contact Us") }
             }
             .accessibilityIdentifier("household.contactUs")
         }

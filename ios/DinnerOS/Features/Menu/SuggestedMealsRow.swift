@@ -24,8 +24,8 @@ struct SuggestedMealsRow: View {
                         .font(.headline)
                     Text(
                         isEditable
-                            ? "From what you like and what's in your pantry. Press and hold one to shuffle it."
-                            : "From what you like and what's in your pantry."
+                            ? "From what you like and what’s in your pantry. Press and hold one to shuffle it."
+                            : "From what you like and what’s in your pantry."
                     )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -56,7 +56,7 @@ struct SuggestedMealsRow: View {
             }
         }
         .alert(
-            "Couldn't Change That",
+            "Couldn’t Change That",
             isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })
         ) {
             Button("OK", role: .cancel) {}
@@ -90,6 +90,7 @@ struct SuggestedMealsRow: View {
                 .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
+            .carouselInSafeArea()
             .scrollTargetBehavior(.viewAligned)
         }
     }

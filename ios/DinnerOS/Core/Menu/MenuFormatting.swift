@@ -61,6 +61,18 @@ nonisolated enum MenuFormat {
         return planned + " · " + String(localized: "\(fromAutopilot) from Autopilot")
     }
 
+    /// Your Meals' subtitle under its title, or `nil` while the week is empty: the empty card
+    /// below already says "Nothing Planned Yet", and saying it twice read as a mistake.
+    static func yourMealsHeaderSubtitle(counts: MealCounts, isPast: Bool) -> String? {
+        guard counts.meals > 0 || counts.addOns > 0 else { return nil }
+        return isPast ? mealsPlanned(counts.meals) : yourMealsSubtitle(counts: counts)
+    }
+
+    /// The empty Your Meals card's title.
+    static func emptyWeekTitle(isPast: Bool) -> String {
+        isPast ? String(localized: "Nothing Was Planned This Week") : String(localized: "Nothing Planned Yet")
+    }
+
     static func mealsPlanned(_ count: Int) -> String {
         switch count {
         case 0: String(localized: "Nothing planned yet")
@@ -192,7 +204,7 @@ nonisolated enum MenuFormat {
             stats.append(
                 Stat(
                     id: "protein", title: String(localized: "Protein"), systemImage: "dumbbell",
-                    value: String(localized: "\(proteinGrams)g"),
+                    value: String(localized: "\(proteinGrams) g"),
                     accessibilityValue: String(localized: "\(proteinGrams) grams")))
         }
         if let difficulty, !difficulty.isEmpty {
@@ -220,10 +232,13 @@ nonisolated enum MenuFormat {
             .map(\.element)
     }
 
-    /// For example "36 g" or "1,250 mg".
+    /// For example "36 g", "1,250 mg" or "640 Cal" (never "kcal").
+    /// The server's own text wins; the same format is made here for an older server or offline.
     static func nutrientAmount(_ nutrient: RecipeNutrient, locale: Locale = .autoupdatingCurrent) -> String {
+        if let text = nutrient.text?.trimmingCharacters(in: .whitespaces), !text.isEmpty { return text }
         let amount = nutrient.amount.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
-        return nutrient.unit.isEmpty ? amount : "\(amount) \(nutrient.unit)"
+        let unit = RecipeFormat.abbreviatedUnit(nutrient.unit)
+        return unit.isEmpty ? amount : "\(amount) \(unit)"
     }
 }
 

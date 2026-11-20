@@ -67,7 +67,7 @@ struct WeekCostSection: View {
                     }
                 }
             } header: {
-                Text("This Week's Cost")
+                Text("This Week’s Cost")
             }
         }
     }
@@ -123,7 +123,7 @@ struct WeekCostSummary: View {
             if let saved = cost.savedCents, cost.mealKit != nil {
                 Text(WeekCostText.comparison(savedCents: saved))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(saved >= 0 ? AnyShapeStyle(Color.green) : AnyShapeStyle(Color.orange))
+                    .foregroundStyle(saved >= 0 ? DS.Colors.success : DS.Colors.warning)
             }
             if !cost.summary.isEmpty {
                 Text(cost.summary)
@@ -176,7 +176,7 @@ struct OrderTotalSheet: View {
                         FormErrorLabel(message: errorMessage)
                     }
                 } header: {
-                    Text("Order total (with fees, tax, and tip)")
+                    Text("Order Total (With Fees, Tax, and Tip)")
                 } footer: {
                     Text("What the whole order cost. Fees, tax, and tip count toward your cost per meal.")
                 }
@@ -186,6 +186,7 @@ struct OrderTotalSheet: View {
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle("Order Total")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

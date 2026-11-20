@@ -183,16 +183,16 @@ const (
 	FreeMonthReadyTitle    = "Your free month is ready"
 	FreeMonthReadyText     = "Redeem it to start DinnerOS Plus with the first month free."
 	FreeMonthOwedTitle     = "Your free month is on the way"
-	FreeMonthOwedText      = "We'll let you know when it's ready."
+	FreeMonthOwedText      = "We’ll let you know when it’s ready."
 	FreeMonthRedeemedTitle = "Free month redeemed"
 	FreeMonthRedeemedText  = "Your free month went through Apple."
 	FreeMonthRedeemText    = "Redeem"
 	// FreeMonthTerms sits above Redeem: redeeming starts a subscription.
 	FreeMonthTerms = "Redeeming starts DinnerOS Plus with the first month free. After that it renews at the normal price unless you cancel in your Apple account settings."
 	// FreeMonthCopiedText is shown when the code goes to the clipboard.
-	FreeMonthCopiedText = "Your code is copied. Paste it in Apple's screen."
+	FreeMonthCopiedText = "Your code is copied. Paste it in Apple’s screen."
 	// FreeMonthNotFoundText and the others answer the reveal call.
-	FreeMonthNotFoundText = "We couldn't find that free month."
+	FreeMonthNotFoundText = "We couldn’t find that free month."
 	FreeMonthOwedError    = FreeMonthOwedTitle + ". " + FreeMonthOwedText
 	FreeMonthRedeemedErr  = "You already redeemed this free month."
 )

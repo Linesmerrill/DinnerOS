@@ -200,7 +200,7 @@ func (s *Service) Alternatives(ctx context.Context, householdID, week, entryID s
 		out.Alternatives = rest
 		out.Messages = append(out.Messages, Message{Code: MessageNoSimilar, Text: "Nothing in your library is much like this one, so these are the best fits for the day."})
 	case len(opts.Seen) > 0:
-		out.Messages = append(out.Messages, Message{Code: MessageSeenAll, Text: "That's everything that fits this day. Try Add a Meal to choose one yourself."})
+		out.Messages = append(out.Messages, Message{Code: MessageSeenAll, Text: "That’s everything that fits this day. Try Add a Meal to choose one yourself."})
 	default:
 		text := "No other recipe in your library fits this day."
 		if len(res.Messages) > 0 {

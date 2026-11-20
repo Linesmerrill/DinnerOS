@@ -146,7 +146,7 @@ func TestUploadPhotoRefusesWhatIsntAPhoto(t *testing.T) {
 	} {
 		rec := srv.upload(t, hhAda, userAda, tc.ct, tc.body, nil)
 		wantError(t, rec, http.StatusBadRequest, "validation_failed")
-		if !strings.Contains(rec.Body.String(), "That file isn't a photo.") {
+		if !strings.Contains(rec.Body.String(), "That file isn’t a photo.") {
 			t.Errorf("%s: body %s", name, rec.Body.String())
 		}
 	}
@@ -239,7 +239,7 @@ func TestEditSetsAndRemovesThePhoto(t *testing.T) {
 
 	rec = srv.do(t, http.MethodPut, path, `{"imageUrl":"https://elsewhere.example.com/a.jpg"}`, userAda)
 	wantError(t, rec, http.StatusBadRequest, "validation_failed")
-	if !strings.Contains(rec.Body.String(), "That photo can't be used.") {
+	if !strings.Contains(rec.Body.String(), "That photo can’t be used.") {
 		t.Errorf("other photo body = %s", rec.Body.String())
 	}
 	if rec := srv.do(t, http.MethodPut, path, `{"imageUrl":"`+own+`"}`, userViewer); rec.Code != http.StatusForbidden {

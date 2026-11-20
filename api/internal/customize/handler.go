@@ -95,16 +95,11 @@ type selectionRequest struct {
 	ChoiceID      string `json:"choiceId"`
 }
 
-// massUnitNames spell mass units the way meal-kit recipes do ("10 ounce").
-var massUnitNames = map[string]string{"oz": "ounce", "lb": "pound", "g": "gram", "kg": "kilogram"}
-
-// AmountText renders an amount as "10 ounce" or "1 ½ pound".
+// AmountText renders an amount the way the rest of the app does: "10 oz",
+// "1 ½ lb", "2 cloves".
 func AmountText(q ingredients.Quantity, unit string) string {
-	name, ok := massUnitNames[unit]
-	if !ok {
-		u, _ := ingredients.LookupUnit(unit)
-		name = u.Label(q)
-	}
+	u, _ := ingredients.LookupUnit(unit)
+	name := u.Label(q)
 	if name == "" {
 		return q.Format()
 	}

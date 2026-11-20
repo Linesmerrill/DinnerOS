@@ -11,9 +11,9 @@ struct HowItWorksSection: View {
                 HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     Text("\(index + 1)")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(Color("OnAccent"))
-                        .frame(minWidth: 24, minHeight: 24)
-                        .background(Circle().fill(.tint))
+                        .foregroundStyle(DS.Colors.onAccent)
+                        .frame(minWidth: DS.Space.xxl, minHeight: DS.Space.xxl)
+                        .background(Circle().fill(DS.Colors.accent))
                         .accessibilityHidden(true)
                     Text(step)
                         .fixedSize(horizontal: false, vertical: true)
@@ -99,14 +99,14 @@ struct YourInvitesList: View {
         Section {
             if let pending = invites.pending, let qualified = invites.qualified, let expired = invites.expired {
                 LabeledContent("Pending", value: pending.formatted())
-                LabeledContent("Free months earned", value: invites.capText)
+                LabeledContent("Free Months Earned", value: invites.capText)
                     .accessibilityHint(Text("\(qualified) invites counted"))
                 if expired > 0 {
                     LabeledContent("Expired", value: expired.formatted())
                 }
             } else {
-                LabeledContent("Households joined", value: invites.joined.formatted())
-                LabeledContent("Free months earned", value: invites.capText)
+                LabeledContent("Households Joined", value: invites.joined.formatted())
+                LabeledContent("Free Months Earned", value: invites.capText)
             }
             if let free = invites.freeUntil {
                 Label("Plus free until \(PlusText.day(free))", systemImage: "gift.fill")

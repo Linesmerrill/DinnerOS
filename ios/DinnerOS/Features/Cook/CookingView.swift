@@ -56,16 +56,10 @@ struct CookingView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle(dish?.recipe.name ?? meal?.name ?? "")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    // Centered over the whole screen: the iPad draws a plain inline title at
-                    // the leading edge of the detail column.
-                    ToolbarItem(placement: .principal) {
-                        Text(dish?.recipe.name ?? meal?.name ?? "")
-                            .font(.headline)
-                            .lineLimit(1)
-                    }
+                    // No title in the bar: a dish's name didn't fit beside the buttons and was cut
+                    // short ("Street Cart-St..."). It heads the page instead, on up to two lines.
                     ToolbarItem(placement: .topBarLeading) { switcherButton }
                     ToolbarItem(placement: .topBarLeading) { layoutButton }
                     ToolbarItem(placement: .topBarLeading) {
@@ -132,7 +126,7 @@ struct CookingView: View {
             }
         } else if let loadError {
             ContentUnavailableView {
-                Label("Couldn't Load the Recipe", systemImage: "wifi.exclamationmark")
+                Label("Couldn’t Load the Recipe", systemImage: "wifi.exclamationmark")
             } description: {
                 Text(loadError)
             } actions: {
@@ -189,9 +183,12 @@ struct CookingView: View {
         meals.count > 1 ? String(localized: "Step \(step), \(dish.recipe.name)") : String(localized: "Step \(step)")
     }
 
-    /// Phone: one tab at a time.
+    /// Phone: the dish's name, then one tab at a time.
     private func tabs(_ dish: CookDish) -> some View {
         VStack(spacing: 0) {
+            CookTitle(name: dish.recipe.name)
+                .padding(.horizontal, DS.Space.l)
+                .padding(.top, DS.Space.xs)
             Picker("Show", selection: $tab) {
                 ForEach(CookTab.allCases) { tab in
                     Text(tab.title).tag(tab)
@@ -205,7 +202,7 @@ struct CookingView: View {
                     switch tab {
                     case .ingredients:
                         VStack(alignment: .leading, spacing: DS.Space.xl) {
-                            CookHeader(dish: dish)
+                            CookHeader(dish: dish, showsName: false)
                             CookIngredientList(dish: dish, session: session, layout: layout)
                         }
                     case .steps:
@@ -316,29 +313,53 @@ enum CookTab: String, CaseIterable, Identifiable {
 
 // MARK: - Header
 
-private struct CookHeader: View {
-    let dish: CookDish
+/// The dish's name at the top of the cooking screen: wraps to two lines rather than being cut.
+private struct CookTitle: View {
+    let name: String
 
     var body: some View {
-        HStack(alignment: .center, spacing: DS.Space.ml) {
-            RecipePhoto(
-                url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: 88, cornerRadius: DS.Radius.large,
-                title: dish.recipe.name
-            )
-            .frame(width: 88, height: 88)
-            VStack(alignment: .leading, spacing: DS.Space.xxs) {
-                if let servings = dish.servings {
-                    Text("Serves \(servings)")
-                        .font(.headline)
+        Text(name)
+            .font(DS.Typography.title)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+private struct CookHeader: View {
+    let dish: CookDish
+    /// The iPad's ingredient column names the dish here; a phone names it above the tabs.
+    var showsName = true
+
+    @ScaledMetric(relativeTo: .body) private var photoSize: CGFloat = 88
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            if showsName {
+                CookTitle(name: dish.recipe.name)
+            }
+            HStack(alignment: .center, spacing: DS.Space.ml) {
+                RecipePhoto(
+                    url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: photoSize, cornerRadius: DS.Radius.large,
+                    title: dish.recipe.name
+                )
+                .frame(width: photoSize, height: photoSize)
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                    if let servings = dish.servings {
+                        Text("Serves \(servings)")
+                            .font(DS.Typography.headline)
+                    }
+                    if let minutes = dish.recipe.displayMinutes {
+                        Text(RecipeFormat.minutes(minutes))
+                            .font(DS.Typography.subheadline)
+                            .foregroundStyle(DS.Colors.secondaryText)
+                    }
                 }
-                if let minutes = dish.recipe.displayMinutes {
-                    Text("\(minutes) min")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                .accessibilityElement(children: .combine)
             }
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -346,16 +367,27 @@ private struct CookHeader: View {
 
 /// The checklist. An ingredient split across steps opens into its shares, each ticked as it
 /// goes in.
+///
+/// Every row has the same columns, in both layouts: the check, the amount right-aligned in a
+/// fixed column in one quiet style, then the name. Headings and rows share one leading edge.
 struct CookIngredientList: View {
     let dish: CookDish
     let session: CookSession
     var layout: CookIngredientLayout = .all
 
+    /// The amount column, wide enough for "1½ Tbsp"; it grows with the text size.
+    @ScaledMetric(relativeTo: .subheadline) private var amountWidth: CGFloat = 64
+
+    /// Where a row's name starts: after the check and the amount column.
+    private var nameInset: CGFloat { CookCircle.size + DS.Space.m + amountWidth + DS.Space.m }
+    /// Where a row's shares start: under the amount column, so their text has room.
+    private var partInset: CGFloat { CookCircle.size / 2 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Ingredients")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
+                .font(DS.Typography.sectionTitle)
+                .foregroundStyle(DS.Colors.accent)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, DS.Space.s)
             if let notes = dish.instructions?.saveForLater, !notes.isEmpty {
@@ -376,6 +408,7 @@ struct CookIngredientList: View {
                             component, id: ingredient.componentID(index),
                             isLast: index == ingredient.components.count - 1)
                     }
+                    Divider().padding(.leading, nameInset)
                 }
             case .byStep:
                 let current = session.current(recipe: dish.recipe.id)
@@ -387,14 +420,14 @@ struct CookIngredientList: View {
     }
 
     /// One step's ingredients under a bold heading with a green underline; the step you're on
-    /// gets a tinted background.
+    /// gets a tinted background that reaches past the rows, so the text keeps its edge.
     private func stepGroup(_ group: CookStepGroup, isCurrent: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(group.index == 0 ? String(localized: "Have Ready") : String(localized: "Step \(group.index)"))
-                .font(.title3.weight(.bold))
+            Text(CookStepGroupTitle.text(group.index))
+                .font(DS.Typography.sectionTitle)
                 .padding(.bottom, DS.Space.xxs)
                 .overlay(alignment: .bottom) {
-                    Capsule().fill(Color.accentColor).frame(height: 3).offset(y: 2)
+                    Capsule().fill(DS.Colors.accent).frame(height: 3).offset(y: 2)
                 }
                 .padding(.top, DS.Space.l)
                 .padding(.bottom, DS.Space.xs)
@@ -404,18 +437,47 @@ struct CookIngredientList: View {
                 ForEach(Array(item.parts.enumerated()), id: \.offset) { index, part in
                     stepPartRow(part, index: index, of: item, isLast: index == item.parts.count - 1)
                 }
-                Divider().padding(.leading, 52)
+                Divider().padding(.leading, nameInset)
             }
         }
-        .padding(.horizontal, DS.Space.s)
         .padding(.bottom, DS.Space.xxs)
-        .background(
+        .background {
             RoundedRectangle(cornerRadius: DS.Radius.large)
-                .fill(isCurrent ? Color.accentColor.opacity(0.10) : Color.clear)
-        )
+                .fill(isCurrent ? DS.Colors.accentFill : Color.clear)
+                .padding(.horizontal, -DS.Space.s)
+        }
     }
 
-    @ScaledMetric(relativeTo: .body) private var amountWidth: CGFloat = 64
+    /// The check, the amount in its column, and the name with what's under it.
+    private func row(
+        isChecked: Bool, isQuiet: Bool, amount: String?, name: String, ingredientKey: String?,
+        @ViewBuilder details: () -> some View
+    ) -> some View {
+        HStack(alignment: .center, spacing: DS.Space.m) {
+            CookCircle(isChecked: isChecked)
+            Text(amount ?? "")
+                .font(DS.Typography.subheadline)
+                .monospacedDigit()
+                .foregroundStyle(DS.Colors.secondaryText)
+                .strikethrough(isQuiet)
+                .lineLimit(2)
+                .multilineTextAlignment(.trailing)
+                .frame(width: amountWidth, alignment: .trailing)
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                HStack(spacing: DS.Space.xs) {
+                    Text(name)
+                        .font(DS.Typography.body.weight(.semibold))
+                        .strikethrough(isQuiet)
+                        .foregroundStyle(isQuiet ? DS.Colors.secondaryText : Color.primary)
+                    CookFlagBadge(ingredientKey: ingredientKey)
+                }
+                details()
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, DS.Space.s)
+        .contentShape(Rectangle())
+    }
 
     private func stepItemRow(_ item: CookStepItem) -> some View {
         let isChecked = session.isChecked(item.id, recipe: dish.recipe.id)
@@ -424,35 +486,20 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(item, recipe: dish.recipe.id)
         } label: {
-            HStack(alignment: .center, spacing: DS.Space.m) {
-                CookCircle(isChecked: isChecked)
-                Text(item.amountText ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(width: amountWidth, alignment: .center)
-                    .strikethrough(quiet)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: DS.Space.xs) {
-                        Text(item.name)
-                            .font(.body.weight(.semibold))
-                            .strikethrough(quiet)
-                            .foregroundStyle(quiet ? Color.secondary : Color.primary)
-                        CookFlagBadge(ingredientKey: item.ingredientKey)
-                    }
-                    if let prep = item.prep {
-                        Text(prep)
-                            .font(.subheadline)
-                            .italic()
-                            .foregroundStyle(.secondary)
-                    }
-                    if let save, !item.isLeftOut {
-                        CookSaveBadge(text: save.short)
-                    }
+            row(
+                isChecked: isChecked, isQuiet: quiet, amount: item.amountText, name: item.name,
+                ingredientKey: item.ingredientKey
+            ) {
+                if let prep = item.prep {
+                    Text(prep)
+                        .font(DS.Typography.subheadline)
+                        .italic()
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
-                Spacer(minLength: 0)
+                if let save, !item.isLeftOut {
+                    CookSaveBadge(text: save.short)
+                }
             }
-            .padding(.vertical, DS.Space.s)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(item.isLeftOut)
@@ -466,34 +513,33 @@ struct CookIngredientList: View {
         .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
     }
 
+    /// A share of an ingredient ("1 Tbsp for step 1, melted"), on a branch under its row.
+    private func shareRow(isChecked: Bool, isLast: Bool, text: Text) -> some View {
+        HStack(spacing: DS.Space.sm) {
+            CookBranch(isLast: isLast)
+                .frame(width: DS.Space.l)
+            CookCircle(isChecked: isChecked, small: true)
+            text
+                .font(DS.Typography.subheadline)
+                .strikethrough(isChecked)
+                .foregroundStyle(isChecked ? DS.Colors.secondaryText : Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, partInset)
+        .frame(minHeight: DS.Size.tapTarget)
+        .contentShape(Rectangle())
+    }
+
     private func stepPartRow(_ part: String, index: Int, of item: CookStepItem, isLast: Bool) -> some View {
         let isChecked = session.isChecked(item.partID(index), recipe: dish.recipe.id)
         return Button {
             session.togglePart(index, of: item, recipe: dish.recipe.id)
         } label: {
-            HStack(spacing: DS.Space.sm) {
-                CookBranch(isLast: isLast)
-                    .frame(width: 18)
-                CookCircle(isChecked: isChecked, small: true)
-                Text(part)
-                    .font(.subheadline)
-                    .strikethrough(isChecked)
-                    .foregroundStyle(isChecked ? Color.secondary : Color.primary)
-                Spacer(minLength: 0)
-            }
-            .padding(.leading, 12 + amountWidth + 20)
-            .frame(minHeight: 34)
-            .contentShape(Rectangle())
+            shareRow(isChecked: isChecked, isLast: isLast, text: Text(part))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
-    }
-
-    /// "**2** Scallions, *sliced*".
-    private func prepText(amount: String?, name: String, prep: String?) -> Text {
-        var text = amountAndName(amount: amount, name: name)
-        if let prep { text = text + Text(", ") + Text(prep).italic().foregroundStyle(.secondary) }
-        return text
     }
 
     private func ingredientRow(_ ingredient: CookIngredient) -> some View {
@@ -502,29 +548,27 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(ingredient, recipe: dish.recipe.id)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
-                CookCheckbox(isChecked: isChecked)
-                VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                    amountAndName(amount: ingredient.amountText, name: ingredient.name)
-                        .strikethrough(isChecked || ingredient.isLeftOut)
-                        .foregroundStyle(isChecked || ingredient.isLeftOut ? Color.secondary : Color.primary)
-                    if ingredient.isLeftOut {
-                        Text("You skip this")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if let save {
-                        CookSaveBadge(text: save.short)
-                    }
+            row(
+                isChecked: isChecked, isQuiet: isChecked || ingredient.isLeftOut, amount: ingredient.amountText,
+                name: ingredient.name, ingredientKey: ingredient.ingredientKey
+            ) {
+                if ingredient.isLeftOut {
+                    Text("You skip this")
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(DS.Colors.secondaryText)
+                } else if let save {
+                    CookSaveBadge(text: save.short)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.vertical, DS.Space.s)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(ingredient.isLeftOut)
         .modifier(CookFlagMenu(ingredientKey: ingredient.ingredientKey, name: ingredient.name))
-        .accessibilityAddTraits(isChecked ? .isSelected : [])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            Text([ingredient.amountText, ingredient.name].compactMap { $0 }.joined(separator: " "))
+        )
+        .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
     }
 
     private func partRow(_ part: CookPart, of ingredient: CookIngredient, isLast: Bool) -> some View {
@@ -532,23 +576,11 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(part, of: ingredient, recipe: dish.recipe.id)
         } label: {
-            HStack(spacing: DS.Space.sm) {
-                CookBranch(isLast: isLast)
-                    .frame(width: 18)
-                CookCheckbox(isChecked: isChecked, small: true)
-                (Text(part.amountText).fontWeight(.semibold) + Text(" in step \(part.stepIndex)"))
-                    .font(.subheadline)
-                    .strikethrough(isChecked)
-                    .foregroundStyle(isChecked ? Color.secondary : Color.primary)
-                Spacer(minLength: 0)
-            }
-            .padding(.leading, DS.Space.m)
-            .frame(minHeight: 34)
-            .contentShape(Rectangle())
+            shareRow(isChecked: isChecked, isLast: isLast, text: Text("\(part.amountText) for step \(part.stepIndex)"))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("\(part.amountText) of \(ingredient.name) in step \(part.stepIndex)"))
-        .accessibilityAddTraits(isChecked ? .isSelected : [])
+        .accessibilityLabel(Text("\(part.amountText) of \(ingredient.name) for step \(part.stepIndex)"))
+        .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
     }
 
     /// One thing a home-made sauce or blend is mixed from: "1 tsp Chili Powder".
@@ -557,27 +589,17 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(id: id, recipe: dish.recipe.id)
         } label: {
-            HStack(spacing: DS.Space.sm) {
-                CookBranch(isLast: isLast)
-                    .frame(width: 18)
-                CookCheckbox(isChecked: isChecked, small: true)
-                Text(component)
-                    .font(.subheadline)
-                    .strikethrough(isChecked)
-                    .foregroundStyle(isChecked ? Color.secondary : Color.primary)
-                Spacer(minLength: 0)
-            }
-            .padding(.leading, DS.Space.m)
-            .frame(minHeight: 34)
-            .contentShape(Rectangle())
+            shareRow(isChecked: isChecked, isLast: isLast, text: Text(component))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
     }
+}
 
-    private func amountAndName(amount: String?, name: String) -> Text {
-        guard let amount, !amount.isEmpty else { return Text(name) }
-        return Text(amount).fontWeight(.semibold) + Text(" ") + Text(name)
+/// A by-step group's heading: "Have Ready" for what to gather first, then "Step 1", "Step 2".
+enum CookStepGroupTitle {
+    static func text(_ index: Int) -> String {
+        index == 0 ? String(localized: "Have Ready") : String(localized: "Step \(index)")
     }
 }
 
@@ -665,7 +687,7 @@ private struct CookFlagMenu: ViewModifier {
                         }
                     }
                 }
-                .alert("Couldn't Save That", isPresented: $failed) {
+                .alert("Couldn’t Save That", isPresented: $failed) {
                     Button("OK", role: .cancel) {}
                 } message: {
                     Text("Check your connection and try again.")
@@ -691,37 +713,28 @@ private struct CookFlagBadge: View {
     }
 }
 
-/// A square check, filled green when done.
+/// A rounded square check, filled with the accent when done: one style for every row.
 private struct CookCircle: View {
+    static let size: CGFloat = 26
+    static let smallSize: CGFloat = 20
+
     let isChecked: Bool
     var small = false
 
     var body: some View {
-        let size: CGFloat = small ? 20 : 26
-        let shape = RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+        let size = small ? Self.smallSize : Self.size
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.small * size / Self.size, style: .continuous)
         ZStack {
-            shape.strokeBorder(isChecked ? Color.accentColor : Color.secondary.opacity(0.6), lineWidth: 1.5)
+            shape.strokeBorder(isChecked ? DS.Colors.accent : DS.Colors.secondaryText, lineWidth: 1.5)
             if isChecked {
-                shape.fill(Color.accentColor)
+                shape.fill(DS.Colors.accent)
                 Image(systemName: "checkmark")
                     .font(.system(size: size * 0.45, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DS.Colors.onAccent)
             }
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
-    }
-}
-
-private struct CookCheckbox: View {
-    let isChecked: Bool
-    var small = false
-
-    var body: some View {
-        Image(systemName: isChecked ? "checkmark.square.fill" : "square")
-            .font(small ? .body : .title3)
-            .foregroundStyle(isChecked ? Color.accentColor : Color.secondary)
-            .accessibilityHidden(true)
     }
 }
 
@@ -740,8 +753,8 @@ struct CookStepList: View {
         let current = session.current(recipe: dish.recipe.id)
         VStack(alignment: .leading, spacing: DS.Space.m) {
             Text("Steps")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
+                .font(DS.Typography.sectionTitle)
+                .foregroundStyle(DS.Colors.accent)
                 .accessibilityAddTraits(.isHeader)
             if let steps = dish.instructions?.steps, !steps.isEmpty {
                 ForEach(steps) { step in
@@ -777,24 +790,27 @@ struct CookStepList: View {
         let isCurrent = current == index
         return VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("Step \(index)")
-                .font(.headline)
-                .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+                .font(DS.Typography.headline)
+                .foregroundStyle(isCurrent ? DS.Colors.accent : DS.Colors.secondaryText)
             text()
             if let imageURL {
                 RecipePhoto(url: imageURL, aspectRatio: 16.0 / 9.0, pointWidth: 520, cornerRadius: DS.Radius.medium)
                     .frame(maxWidth: 520)
             }
         }
-        .padding(DS.Space.ml)
+        // The highlight reaches past the text, so every step keeps the headings' leading edge.
+        .padding(.vertical, DS.Space.ml)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
+        .background {
             RoundedRectangle(cornerRadius: DS.Radius.large)
-                .fill(isCurrent ? Color.accentColor.opacity(0.12) : Color.clear)
-        )
-        .overlay(
+                .fill(isCurrent ? DS.Colors.accentFill : Color.clear)
+                .padding(.horizontal, -DS.Space.ml)
+        }
+        .overlay {
             RoundedRectangle(cornerRadius: DS.Radius.large)
-                .strokeBorder(isCurrent ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
+                .strokeBorder(isCurrent ? DS.Colors.accent : Color.clear, lineWidth: 2)
+                .padding(.horizontal, -DS.Space.ml)
+        }
         .opacity(current == nil || isCurrent ? 1 : 0.45)
         .contentShape(Rectangle())
         // Simultaneous, so a time in the text still opens its timer (and marks this step).
@@ -805,7 +821,7 @@ struct CookStepList: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
-        .accessibilityHint(Text(isCurrent ? "Tap to clear" : "Marks this as the step you're on"))
+        .accessibilityHint(Text(isCurrent ? "Tap to clear" : "Marks this as the step you’re on"))
         .popover(
             item: Binding(
                 get: { timerRequest?.step == index ? timerRequest : nil },
@@ -836,8 +852,8 @@ struct CookNotesEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("My Notes")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
+                .font(DS.Typography.sectionTitle)
+                .foregroundStyle(DS.Colors.accent)
                 .accessibilityAddTraits(.isHeader)
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
@@ -855,7 +871,7 @@ struct CookNotesEditor: View {
             }
             .padding(DS.Space.s)
             .background(DS.Colors.subtleFill, in: RoundedRectangle(cornerRadius: DS.Radius.medium))
-            Text(failed ? "Couldn't save your note. It'll try again as you type." : "Only you see this.")
+            Text(failed ? "Couldn’t save your note. It’ll try again as you type." : "Only you see this.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

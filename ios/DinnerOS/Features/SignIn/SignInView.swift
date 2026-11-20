@@ -29,15 +29,18 @@ private struct SignInScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
+            // A short screen (iPhone SE, the Duo's cover screen) keeps everything, down to the
+            // Privacy Policy link, on screen without scrolling (build 121).
+            let compact = proxy.size.height < 760
             ScrollView {
-                VStack(spacing: DS.Space.xxxl) {
-                    Spacer(minLength: 16)
-                    header
-                    Spacer(minLength: 16)
+                VStack(spacing: compact ? DS.Space.l : DS.Space.xxxl) {
+                    Spacer(minLength: 0)
+                    header(compact: compact)
+                    Spacer(minLength: 0)
                     actions
                 }
                 .padding(.horizontal, DS.Space.xxl)
-                .padding(.vertical, DS.Space.l)
+                .padding(.vertical, compact ? DS.Space.s : DS.Space.l)
                 .frame(maxWidth: 480)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
@@ -58,19 +61,20 @@ private struct SignInScreen: View {
         }
     }
 
-    private var header: some View {
-        VStack(spacing: DS.Space.l) {
+    private func header(compact: Bool) -> some View {
+        VStack(spacing: compact ? DS.Space.s : DS.Space.l) {
             Image(systemName: "fork.knife.circle.fill")
-                .font(.system(size: markSize))
+                .font(.system(size: compact ? markSize * 0.7 : markSize))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
             Text(configuration.displayName)
                 .font(DS.Typography.largeTitle)
                 .accessibilityAddTraits(.isHeader)
-            Text("Plan the week's dinners together, shop once, and cook with less guesswork.")
-                .font(DS.Typography.subtitle)
+            Text("Plan the week’s dinners together, shop once, and cook with less guesswork.")
+                .font(compact ? DS.Typography.callout : DS.Typography.subtitle)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -93,19 +97,13 @@ private struct SignInScreen: View {
                     .padding(.bottom, DS.Space.xxs)
             }
 
-            // Apple's own button, as the Human Interface Guidelines ask: its title is 43% of its
-            // height, and the other sign-in buttons match it (DS.Typography.signInButton).
-            SignInWithAppleButton(.continue) { request in
+            // A custom Sign in with Apple button within Apple's rules, so all three sign-in
+            // buttons share one title font (DS.Typography.signInButton, build 121).
+            AppleSignInButton(height: buttonHeight) { request in
                 model.prepareAppleRequest(request)
-            } onCompletion: { result in
+            } completion: { result in
                 model.handleAppleCompletion(result)
             }
-            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-            // The button doesn't restyle when the color scheme changes; rebuild it.
-            .id(colorScheme)
-            .frame(height: buttonHeight)
-            .clipShape(Capsule())
-            .accessibilityIdentifier("signIn.apple")
 
             if model.isGoogleAvailable {
                 GoogleSignInButton {
@@ -117,22 +115,28 @@ private struct SignInScreen: View {
                 EmailSignInSection(model: model)
             }
 
-            #if DEBUG
-                if configuration.environment == .development {
-                    developerSignIn
-                }
-            #endif
-
-            Text("Only the people you invite can see your household's plans.")
+            Text("Only the people you invite can see your household’s plans.")
                 .font(DS.Typography.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.top, DS.Space.s)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, DS.Space.xxs)
 
             if let privacyURL = configuration.privacyPolicyURL {
                 Link("Privacy Policy", destination: privacyURL)
                     .font(DS.Typography.footnote)
             }
+
+            // Below everything a person sees, and only in Debug builds against the development
+            // server. Screenshot QA hides it (QA_HIDE_DEVELOPER_SIGN_IN) to show the Release screen.
+            #if DEBUG
+                if configuration.environment == .development,
+                    ProcessInfo.processInfo.environment["QA_HIDE_DEVELOPER_SIGN_IN"] != "1"
+                {
+                    developerSignIn
+                        .padding(.top, DS.Space.l)
+                }
+            #endif
         }
         .disabled(model.isWorking)
     }
@@ -179,14 +183,14 @@ private struct SignInScreen: View {
         return Button {
             Task { await lock.signIn() }
         } label: {
-            SignInButtonLabel(title: Text(kind.toggleTitle), height: buttonHeight) {
+            SignInButtonLabel(title: Text(kind.signInTitle), height: buttonHeight) {
                 Image(systemName: kind.systemImage)
                     .resizable()
                     .scaledToFit()
                     .fontWeight(.medium)
             }
         }
-        .buttonStyle(.dsPrimary(fullWidth: true, font: DS.Typography.signInButton(height: buttonHeight)))
+        .buttonStyle(.dsSignInPrimary)
         .disabled(lock.isSigningIn)
         .accessibilityIdentifier("signIn.biometric")
     }

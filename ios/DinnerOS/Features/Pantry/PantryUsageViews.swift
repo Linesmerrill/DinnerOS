@@ -8,7 +8,7 @@ struct PantryItemRoute: Hashable {
 extension PantryEstimateLevel {
     var color: Color {
         switch self {
-        case .plenty: .green
+        case .plenty: DS.Colors.success
         case .low: .orange
         case .empty: .red
         }
@@ -156,12 +156,12 @@ struct PantryUsageSections: View {
                 Text("Usage Estimate")
             } footer: {
                 Text(
-                    "Some amounts can't be converted, so they weren't counted. Enter what you used, or fix the amount left above."
+                    "Some amounts can’t be converted, so they weren’t counted. Enter what you used, or fix the amount left above."
                 )
             }
         } else {
             Section("Usage Estimate") {
-                Text("Record an amount or restock this item to estimate what's left.")
+                Text("Record an amount or restock this item to estimate what’s left.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -289,7 +289,7 @@ struct PantryItemDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load the Pantry", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load the Pantry", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -406,6 +406,7 @@ struct PantryRestockSheet: View {
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle("Restock \(item.displayName)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -489,6 +490,7 @@ struct PantryThresholdSheet: View {
             Form {
                 content
             }
+            .dsReadableForm()
             .navigationTitle("Low-Stock Alerts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -676,10 +678,11 @@ struct PantryRecordUseSheet: View {
                     if let left = PantryUsageFormat.remainingGlance(estimate) {
                         Text("About \(left) left now. This comes off that.")
                     } else {
-                        Text("This comes off what's left.")
+                        Text("This comes off what’s left.")
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle(item.displayName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

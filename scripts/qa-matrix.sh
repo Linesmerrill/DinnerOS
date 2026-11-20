@@ -1,6 +1,6 @@
 #!/bin/bash
-# The 9-config UI QA matrix, in parallel: one simulator per config (iPhone 17 Pro Max, iPhone SE,
-# iPad landscape, iPad portrait; each light and dark; plus iPhone Duo in light). Target: under 30
+# The 10-config UI QA matrix, in parallel: one simulator per config (iPhone 17 Pro Max, iPhone SE,
+# iPad landscape, iPad portrait, iPhone Duo's cover screen; each light and dark). Target: under 30
 # minutes. Build 118 (Xcode 27): the iPhones and the Duo run iOS 27.2, the iPads stay on iOS 26.4,
 # so both the new and the previous iOS are covered. runs_on below says where each test runs.
 #
@@ -25,7 +25,7 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
-ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light"
+ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light duo-dark"
 CONFIGS=${CONFIGS:-$ALL}
 TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID StartCookingQATests"}
 STALL=${STALL:-600}
@@ -158,73 +158,52 @@ run_test() {
 }
 
 # Whether a test runs on a config: the placement rules for every test.
+# Build 121 (Hark's screenshot review): every config, the Duo in dark included, runs every
+# screenshot test (the sweep, both screen tests, the sign-in screen, Start Cooking). The flow
+# tests each run on one iPhone and one iPad (the short ones) or once, placed so every config's
+# minutes come out about even (build 120's times: the screenshot tests about 15 minutes per
+# config, the flows below about 10 to 13 more). PLAN_ONLY=1 prints the result.
 runs_on() {
     local config=$1 test=$2
-    # The Duo (build 118) checks how screens look on its size, not the long flows.
-    if [ "${config%%-*}" = duo ]; then
-        case $test in
-        AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) return 0 ;;
-        StartCookingQATests | BiometricSignInQATests/testSignInScreenWithFaceID | UnsplashPhotoQATests) return 0 ;;
-        BiometricSignInQATests/testFaceIDSignInLoop) return 0 ;;
-        *) return 1 ;;
-        esac
-    fi
-    # Build 118 (Xcode 27, iOS 27.2): every test ran 10 to 15% slower, and the first full run hit
-    # 30 minutes before any config finished. A second simulator per config ran everything 40 to 70%
-    # slower again and filled the disk, so the work itself shrank instead:
-    # - Sweeps and both screen tests still run on every config: they are how each screen looks.
-    # - The short tests that ran on all 8 run on 3 or 4, at least one iPhone and one iPad each.
-    # - The long flows (referral, invite link, AnyList) check what a person does, so each runs on
-    #   one iPhone and one iPad.
-    # Then each device's tests are split between light and dark so every config finishes in about
-    # 28 minutes. PLAN_ONLY=1 prints the result.
     case $test in
-    AppSweepQATests/SWEEP | ScreensQATests/*) return 0 ;;
-    # Build 120: every config ran 2-3 minutes longer and three passed 30, so Unsplash moved to the
-    # Duo, Report and Start Cooking to the upright iPad, and Discover and the chooser left the
-    # large iPhone (each still runs on an iPhone and an iPad).
-    # Build 119: the sign-in screen with Face ID kept is a screen to check everywhere. Start
-    # Cooking pinned to the bottom (the Duo's cover screen) is checked on the Duo and, where it
-    # must not move, on an iPhone of each size and both iPads.
-    BiometricSignInQATests/testSignInScreenWithFaceID) return 0 ;;
-    StartCookingQATests) case $config in large-light | small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
-    ReferralQATests) case $config in large-light | ipadL-light) ;; *) return 1 ;; esac ;;
-    InviteLinkQATests) case $config in small-light | ipadP-dark) ;; *) return 1 ;; esac ;;
-    AnyListGuideQATests) case $config in large-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
-    UnsplashPhotoQATests) case $config in large-light | small-dark | duo-light) ;; *) return 1 ;; esac ;;
-    AddRecipeChooserQATests) case $config in small-dark | ipadL-light) ;; *) return 1 ;; esac ;;
-    ImportFailureQATests) case $config in large-dark | small-light | ipadL-light) ;; *) return 1 ;; esac ;;
-    DiscoverQATests) case $config in small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
-    # The end-to-end add tests run once each: adding by hand on the large iPhone, companions and
-    # cuisine on a small iPhone and on the iPad on its side (where their forms are a sheet).
-    AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || return 1 ;;
-    CompanionQATests) case $config in small-light | ipadL-dark) ;; *) return 1 ;; esac ;;
-    CuisineQATests) case $config in small-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
-    NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) return 1 ;; esac ;;
-    ReportRecipeQATests) case $config in small-dark | ipadP-light) ;; *) return 1 ;; esac ;;
-    # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
-    # account deletion and denied permissions once each.
-    ReviewPathQATests) case $config in small-dark | ipadP-dark) ;; *) return 1 ;; esac ;;
-    AccountDeletionQATests) [ "$config" = ipadP-light ] || return 1 ;;
-    PermissionsDeniedQATests) [ "$config" = small-dark ] || return 1 ;;
-    # Face ID sign-in (decision 760): the long fake-biometrics flow (about 5 minutes) on the upright
-    # iPad, and the simulator's own Face ID (about 1.5 minutes) on the small iPhone.
-    BiometricSignInQATests/testFakeFaceID) [ "$config" = ipadP-light ] || return 1 ;;
-    BiometricSignInQATests/testSimulatorFaceID) [ "$config" = small-light ] || return 1 ;;
-    # The whole Face ID sign-in loop (build 119, about 5 minutes) on one iPhone and one iPad: the
-    # Duo and the upright iPad in light had the most time left (on large-light and ipadL-dark the
-    # first full run took 31.7 and 31.5 minutes).
-    BiometricSignInQATests/testFaceIDSignInLoop) case $config in duo-light | ipadP-light) ;; *) return 1 ;; esac ;;
+    AppSweepQATests/SWEEP | ScreensQATests/* | BiometricSignInQATests/testSignInScreenWithFaceID | StartCookingQATests) return 0 ;;
+    esac
+    local placed
+    case $test in
+    ReferralQATests) placed="large-light ipadL-light" ;;
+    AnyListGuideQATests) placed="large-dark ipadL-dark" ;;
+    InviteLinkQATests) placed="small-light ipadP-dark" ;;
+    CompanionQATests) placed="small-dark ipadL-dark" ;;
+    # Adding by hand end to end, once, on the large iPhone.
+    AddRecipeQATests | SaveThenOpenQATests) placed="large-dark" ;;
+    UnsplashPhotoQATests) placed="duo-light ipadP-dark" ;;
+    AddRecipeChooserQATests) placed="large-light ipadL-light" ;;
+    ImportFailureQATests) placed="small-light ipadL-light" ;;
+    DiscoverQATests) placed="duo-light ipadP-light" ;;
+    CuisineQATests) placed="small-dark ipadL-dark" ;;
+    NextStepDotQATests) placed="duo-dark ipadP-light" ;;
+    ReportRecipeQATests) placed="small-dark ipadP-light" ;;
+    # Pre-submission checks (decisions 741, 749).
+    ReviewPathQATests) placed="small-dark ipadP-dark" ;;
+    AccountDeletionQATests) placed="ipadP-light" ;;
+    PermissionsDeniedQATests) placed="small-dark" ;;
+    # Face ID sign-in (decision 760): fake biometrics on the upright iPad, the simulator's own
+    # Face ID on the small iPhone, and the whole loop (build 119) on the Duo and the upright iPad.
+    BiometricSignInQATests/testFakeFaceID) placed="ipadP-light" ;;
+    BiometricSignInQATests/testSimulatorFaceID) placed="small-light" ;;
+    BiometricSignInQATests/testFaceIDSignInLoop) placed="duo-light ipadP-light" ;;
     # The App Review account (decision 752) is one account, so its test runs once, and only
     # when the review account's email and password are exported for it.
     ReviewAccountQATests)
-        [ "$config" = ipadL-dark ] || return 1
-        if [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; then
+        placed="ipadL-dark"
+        if [ "$config" = ipadL-dark ] && { [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; }; then
             echo "$config $test: skipped (export REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD)" >>"$OUT/summary.txt"
             return 1
         fi ;;
+    *) return 0 ;;
     esac
-    return 0
+    case " $placed " in *" $config "*) return 0 ;; esac
+    return 1
 }
 
 run_config() {
@@ -233,6 +212,9 @@ run_config() {
     xcrun simctl boot "$id" 2>/dev/null
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
+    # No "Slide to type" tip over the keyboard in screenshots (build 121).
+    xcrun simctl spawn "$id" defaults write com.apple.Preferences KeyboardContinuousPathEnabled -bool false 2>/dev/null
+    xcrun simctl spawn "$id" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true 2>/dev/null
     for test in $TESTS; do
         [ -f "$OUT/STOP" ] && break
         if [ -n "$PAIRS" ]; then echo "$PAIRS" | grep -qxF "$config|$test" || continue; fi

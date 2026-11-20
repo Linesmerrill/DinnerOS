@@ -298,7 +298,7 @@ func (s *Service) resolvePairingTargets(ctx context.Context, householdID string,
 		case !r.IsAddon:
 			return nil, invalidf("pairings[%d].add.recipeId must be an add-on recipe (a side or dessert)", i)
 		case len(r.Servings) == 0:
-			return nil, invalidf("pairings[%d].add.recipeId: the recipe has no serving sizes, so it can't be planned", i)
+			return nil, invalidf("pairings[%d].add.recipeId: the recipe has no serving sizes, so it can’t be planned", i)
 		}
 		t.RecipeName = r.Name
 	}

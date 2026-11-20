@@ -19,7 +19,7 @@ struct DiscoverView: View {
     @FocusState private var searchFocused: Bool
 
     private var canAdd: Bool { households.access?.can(.recipesEdit) == true }
-    private var margin: CGFloat { sizeClass == .regular ? 28 : 16 }
+    private var margin: CGFloat { DiscoverLayout.margin(isWide: sizeClass == .regular) }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -48,7 +48,7 @@ struct DiscoverView: View {
         }
         .refreshable { await discover.refresh() }
         .alert(
-            "Couldn't Add That Recipe", isPresented: .constant(discover.addError != nil),
+            "Couldn’t Add That Recipe", isPresented: .constant(discover.addError != nil),
             presenting: discover.addError
         ) { _ in
             Button("OK") { discover.addError = nil }
@@ -56,7 +56,7 @@ struct DiscoverView: View {
             Text(message)
         }
         .confirmationDialog(
-            "Why are you reporting this recipe?", isPresented: Binding(presenting: $reporting),
+            "Why Are You Reporting This Recipe?", isPresented: Binding(presenting: $reporting),
             titleVisibility: .visible, presenting: reporting
         ) { item in
             ForEach(CatalogReportReason.allCases) { reason in
@@ -66,7 +66,7 @@ struct DiscoverView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("You won't see it again. We'll take a look.")
+            Text("You won’t see it again. We’ll take a look.")
         }
         .alert(
             discover.reportTitle, isPresented: Binding(presenting: Bindable(discover).reportMessage),
@@ -112,7 +112,7 @@ struct DiscoverView: View {
         } else if discover.isLoadingHome || discover.homeError == nil {
             DiscoverSectionRow(
                 section: DiscoverSection(
-                    id: "placeholder", title: "Chef's Picks This Week",
+                    id: "placeholder", title: "Chef’s Picks This Week",
                     items: Array(repeating: CatalogPreviewData.placeholder, count: 4)),
                 featured: true, seeAllTitle: nil, margin: margin, canAdd: false, report: { _ in }
             )
@@ -127,7 +127,7 @@ struct DiscoverView: View {
     private var browseAll: some View {
         VStack(alignment: .leading, spacing: DS.Space.ml) {
             Text(discover.home?.browseTitle ?? String(localized: "Browse All"))
-                .font(.title2.bold())
+                .font(DS.Typography.sectionTitle)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.horizontal, margin)
             searchField
@@ -160,7 +160,7 @@ struct DiscoverView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
+                .accessibilityLabel("Clear Search")
             }
         }
         .padding(.horizontal, DS.Space.m)
@@ -189,6 +189,7 @@ struct DiscoverView: View {
             .padding(.horizontal, margin)
         }
         .scrollIndicators(.hidden)
+        .carouselInSafeArea()
     }
 
     @ViewBuilder
@@ -236,7 +237,7 @@ struct DiscoverView: View {
                         discover.emptyText
                             ?? String(
                                 localized:
-                                    "You already have every recipe other households have shared. Check back later.")))
+                                    "You have every recipe other households shared. Check back later.")))
             }
         }
         .frame(maxWidth: .infinity)
@@ -257,6 +258,21 @@ struct DiscoverView: View {
     }
 }
 
+/// Shared Recipes' sizes, kept in one place so every row and grid agrees.
+enum DiscoverLayout {
+    /// The screen margin: wider on an iPad.
+    static func margin(isWide: Bool) -> CGFloat { isWide ? DS.Space.xxl : DS.Space.l }
+    /// One card width for every row, so no row's cards look smaller than another's.
+    static func cardWidth(isWide: Bool) -> CGFloat { isWide ? 240 : 180 }
+    /// The grid's card widths (Browse All, See All).
+    static let gridMinimum: CGFloat = 150
+    static let gridMaximum: CGFloat = 260
+    /// A card's photo is 4:3.
+    static func photoHeight(forWidth width: CGFloat) -> CGFloat { (width * 3 / 4).rounded() }
+    /// The round save button on a card's photo.
+    static let saveButtonSize: CGFloat = 32
+}
+
 /// Opens one row of Shared Recipes in full.
 struct DiscoverSectionRoute: Hashable {
     let id: String
@@ -264,7 +280,7 @@ struct DiscoverSectionRoute: Hashable {
 }
 
 /// One server row: its title, an optional subtitle and sponsor, and a
-/// sideways-scrolling line of cards. The first row's cards are larger.
+/// sideways-scrolling line of cards, all one size.
 struct DiscoverSectionRow: View {
     let section: DiscoverSection
     let featured: Bool
@@ -275,21 +291,16 @@ struct DiscoverSectionRow: View {
 
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    private var cardWidth: CGFloat {
-        switch (featured, sizeClass == .regular) {
-        case (true, true): 320
-        case (true, false): 260
-        case (false, true): 220
-        case (false, false): 168
-        }
-    }
+    /// Every row's cards are the same size: a bigger first row made Top Rated look smaller than
+    /// Chef's Picks.
+    private var cardWidth: CGFloat { DiscoverLayout.cardWidth(isWide: sizeClass == .regular) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                 VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(section.title)
-                        .font(featured ? .title2.bold() : .title3.bold())
+                        .font(DS.Typography.sectionTitle)
                         .accessibilityAddTraits(.isHeader)
                     if let subtitle = section.subtitle, !subtitle.isEmpty {
                         Text(subtitle)
@@ -302,18 +313,18 @@ struct DiscoverSectionRow: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, DS.Space.s)
-                            .padding(.vertical, 3)
+                            .padding(.vertical, DS.Space.hairline)
                             .background(DS.Colors.subtleFill, in: .capsule)
                             .padding(.top, DS.Space.xxs)
                             .accessibilityIdentifier("DiscoverSponsor")
                     }
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: DS.Space.s)
                 NavigationLink(value: DiscoverSectionRoute(id: section.id, title: section.title)) {
                     Text(seeAllTitle ?? String(localized: "See All"))
                         .font(.subheadline.weight(.semibold))
                 }
-                .accessibilityLabel("See all \(section.title)")
+                .accessibilityLabel("See All \(section.title)")
                 .accessibilityIdentifier("DiscoverSeeAll-\(section.id)")
             }
             .padding(.horizontal, margin)
@@ -329,6 +340,7 @@ struct DiscoverSectionRow: View {
             .contentMargins(.horizontal, margin, for: .scrollContent)
             .scrollTargetBehavior(.viewAligned)
             .scrollIndicators(.hidden)
+            .carouselInSafeArea()
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("DiscoverSection-\(section.id)")
@@ -346,7 +358,11 @@ struct DiscoverCard: View {
 
     @Environment(DiscoverStore.self) private var discover
 
-    static let gridColumns = [GridItem(.adaptive(minimum: 150, maximum: 260), spacing: DS.Space.l, alignment: .top)]
+    static let gridColumns = [
+        GridItem(
+            .adaptive(minimum: DiscoverLayout.gridMinimum, maximum: DiscoverLayout.gridMaximum), spacing: DS.Space.l,
+            alignment: .top)
+    ]
 
     private var isSaved: Bool { discover.isSaved(summary) }
 
@@ -354,6 +370,9 @@ struct DiscoverCard: View {
         NavigationLink(value: CatalogRecipeRoute(id: summary.id, name: summary.name)) {
             VStack(alignment: .leading, spacing: DS.Space.s) {
                 RecipeImage(url: summary.imageURL, pointWidth: width ?? 240, title: summary.name)
+                    // A fixed photo size in a row: a fitted photo shrank to make room for a
+                    // two-line name, so cards in one row came out different sizes.
+                    .frame(width: width, height: width.map { DiscoverLayout.photoHeight(forWidth: $0) })
                     .clipShape(.rect(cornerRadius: DS.Radius.large))
                 // The time and cuisine sit right under the name, one line or two; cards in a
                 // row line up at the top, and the space a short name leaves goes below.
@@ -362,7 +381,10 @@ struct DiscoverCard: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
-                        .lineLimit(2)
+                        // A row's cards keep two lines for the name, so every card in the row is
+                        // one height: the lazy row sizes itself from its first card, and a
+                        // two-line name under a one-line first card lost its time and cuisine.
+                        .lineLimit(2, reservesSpace: width != nil)
                         .fixedSize(horizontal: false, vertical: true)
                     facts
                 }
@@ -406,10 +428,10 @@ struct DiscoverCard: View {
         if isSaved {
             Image(systemName: "checkmark")
                 .font(.footnote.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(Color.green, in: .circle)
-                .accessibilityLabel("In your library")
+                .foregroundStyle(DS.Colors.onAccent)
+                .frame(width: DiscoverLayout.saveButtonSize, height: DiscoverLayout.saveButtonSize)
+                .background(DS.Colors.success, in: .circle)
+                .accessibilityLabel("In Your Library")
                 .accessibilityIdentifier("DiscoverCardSaved")
         } else if canAdd {
             let adding = discover.adding.contains(summary.id)
@@ -424,7 +446,7 @@ struct DiscoverCard: View {
                             .font(.footnote.weight(.bold))
                     }
                 }
-                .frame(width: 32, height: 32)
+                .frame(width: DiscoverLayout.saveButtonSize, height: DiscoverLayout.saveButtonSize)
                 .background(.regularMaterial, in: .circle)
             }
             .buttonStyle(.plain)
@@ -444,7 +466,7 @@ struct DiscoverCard: View {
             parts.append(cuisine.capitalized)
         }
         if saved {
-            parts.append(String(localized: "In your library"))
+            parts.append(String(localized: "In Your Library"))
         }
         return parts.joined(separator: ", ")
     }
@@ -492,9 +514,9 @@ struct DiscoverFilterChip: View {
             .font(.subheadline.weight(.medium))
             .padding(.horizontal, DS.Space.ml)
             .padding(.vertical, DS.Space.s)
-            .foregroundStyle(selected == nil ? Color.primary : Color.white)
+            .foregroundStyle(selected == nil ? Color.primary : DS.Colors.onAccent)
             .background(
-                selected == nil ? AnyShapeStyle(DS.Colors.surface) : AnyShapeStyle(.tint), in: .capsule)
+                selected == nil ? AnyShapeStyle(DS.Colors.surface) : AnyShapeStyle(DS.Colors.accent), in: .capsule)
         }
         .accessibilityLabel(selectedLabel.map { "\(group.title): \($0)" } ?? group.title)
         .accessibilityIdentifier("DiscoverFilter-\(group.id)")
@@ -538,7 +560,7 @@ struct DiscoverErrorRow: View {
     let home = DiscoverHome(
         sections: [
             DiscoverSection(
-                id: "chefs-picks", title: "Chef's Picks This Week", subtitle: "Our favorites right now",
+                id: "chefs-picks", title: "Chef’s Picks This Week", subtitle: "Our favorites right now",
                 items: CatalogPreviewData.summaries),
             DiscoverSection(
                 id: "quick", title: "Quick", subtitle: "30 minutes or less", items: CatalogPreviewData.summaries),

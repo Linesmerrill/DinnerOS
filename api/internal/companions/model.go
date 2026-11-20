@@ -268,7 +268,7 @@ func (in Input) normalize(canonicalCuisine func(string) string, mealCategory fun
 	if out.ProductURL != "" {
 		u, err := url.Parse(out.ProductURL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || len(out.ProductURL) > MaxURLLength {
-			return Input{}, invalid("That link doesn't look right. Paste a web address that starts with http or https.")
+			return Input{}, invalid("That link doesn’t look right. Paste a web address that starts with http or https.")
 		}
 	}
 	for _, c := range in.Cuisines {
@@ -298,7 +298,7 @@ func (in Input) normalize(canonicalCuisine func(string) string, mealCategory fun
 	for _, c := range in.MealCategories {
 		v := strings.ToLower(clean(c))
 		if v == "" || (mealCategory != nil && !mealCategory(v)) {
-			return Input{}, invalid("That kind of meal isn't one we know.")
+			return Input{}, invalid("That kind of meal isn’t one we know.")
 		}
 		if !slices.Contains(out.MealCategories, v) {
 			out.MealCategories = append(out.MealCategories, v)
@@ -320,7 +320,7 @@ func (in Input) normalize(canonicalCuisine func(string) string, mealCategory fun
 		out.Mode = ModeSuggest
 	}
 	if !optionValue(ModeOptions, out.Mode) {
-		return Input{}, invalid("Pick what happens when it's due.")
+		return Input{}, invalid("Pick what happens when it’s due.")
 	}
 	return out, nil
 }

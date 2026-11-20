@@ -10,7 +10,7 @@ struct CookWelcome: View {
 
     private let pages: [CookWelcomePage] = [
         CookWelcomePage(
-            title: "Welcome to cooking with DinnerOS",
+            title: "Welcome to Cooking with DinnerOS",
             lines: [
                 "Your ingredients are grouped by the step that uses them.",
                 "Check them off as they go in.",
@@ -18,22 +18,22 @@ struct CookWelcome: View {
             ],
             drawing: .ingredients),
         CookWelcomePage(
-            title: "Follow the steps",
+            title: "Follow the Steps",
             lines: [
                 "Tap a step to highlight it, so you can find your place again.",
                 "Tap a green time to start a timer. Add or take away time before you start it.",
             ],
             drawing: .steps),
         CookWelcomePage(
-            title: "Run a few timers at once",
+            title: "Run a Few Timers at Once",
             lines: [
-                "Each timer is named for what it's cooking.",
-                "When one's done, add a minute or stop it.",
+                "Each timer is named for what it’s cooking.",
+                "When one’s done, add a minute or stop it.",
                 "Press and hold a timer to move it.",
             ],
             drawing: .timers),
         CookWelcomePage(
-            title: "Make it yours",
+            title: "Make It Yours",
             lines: [
                 "Tap the list button at the top to show ingredients all together.",
                 "Tap the stacked squares to switch to another dish this week.",
@@ -50,13 +50,16 @@ struct CookWelcome: View {
                         .tag(index)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            // The system's page dots were white on a light gray; these use the app's colors.
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            CookWelcomeDots(count: pages.count, current: page)
+                .padding(.top, DS.Space.s)
 
             HStack {
                 if page < pages.count - 1 {
                     Button("Skip", action: done)
-                        .foregroundStyle(.secondary)
+                        .buttonStyle(.dsOutline(.small))
                 }
                 Spacer()
                 Button {
@@ -73,31 +76,58 @@ struct CookWelcome: View {
             .padding(DS.Space.xl)
         }
         .frame(idealWidth: 560, idealHeight: 640)
+        .background(DS.Colors.background)
+        .presentationBackground(DS.Colors.background)
     }
 
     private func pageView(_ page: CookWelcomePage) -> some View {
         ScrollView {
-            VStack(spacing: 22) {
+            VStack(spacing: DS.Space.xl) {
                 CookWelcomeDrawing(kind: page.drawing)
-                    .frame(maxWidth: 420)
-                    .frame(height: 230)
-                    .padding(.top, 28)
+                    .frame(maxWidth: Self.columnWidth)
+                    .frame(height: Self.drawingHeight)
+                    .padding(.top, DS.Space.xxl)
                     .accessibilityHidden(true)
                 Text(page.title)
-                    .font(.title2.weight(.bold))
+                    .font(DS.Typography.title)
                     .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
                 VStack(alignment: .leading, spacing: DS.Space.sm) {
                     ForEach(Array(page.lines.enumerated()), id: \.offset) { _, line in
                         Text(line)
-                            .font(.body)
+                            .font(DS.Typography.body)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .frame(maxWidth: 420, alignment: .leading)
+                .frame(maxWidth: Self.columnWidth, alignment: .leading)
             }
             .padding(.horizontal, DS.Space.xxl)
             .padding(.bottom, DS.Space.huge)
         }
+    }
+}
+
+extension CookWelcome {
+    /// The drawing and the text under it share one column.
+    fileprivate static let columnWidth: CGFloat = 420
+    fileprivate static let drawingHeight: CGFloat = 230
+}
+
+/// Which of the walkthrough's pages is showing: the current dot in the accent, the rest gray.
+private struct CookWelcomeDots: View {
+    let count: Int
+    let current: Int
+
+    var body: some View {
+        HStack(spacing: DS.Space.s) {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(index == current ? DS.Colors.accent : DS.Colors.secondaryText)
+                    .frame(width: DS.Space.s, height: DS.Space.s)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Page \(current + 1) of \(count)"))
     }
 }
 
@@ -116,6 +146,7 @@ private struct CookWelcomeDrawing: View {
         ZStack {
             RoundedRectangle(cornerRadius: DS.Radius.xLarge, style: .continuous)
                 .fill(DS.Colors.surface)
+                .strokeBorder(Color(.separator))
             content
                 .padding(22)
         }

@@ -178,7 +178,7 @@ func TestAddValidation(t *testing.T) {
 		{"bad category", AddInput{Name: "Rice", Category: "snacks"}, "category must be one of"},
 		{"bad date", AddInput{Name: "Rice", ExpiresOn: "2026-13-01"}, "YYYY-MM-DD"},
 		{"US date", AddInput{Name: "Rice", ExpiresOn: "10/01/2026"}, "YYYY-MM-DD"},
-		{"out with quantity", AddInput{Name: "Rice", Status: StatusOut, Quantity: "1"}, "out can't have a quantity"},
+		{"out with quantity", AddInput{Name: "Rice", Status: StatusOut, Quantity: "1"}, "out can’t have a quantity"},
 		{"long note", AddInput{Name: "Rice", Note: strings.Repeat("n", MaxNoteLength+1)}, "note must be at most"},
 	}
 	for _, tt := range tests {
@@ -263,7 +263,7 @@ func TestUpdate(t *testing.T) {
 		{"unknown unit", UpdateInput{Unit: ptr("dollop")}, "not a DinnerOS unit code"},
 		{"negative quantity", UpdateInput{Quantity: ptr("-1")}, "positive amount"},
 		{"bad status", UpdateInput{Status: ptr(Status("gone"))}, "status must be"},
-		{"out with quantity", UpdateInput{Status: ptr(StatusOut), Quantity: ptr("2")}, "out can't have a quantity"},
+		{"out with quantity", UpdateInput{Status: ptr(StatusOut), Quantity: ptr("2")}, "out can’t have a quantity"},
 		{"blank name", UpdateInput{DisplayName: ptr(" ")}, "name is required"},
 		{"bad category", UpdateInput{Category: ptr("snacks")}, "category must be one of"},
 		{"bad date", UpdateInput{ExpiresOn: ptr("tomorrow")}, "YYYY-MM-DD"},

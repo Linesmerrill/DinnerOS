@@ -15,6 +15,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
@@ -330,7 +331,8 @@ func (h *Handler) section(w http.ResponseWriter, r *http.Request) {
 
 func sectionResponse(c Collection, items []Result, more bool) DiscoverSectionResponse {
 	out := DiscoverSectionResponse{
-		ID: c.ID, Title: c.Title, Subtitle: c.Subtitle, Type: c.Type, SponsorLabel: c.SponsorLabel(),
+		// A row an operator wrote may have straight apostrophes; people see curly.
+		ID: c.ID, Title: copytext.Curly(c.Title), Subtitle: copytext.Curly(c.Subtitle), Type: c.Type, SponsorLabel: c.SponsorLabel(),
 		Items: make([]CatalogSummaryResponse, 0, len(items)), HasMore: more,
 	}
 	if out.SponsorLabel != "" && c.Sponsor != nil {
@@ -395,7 +397,7 @@ type ReportResponse struct {
 }
 
 // ReportThanks is what the app shows after a report.
-const ReportThanks = "Thanks for telling us. We'll take a look, and you won't see this recipe again."
+const ReportThanks = "Thanks for telling us. We’ll take a look, and you won’t see this recipe again."
 
 func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	var req ReportRequest
@@ -521,7 +523,7 @@ func recipeResponse(it Result) CatalogRecipeResponse {
 		Steps:       make([]recipes.StepResponse, 0, len(c.Steps)),
 	}
 	for _, n := range c.Nutrition {
-		out.Nutrition = append(out.Nutrition, recipes.NutrientResponse(n))
+		out.Nutrition = append(out.Nutrition, recipes.NewNutrientResponse(n))
 	}
 	for _, line := range c.Ingredients {
 		l := CatalogIngredientResponse{

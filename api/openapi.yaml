@@ -7412,6 +7412,10 @@ components:
                 type: number
               unit:
                 type: string
+              text:
+                type: string
+                description: The value as the app shows it, "640 Cal" or "39 g". Ignored in requests.
+                example: 640 Cal
         ingredients:
           type: array
           items:
@@ -7939,6 +7943,10 @@ components:
                     type: number
                   unit:
                     type: string
+                  text:
+                    type: string
+                    description: The value as the app shows it, "640 Cal" or "39 g". Ignored in requests.
+                    example: 640 Cal
             ingredients:
               type: array
               items:
@@ -10815,6 +10823,14 @@ components:
         createdAt:
           type: string
           format: date-time
+        groupedIds:
+          type: array
+          items:
+            type: string
+          description: >-
+            Present when this notification stands for repeats shown as one ("3 invites
+            counted"): the IDs of all of them, newest first. Reading or dismissing this
+            notification's ID covers every one, and the unread count counts the group once.
     NotificationListResponse:
       type: object
       required: [items, nextCursor]

@@ -408,13 +408,17 @@ nonisolated enum PlusPurchaseResult: Hashable, Sendable {
 
 /// Words the Plus screens show that don't come from the API.
 nonisolated enum PlusText {
-    /// A status line for someone who has Plus.
-    static func status(_ status: PlusStatus, now: Date = .now) -> String {
+    /// A status line for someone who has Plus. `testerThanks` adds the beta thank-you to a
+    /// comp's line; callers pass `BuildChannel.showsTesterThanks(for:)`, which is never true in
+    /// an App Store build (build 121).
+    static func status(_ status: PlusStatus, testerThanks: Bool = false, now: Date = .now) -> String {
         if status.comp != nil {
-            return String(localized: "Plus is on the house. Thank you for testing.")
+            return testerThanks
+                ? String(localized: "Plus is on the house. Thank you for testing.")
+                : String(localized: "Plus is on the house.")
         }
         if status.billingIssue {
-            return String(localized: "Apple couldn't charge your last renewal. Check your payment in Settings.")
+            return String(localized: "Apple couldn’t charge your last renewal. Check your payment in Settings.")
         }
         if status.trial, let end = status.expiresAt {
             return String(localized: "Free trial until \(end.formatted(date: .abbreviated, time: .omitted)).")
@@ -450,7 +454,7 @@ nonisolated enum PlusText {
     static func buyTitle(_ offer: PlusOffer, product: PlusProduct?) -> String {
         let days = trialDays(offerDays: offer.trialDays, product: product)
         guard days > 0 else { return offer.buyText }
-        return days == offer.trialDays ? offer.trialText : String(localized: "Try it free for \(days) days")
+        return days == offer.trialDays ? offer.trialText : String(localized: "Try It Free for \(days) Days")
     }
 
     /// "Nov 13, 2026".

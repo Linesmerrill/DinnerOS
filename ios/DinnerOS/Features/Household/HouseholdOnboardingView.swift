@@ -4,7 +4,7 @@ import SwiftUI
 struct HouseholdOnboardingView: View {
     @Environment(AuthSession.self) private var session
     @Environment(\.appConfiguration) private var configuration
-    @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 64
+    @Environment(PlusStore.self) private var plus
     @State private var isConfirmingSignOut = false
 
     var body: some View {
@@ -14,15 +14,18 @@ struct HouseholdOnboardingView: View {
                     header
                         .listRowBackground(Color.clear)
                 }
-                // Before making a household, so the free month comes with it.
-                InviteCodeSetupSection()
+                // A friend's code from an invite link, already saved. Typing one in is part of
+                // Create a Household, so this screen has one way to join with a code (build 121).
+                if plus.savedInvite?.accepted == true {
+                    InviteCodeSetupSection()
+                }
                 Section {
                     NavigationLink {
-                        CreateHouseholdForm()
+                        CreateHouseholdForm(offersInviteCode: true)
                     } label: {
                         option(
                             "Create a Household",
-                            detail: "You'll be its admin and can invite the people you cook with.",
+                            detail: "You’ll be its admin and can invite the people you cook with.",
                             systemImage: "house.fill")
                     }
                     NavigationLink {
@@ -43,6 +46,7 @@ struct HouseholdOnboardingView: View {
             }
             .navigationTitle(configuration.displayName)
             .navigationBarTitleDisplayMode(.inline)
+            .dsReadableForm()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -73,17 +77,18 @@ struct HouseholdOnboardingView: View {
     private var header: some View {
         VStack(spacing: DS.Space.m) {
             Image(systemName: "person.2.circle.fill")
-                .font(.system(size: markSize))
-                .foregroundStyle(.tint)
+                .font(DS.Typography.largeTitle)
+                .imageScale(.large)
+                .foregroundStyle(DS.Colors.accent)
                 .accessibilityHidden(true)
             Text("Set Up Your Household")
-                .font(.title2.bold())
+                .font(DS.Typography.title)
                 .accessibilityAddTraits(.isHeader)
             Text(
                 "A household is the people you plan dinners and shop with. Start one, or join one you were invited to."
             )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .font(DS.Typography.subheadline)
+            .foregroundStyle(DS.Colors.secondaryText)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
@@ -91,17 +96,14 @@ struct HouseholdOnboardingView: View {
     }
 
     private func option(_ title: LocalizedStringKey, detail: LocalizedStringKey, systemImage: String) -> some View {
-        Label {
+        DSIconRow(systemImage: systemImage) {
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(title)
-                    .font(.headline)
+                    .font(DS.Typography.headline)
                 Text(detail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
             }
-        } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(.tint)
         }
         .padding(.vertical, DS.Space.xs)
     }
@@ -112,4 +114,5 @@ struct HouseholdOnboardingView: View {
     HouseholdOnboardingView()
         .environment(session)
         .environment(HouseholdStore.preview(session: session, phase: .needsHousehold))
+        .environment(PlusStore(session: session, api: nil, purchaser: StoreKitPlusPurchaser()))
 }

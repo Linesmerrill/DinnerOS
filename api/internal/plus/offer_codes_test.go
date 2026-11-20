@@ -299,7 +299,7 @@ func TestFreeMonthRevealRoute(t *testing.T) {
 	h.offers.mu.Unlock()
 	rec = do(http.MethodPost, "/households/"+hhB+"/plus/free-months/"+owed.ID+"/reveal", "u2", "")
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "free_month_on_the_way") ||
-		!strings.Contains(rec.Body.String(), "We'll let you know when it's ready.") {
+		!strings.Contains(rec.Body.String(), "We’ll let you know when it’s ready.") {
 		t.Errorf("owed = %d %s", rec.Code, rec.Body.String())
 	}
 }

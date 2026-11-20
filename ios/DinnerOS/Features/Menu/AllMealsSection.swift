@@ -6,12 +6,9 @@ struct AllMealsSection: View {
     let list: MenuRecipeList
     var title: String? = String(localized: "All Meals")
     var canAdd = true
-    /// Opens the "add a recipe by hand" sheet. Nil where the screen has no sheet to open,
-    /// which only drops the shortcut: the empty state still points somewhere.
-    var onAddOwnRecipe: (() -> Void)?
 
     @Environment(MenuStore.self) private var menu
-    @Environment(HouseholdStore.self) private var households
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var isSearching = false
     @State private var searchText = ""
@@ -24,8 +21,6 @@ struct AllMealsSection: View {
     }
 
     private var photoURLs: [URL?] { list.items.map(\.recipe.imageURL) }
-
-    private var canEditRecipes: Bool { households.access?.can(.recipesEdit) == true }
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: DS.Space.xl, pinnedViews: [.sectionHeaders]) {
@@ -93,14 +88,21 @@ struct AllMealsSection: View {
                 let urls = photoURLs
                 let canAdd = canAdd
                 let width = MenuRecipeCard.fullWidthEstimate
-                LazyVStack(alignment: .leading, spacing: DS.Space.xxl) {
+                VStack(alignment: .leading, spacing: DS.Space.xxl) {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
-                    ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
-                        MenuCardRow(
-                            index: index, card: card, size: .fullWidth, canAdd: canAdd, photoURLs: urls,
-                            photoWidth: width)
+                    // One column on a phone; on an iPad a grid of cards, so one search result
+                    // stays card-sized instead of filling the screen.
+                    LazyVGrid(
+                        columns: AllMealsLayout.columns(isWide: sizeClass == .regular), alignment: .leading,
+                        spacing: DS.Space.xxl
+                    ) {
+                        ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
+                            MenuCardRow(
+                                index: index, card: card, size: .fullWidth, canAdd: canAdd, photoURLs: urls,
+                                photoWidth: width)
+                        }
                     }
                     pageFooter
                 }
@@ -140,22 +142,32 @@ struct AllMealsSection: View {
                 }
             }
         } else {
+            // No Shared Recipes button here: the Menu already offers it above (`MenuEntryPoints`).
             ContentUnavailableView {
                 Label("No Recipes Yet", systemImage: "book.closed")
             } description: {
-                Text("Add recipes other households shared, or add one yourself.")
-            } actions: {
-                if canEditRecipes {
-                    NavigationLink(value: DiscoverRoute()) {
-                        Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
-                    }
-                    .buttonStyle(.dsPrimary(.small))
-                    if let onAddOwnRecipe {
-                        Button("Add a Recipe", systemImage: "square.and.pencil", action: onAddOwnRecipe)
-                    }
-                }
+                Text("Recipes you add show up here.")
             }
         }
+    }
+}
+
+/// How All Meals lays out its cards.
+enum AllMealsLayout {
+    /// The narrowest a card gets in the iPad grid.
+    static let minimumCardWidth: CGFloat = 280
+    /// The widest a card gets in the iPad grid, so one result is card-sized, not screen-sized.
+    static let maximumCardWidth: CGFloat = 400
+
+    /// One full-width column on a phone; on a wide screen, as many cards as fit, each at most
+    /// `maximumCardWidth`.
+    static func columns(isWide: Bool) -> [GridItem] {
+        guard isWide else { return [GridItem(.flexible(), alignment: .top)] }
+        return [
+            GridItem(
+                .adaptive(minimum: minimumCardWidth, maximum: maximumCardWidth), spacing: DS.Space.l,
+                alignment: .top)
+        ]
     }
 }
 
@@ -177,7 +189,7 @@ struct MenuChipBar: View {
                     filterChip
                     sortMenu
                     valueMenu(
-                        title: String(localized: "Main protein"), options: options.proteins,
+                        title: String(localized: "Main Protein"), options: options.proteins,
                         selection: list.query.protein
                     ) { value in
                         apply { $0.protein = value }
@@ -192,6 +204,7 @@ struct MenuChipBar: View {
                 .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
+            .carouselInSafeArea()
             if isSearching {
                 HStack(spacing: DS.Space.s) {
                     Image(systemName: "magnifyingglass")
@@ -258,7 +271,7 @@ struct MenuChipBar: View {
 
     private var sortMenu: some View {
         Menu {
-            Picker("Sort by", selection: sortBinding) {
+            Picker("Sort By", selection: sortBinding) {
                 ForEach(options.sorts) { option in
                     Text(option.label).tag(option.value)
                 }
@@ -274,9 +287,9 @@ struct MenuChipBar: View {
 
     private var timeMenu: some View {
         Menu {
-            Button("Any time") { apply { $0.maxMinutes = nil } }
+            Button("Any Time") { apply { $0.maxMinutes = nil } }
             ForEach(options.maxMinutes, id: \.self) { minutes in
-                Button("\(minutes) min or less") { apply { $0.maxMinutes = minutes } }
+                Button("\(minutes) Min or Less") { apply { $0.maxMinutes = minutes } }
             }
         } label: {
             chipLabel(
@@ -286,11 +299,22 @@ struct MenuChipBar: View {
         }
     }
 
+    /// A chip with nothing to choose isn't shown, rather than shown grayed out: a new household
+    /// has no proteins or cuisines yet, and gray chips read as broken.
+    @ViewBuilder
     private func valueMenu(
         title: String, options: [MenuFilterOption], selection: String?, apply: @escaping (String?) -> Void
     ) -> some View {
+        if !options.isEmpty {
+            valueMenuChip(title: title, options: options, selection: selection, apply: apply)
+        }
+    }
+
+    private func valueMenuChip(
+        title: String, options: [MenuFilterOption], selection: String?, apply: @escaping (String?) -> Void
+    ) -> some View {
         Menu {
-            Button(String(localized: "Any \(title.lowercased())")) { apply(nil) }
+            Button(String(localized: "Any \(title)")) { apply(nil) }
             ForEach(options) { option in
                 Button {
                     apply(option.value)
@@ -307,8 +331,6 @@ struct MenuChipBar: View {
                 title: selection.map { MenuFilterOptions.label(for: $0, in: options) } ?? title,
                 systemImage: "chevron.down", isSelected: selection != nil, isTrailingImage: true)
         }
-        .disabled(options.isEmpty)
-        .opacity(options.isEmpty ? 0.5 : 1)
         .accessibilityLabel(title)
     }
 
@@ -345,11 +367,11 @@ struct MenuChipBar: View {
             }
         }
         .font(.subheadline.weight(.medium))
-        .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
+        .foregroundStyle(isSelected ? AnyShapeStyle(DS.Colors.onAccent) : AnyShapeStyle(Color.primary))
         .padding(.horizontal, DS.Space.m)
-        .frame(minHeight: 34)
+        .frame(minHeight: DS.ButtonSize.small.height)
         .background(
-            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(DS.Colors.surface), in: .capsule)
+            isSelected ? AnyShapeStyle(DS.Colors.accent) : AnyShapeStyle(DS.Colors.surface), in: .capsule)
     }
 }
 
@@ -373,26 +395,26 @@ struct MenuFilterSheet: View {
         NavigationStack {
             Form {
                 Section("Sort By") {
-                    Picker("Sort by", selection: $draft.sort) {
+                    Picker("Sort By", selection: $draft.sort) {
                         ForEach(options.sorts) { option in
                             Text(option.label).tag(option.value)
                         }
                     }
                 }
                 Section("Filters") {
-                    picker(title: "Main protein", options: options.proteins, selection: $draft.protein)
+                    picker(title: "Main Protein", options: options.proteins, selection: $draft.protein)
                     picker(title: "Cuisine", options: options.cuisines, selection: $draft.cuisine)
                     picker(title: "Tag", options: options.tags, selection: $draft.tag)
-                    Picker("Cook time", selection: $draft.maxMinutes) {
+                    Picker("Cook Time", selection: $draft.maxMinutes) {
                         Text("Any").tag(Int?.none)
                         ForEach(options.maxMinutes, id: \.self) { minutes in
                             Text("\(minutes) min or less").tag(Int?.some(minutes))
                         }
                     }
                     Picker("Show", selection: $draft.addons) {
-                        Text("Mains and add-ons").tag(Bool?.none)
-                        Text("Mains only").tag(Bool?.some(false))
-                        Text("Add-ons only").tag(Bool?.some(true))
+                        Text("Mains and Add-Ons").tag(Bool?.none)
+                        Text("Mains Only").tag(Bool?.some(false))
+                        Text("Add-Ons Only").tag(Bool?.some(true))
                     }
                 }
             }

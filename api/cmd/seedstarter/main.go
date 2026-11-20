@@ -104,6 +104,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	}
 	fmt.Fprintf(out, "household %s in database %q: %s %d of %d starter recipes; %d already present (%s)\n",
 		*target, database, verb, res.Copied, res.Source, res.Existing, time.Since(started).Round(time.Millisecond))
+	for _, m := range res.Mismatched {
+		fmt.Fprintf(out, "check: %s has a name that doesn't match its source page or photo\n", m)
+	}
 	if err != nil {
 		return err
 	}

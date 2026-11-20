@@ -51,7 +51,7 @@ func (s *Service) FindStores(ctx context.Context, householdID, provider, zip str
 	}
 	finder, ok := p.(providers.StoreFinder)
 	if !ok {
-		return nil, invalid("You can't search for %s stores here. Type the store number instead.", p.Name())
+		return nil, invalid("You can’t search for %s stores here. Type the store number instead.", p.Name())
 	}
 	zip = strings.TrimSpace(zip)
 	if !zipCode.MatchString(zip) {
@@ -75,7 +75,7 @@ func (s *Service) SearchProducts(ctx context.Context, householdID, provider, ter
 	}
 	searcher, ok := p.(providers.ProductSearcher)
 	if !ok {
-		return nil, invalid("You can't search %s here. Paste a product link instead.", p.Name())
+		return nil, invalid("You can’t search %s here. Paste a product link instead.", p.Name())
 	}
 	words := strings.Fields(term)
 	if len(words) > maxSearchWords {

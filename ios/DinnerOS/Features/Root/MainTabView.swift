@@ -20,31 +20,10 @@ struct MainTabView: View {
         TabView(selection: $tabs.selection) {
             ForEach(AppTab.allCases) { tab in
                 Tab(value: tab) {
-                    switch tab {
-                    case .menu:
-                        NavigationStack(path: $tabs.menuPath) {
-                            MenuView()
-                        }
-                        // Another household starts at its own menu, not at a recipe
-                        // (or search) from the previous one.
-                        .id(households.current?.household.id)
-                    case .shop:
-                        NavigationStack {
-                            ShopView()
-                        }
-                        .id(households.current?.household.id)
-                    case .pantry:
-                        NavigationStack(path: $tabs.pantryPath) {
-                            PantryView()
-                        }
-                    case .household:
-                        NavigationStack(path: $tabs.householdPath) {
-                            HouseholdView()
-                                .navigationDestination(for: PlusInvitesRoute.self) { _ in
-                                    PlusInviteView()
-                                }
-                        }
-                    }
+                    tabContent(tab)
+                        // Inside each tab, not over the TabView, so the banner sits clear of the
+                        // tab bar (above it on a phone, below it on an iPad), never on it.
+                        .overlay(alignment: .bottom) { newsBanner }
                 } label: {
                     Label(tab.title, systemImage: tab.systemImage)
                         .accessibilityValue(nextSteps.shows(tab: tab.nextStepRow) ? Text("Needs attention") : Text(""))
@@ -75,22 +54,6 @@ struct MainTabView: View {
             if phase == .active {
                 Task { await plus.reload() }
                 Task { await notifications.loadBanner() }
-            }
-        }
-        // News whose push may not have been seen, like an invite that counted.
-        .overlay(alignment: .top) {
-            if let banner = notifications.banner {
-                NewsBanner(notification: banner) {
-                    Task {
-                        await tabs.open(NotificationRouting.destination(for: banner))
-                        await notifications.closeBanner()
-                    }
-                } close: {
-                    Task { await notifications.closeBanner() }
-                }
-                .padding(.horizontal, DS.Space.l)
-                .padding(.top, DS.Space.s)
-                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(.snappy, value: notifications.banner?.id)
@@ -149,6 +112,53 @@ struct MainTabView: View {
         // Outermost, so the sheets above get it too: an environment value set on the TabView
         // alone doesn't reach a sheet presented from a modifier outside it.
         .environment(tabs)
+    }
+
+    @ViewBuilder
+    private func tabContent(_ tab: AppTab) -> some View {
+        switch tab {
+        case .menu:
+            NavigationStack(path: $tabs.menuPath) {
+                MenuView()
+            }
+            // Another household starts at its own menu, not at a recipe
+            // (or search) from the previous one.
+            .id(households.current?.household.id)
+        case .shop:
+            NavigationStack {
+                ShopView()
+            }
+            .id(households.current?.household.id)
+        case .pantry:
+            NavigationStack(path: $tabs.pantryPath) {
+                PantryView()
+            }
+        case .household:
+            NavigationStack(path: $tabs.householdPath) {
+                HouseholdView()
+                    .navigationDestination(for: PlusInvitesRoute.self) { _ in
+                        PlusInviteView()
+                    }
+            }
+        }
+    }
+
+    /// News whose push may not have been seen, like an invite that counted.
+    @ViewBuilder
+    private var newsBanner: some View {
+        if let banner = notifications.banner {
+            NewsBanner(notification: banner) {
+                Task {
+                    await tabs.open(NotificationRouting.destination(for: banner))
+                    await notifications.closeBanner()
+                }
+            } close: {
+                Task { await notifications.closeBanner() }
+            }
+            .padding(.horizontal, DS.Space.l)
+            .padding(.bottom, DS.Space.s)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     /// Gives the router what it needs from the stores: whether a notification's subject still

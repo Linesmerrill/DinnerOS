@@ -232,7 +232,17 @@ var (
 	servesRe    = regexp.MustCompile(`(?i)\b(?:serves|servings?|yield)\b\D{0,12}(\d{1,2})|\b(\d{1,2})\s+servings?\b`)
 	prepTimeRe  = regexp.MustCompile(`(?i)\bprep(?:aration)?\s*time\D{0,10}(\d{1,3})\s*(?:min|minutes?)\b`)
 	totalTimeRe = regexp.MustCompile(`(?i)\b(?:total|cook(?:ing)?|ready in)\s*(?:time)?\D{0,10}(\d{1,3})\s*(?:min|minutes?)\b`)
-	bulletRe    = regexp.MustCompile(`^\s*(?:[-*\x{2022}\x{00b7}\x{25e6}]+|\d{1,2}[.)])\s+`)
+	// labeledTotalRe is a total time anywhere in the text. It needs the word
+	// "time" (or "total", "ready in"), so a step's "cook 1 minute more" isn't
+	// taken for the recipe's time.
+	labeledTotalRe = regexp.MustCompile(`(?i)\b(?:total(?:\s*time)?|cook(?:ing)?\s*time|ready in)\D{0,10}(\d{1,3})\s*(?:min|minutes?)\b`)
+	// bareTimeRe is a head line that is only a time: "30 minutes", "45 min".
+	bareTimeRe = regexp.MustCompile(`(?i)^(\d{1,3})\s*(?:min|mins|minutes?)\.?$`)
+	// metaLineRe is a head line that only gives servings or a time ("Serves
+	// 2", "4 servings", "Prep time: 10 min"). It fills those fields, so it
+	// isn't the recipe's description.
+	metaLineRe = regexp.MustCompile(`(?i)^(?:(?:serves|servings?|yield|makes)\s*:?\s*\d{1,2}(?:\s*(?:people|servings?|portions?))?|\d{1,2}\s+servings?|(?:(?:prep(?:aration)?|cook(?:ing)?|total)\s*time|ready in|time)?\s*:?\s*\d{1,3}\s*(?:min|mins|minutes?))\.?$`)
+	bulletRe   = regexp.MustCompile(`^\s*(?:[-*\x{2022}\x{00b7}\x{25e6}]+|\d{1,2}[.)])\s+`)
 	// The mixed number ("1 1/2") and the bare fraction ("1/2") come first:
 	// Go's alternation is leftmost-first, so a plain integer listed earlier
 	// would match the "1" of "1/2" and leave "/2" in the name.
@@ -291,7 +301,9 @@ func ParseText(text string) Draft {
 	lines := strings.Split(text, "\n")
 
 	mode := "head"
-	var intro []string
+	// head is every line between the title and the first heading; intro is
+	// the ones that aren't only servings or a time.
+	var head, intro []string
 	group := ""
 	for _, raw := range lines {
 		line := strings.TrimSpace(whitespaceRe.ReplaceAllString(raw, " "))
@@ -312,7 +324,10 @@ func ParseText(text string) Draft {
 				d.Name = clip(line, maxDraftName)
 				continue
 			}
-			intro = append(intro, line)
+			head = append(head, line)
+			if !metaLineRe.MatchString(line) {
+				intro = append(intro, line)
+			}
 		case "ingredients":
 			// "For the sauce:" heads the lines under it and isn't one.
 			if bare := bulletRe.ReplaceAllString(line, ""); ingredientHeading(bare) {
@@ -337,19 +352,37 @@ func ParseText(text string) Draft {
 	if m := servesRe.FindStringSubmatch(text); m != nil {
 		d.Servings = atoiClamped(cmpFirst(m[1], m[2]), maxDraftServings)
 	}
-	if m := prepTimeRe.FindStringSubmatch(text); m != nil {
+	// Times come from the lines above the ingredients, where a recipe states
+	// them; a step's "cook 1 minute more" is never the recipe's time.
+	headText := strings.Join(head, "\n")
+	if m := prepTimeRe.FindStringSubmatch(headText); m != nil {
+		d.PrepMinutes = atoiClamped(m[1], 24*60)
+	} else if m := prepTimeRe.FindStringSubmatch(text); m != nil {
 		d.PrepMinutes = atoiClamped(m[1], 24*60)
 	}
-	if m := totalTimeRe.FindStringSubmatch(text); m != nil {
+	switch m := totalTimeRe.FindStringSubmatch(headText); {
+	case m != nil:
 		d.TotalMinutes = atoiClamped(m[1], 24*60)
+	default:
+		for _, line := range head {
+			if b := bareTimeRe.FindStringSubmatch(line); b != nil {
+				d.TotalMinutes = atoiClamped(b[1], 24*60)
+				break
+			}
+		}
+		if d.TotalMinutes == 0 {
+			if m := labeledTotalRe.FindStringSubmatch(text); m != nil {
+				d.TotalMinutes = atoiClamped(m[1], 24*60)
+			}
+		}
 	}
 
 	switch {
 	case d.Name == "":
-		d.Warnings = append(d.Warnings, "Couldn't find a title, so the first line is the name.")
+		d.Warnings = append(d.Warnings, "Couldn’t find a title, so the first line is the name.")
 	case mode == "head":
 		d.Warnings = append(d.Warnings,
-			"Couldn't find an \"Ingredients\" or \"Steps\" heading, so nothing was split up. Add the headings and paste again, or fill this in by hand.")
+			"Couldn’t find an \"Ingredients\" or \"Steps\" heading, so nothing was split up. Add the headings and paste again, or fill this in by hand.")
 	}
 	if len(d.Ingredients) == 0 {
 		d.Warnings = append(d.Warnings, "No ingredients were found.")
@@ -465,7 +498,7 @@ const (
 func timesProblem(prep, total int) string {
 	switch {
 	case prep < 0 || total < 0:
-		return "Times can't be less than zero."
+		return "Times can’t be less than zero."
 	case prep > maxPrepMinutes:
 		return "Prep time can be up to 24 hours."
 	case total > maxTotalMinutes:

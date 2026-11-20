@@ -121,6 +121,7 @@ struct PlusInviteView: View {
                 }
             }
         }
+        .dsReadableForm()
     }
 
     /// Whether "Got a Code?" shows: not once this household has used one.
@@ -146,7 +147,7 @@ struct PlusInviteView: View {
             Text("Got a Code?")
         } footer: {
             Text(
-                "Enter another household's code. Once you add a recipe and plan a dinner, you both get a free month of Plus to redeem through Apple."
+                "Enter another household’s code. Once you add a recipe and plan a dinner, you both get a free month of Plus to redeem through Apple."
             )
         }
     }
@@ -200,7 +201,7 @@ struct CopyCodeButton: View {
             ZStack {
                 if copied {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(DS.Colors.success)
                         .transition(.scale(scale: 0.5).combined(with: .opacity))
                 } else {
                     Image(systemName: "doc.on.doc")

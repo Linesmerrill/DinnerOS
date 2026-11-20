@@ -351,7 +351,7 @@ func (p *PrepSession) count() {
 		p.Headline = "Nothing to prep this week — every pack was about the size the week needs."
 	case p.Pending == 0:
 		p.State = PrepFinished
-		p.Headline = "Everything's put away."
+		p.Headline = "Everything’s put away."
 	case p.Pending == 1:
 		p.State = PrepReady
 		p.Headline = "One thing to put away."
@@ -669,12 +669,12 @@ func prepReminder(card PrepCard, today string) (PrepReminder, string) {
 		}
 		if m.Date >= today {
 			return PrepReminderThaw, fmt.Sprintf(
-				"We'll remind you %s morning to move a bag to the fridge. It takes %s to thaw.",
+				"We’ll remind you %s morning to move a bag to the fridge. It takes %s to thaw.",
 				dayName(m.Day), hours)
 		}
 	}
 	return PrepReminderList, fmt.Sprintf(
-		"When you plan it again, we'll remind you that morning to move a bag to the fridge. It takes %s to thaw.",
+		"When you plan it again, we’ll remind you that morning to move a bag to the fridge. It takes %s to thaw.",
 		hours)
 }
 
@@ -684,9 +684,9 @@ func prepInstruction(card PrepCard) string {
 	reserved := amountText(card.Pack.Needed, card.Pack.Unit)
 	if !card.Pack.Freezable {
 		if len(card.Meals) == 0 {
-			return fmt.Sprintf("This week uses %s. Cook the rest this week too. It doesn't freeze well.", reserved)
+			return fmt.Sprintf("This week uses %s. Cook the rest this week too. It doesn’t freeze well.", reserved)
 		}
-		return fmt.Sprintf("Keep %s out for %s. Cook the rest this week too. It doesn't freeze well.",
+		return fmt.Sprintf("Keep %s out for %s. Cook the rest this week too. It doesn’t freeze well.",
 			reserved, mealsText(card.Meals))
 	}
 	each := amountText(card.Portions.PortionSize, card.Pack.Unit)

@@ -205,14 +205,14 @@ func TestNormalize(t *testing.T) {
 			want: Input{Name: "Salsa", ProductURL: "https://example.com/salsa", Frequency: EveryWeek, Mode: ModeSuggest}},
 		{name: "no name", in: Input{Name: "  "}, wantErr: "Give it a name."},
 		{name: "long name", in: Input{Name: strings.Repeat("a", MaxNameLength+1)}, wantErr: "Keep the name under 60 letters."},
-		{name: "not a web link", in: Input{Name: "Salsa", ProductURL: "javascript:alert(1)"}, wantErr: "That link doesn't look right."},
-		{name: "ftp link", in: Input{Name: "Salsa", ProductURL: "ftp://example.com"}, wantErr: "That link doesn't look right."},
+		{name: "not a web link", in: Input{Name: "Salsa", ProductURL: "javascript:alert(1)"}, wantErr: "That link doesn’t look right."},
+		{name: "ftp link", in: Input{Name: "Salsa", ProductURL: "ftp://example.com"}, wantErr: "That link doesn’t look right."},
 		{name: "zero amount", in: Input{Name: "Salsa", Quantity: "0"}, wantErr: "Pick an amount from 1 to 99."},
 		{name: "huge amount", in: Input{Name: "Salsa", Quantity: "500"}, wantErr: "Pick an amount from 1 to 99."},
 		{name: "odd unit", in: Input{Name: "Salsa", Quantity: "1", Unit: "bushel-ish"}, wantErr: "Pick an amount from the list."},
 		{name: "bad frequency", in: Input{Name: "Salsa", Frequency: "hourly"}, wantErr: "Pick how often you get it."},
-		{name: "bad mode", in: Input{Name: "Salsa", Mode: "maybe"}, wantErr: "Pick what happens when it's due."},
-		{name: "unknown meal category", in: Input{Name: "Salsa", MealCategories: []string{"brunch"}}, wantErr: "That kind of meal isn't one we know."},
+		{name: "bad mode", in: Input{Name: "Salsa", Mode: "maybe"}, wantErr: "Pick what happens when it’s due."},
+		{name: "unknown meal category", in: Input{Name: "Salsa", MealCategories: []string{"brunch"}}, wantErr: "That kind of meal isn’t one we know."},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := tt.in.normalize(canon, func(s string) bool { return s == "pasta" })
@@ -341,7 +341,7 @@ func TestCreateUpdateDelete(t *testing.T) {
 	svc := newTestService(store, testRecipes(), nil)
 
 	if _, err := svc.Create(ctx, testHousehold, testUser, Input{Name: "Chips", RecipeIDs: []string{"66e5a1f2c3b4a5d6e7f8ffff"}}); err == nil ||
-		!strings.Contains(err.Error(), "isn't in your recipes") {
+		!strings.Contains(err.Error(), "isn’t in your recipes") {
 		t.Errorf("unknown recipe = %v", err)
 	}
 	c, err := svc.Create(ctx, testHousehold, testUser, Input{Name: "Chips", Cuisines: []string{"mexico"}, RecipeIDs: []string{rTacos}, Mode: ModeAuto})
@@ -472,7 +472,7 @@ func TestHandler(t *testing.T) {
 		t.Errorf("DELETE = %d", rec.Code)
 	}
 	rec = do(http.MethodDelete, "/"+created.ID, "", testUser)
-	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "That companion isn't here anymore.") {
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "That companion isn’t here anymore.") {
 		t.Errorf("DELETE again = %d %s", rec.Code, rec.Body)
 	}
 }

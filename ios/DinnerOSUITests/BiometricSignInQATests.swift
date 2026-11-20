@@ -162,26 +162,51 @@ final class BiometricSignInQATests: XCTestCase {
     /// The sign-in screen with Face ID kept, for the screenshot checklist on every device.
     @MainActor
     func testSignInScreenWithFaceID() throws {
-        let app = launch(fake: "match")
-        // First the sign-in screen as everyone sees it, without Face ID.
-        if devSignIn(app).waitForExistence(timeout: 10) {
-            XCTAssertFalse(faceIDButton(app).exists, "Face ID showed before it was turned on")
-            sleep(1)
-            snap(app, "Sign-in (\(mode))")
-        }
+        // First the sign-in screen as everyone sees it, without Face ID and without the Debug
+        // build's developer sign-in (build 121: the screenshots show the Release screen).
+        var app = launch(fake: "match", hideDeveloper: true)
+        let apple = app.buttons["signIn.apple"].firstMatch
+        XCTAssertTrue(apple.waitForExistence(timeout: 10), "No Continue with Apple")
+        XCTAssertFalse(faceIDButton(app).exists, "Face ID showed before it was turned on")
+        XCTAssertFalse(devSignIn(app).exists, "Developer sign-in showed in a screenshot launch")
+        assertFitsOnScreen(app)
+        sleep(1)
+        snap(app, "Sign-in (\(mode))")
+        assertSignInButtonsMatch(app, faceID: false)
+
+        app = relaunch(app, fake: "match")
         signInIfNeeded(app)
         answerOffer(app, use: false)
         setToggle(app, on: true)
         signOut(app)
-        XCTAssertTrue(faceIDButton(app).waitForExistence(timeout: 10), "No Sign In with Face ID after signing out")
-        XCTAssertTrue(faceIDButton(app).isHittable, "Sign In with Face ID is off the screen")
-        sleep(1)
+
+        // Launched again signed out: the automatic Face ID prompt is cancelled, so the screen stays.
+        app = relaunch(app, fake: "cancel,match", hideDeveloper: true)
+        XCTAssertTrue(faceIDButton(app).waitForExistence(timeout: 10), "No Sign in with Face ID after signing out")
+        XCTAssertTrue(faceIDButton(app).isHittable, "Sign in with Face ID is off the screen")
+        XCTAssertEqual(faceIDButton(app).label, "Sign in with Face ID")
+        sleep(2)
+        assertFitsOnScreen(app)
         snap(app, "Sign-in › Face ID (\(mode))")
-        assertSignInButtonsMatch(app)
+        assertSignInButtonsMatch(app, faceID: true)
         faceIDButton(app).tap()
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign In with Face ID didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign in with Face ID didn't sign in")
         setToggle(app, on: false)
         app.terminate()
+    }
+
+    /// The privacy line and the Privacy Policy link fit on the screen without scrolling.
+    @MainActor
+    private func assertFitsOnScreen(_ app: XCUIApplication) {
+        let privacy = app.links["Privacy Policy"].firstMatch
+        guard privacy.waitForExistence(timeout: 3) else { return }
+        XCTAssertLessThanOrEqual(privacy.frame.maxY, app.frame.maxY, "The Privacy Policy link is below the screen")
+        let line = app.staticTexts["Only the people you invite can see your household\u{2019}s plans."].firstMatch
+        let plain = app.staticTexts["Only the people you invite can see your household's plans."].firstMatch
+        let shown = line.exists ? line : plain
+        if shown.exists {
+            XCTAssertLessThanOrEqual(shown.frame.maxY, app.frame.maxY, "The privacy line is below the screen")
+        }
     }
 
     // MARK: Simulator Face ID
@@ -260,8 +285,9 @@ final class BiometricSignInQATests: XCTestCase {
     // MARK: Steps
 
     @MainActor
-    private func launch(fake: String?, relockSeconds: Int? = nil) -> XCUIApplication {
+    private func launch(fake: String?, relockSeconds: Int? = nil, hideDeveloper: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
+        if hideDeveloper { app.launchEnvironment["QA_HIDE_DEVELOPER_SIGN_IN"] = "1" }
         applyOrientation()
         for (key, value) in ProcessInfo.processInfo.environment where key.hasPrefix("QA_APP_") {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
@@ -275,10 +301,11 @@ final class BiometricSignInQATests: XCTestCase {
     /// Relaunches; with `expectLock`, the lock screen must show first.
     @MainActor
     private func relaunch(
-        _ app: XCUIApplication, fake: String?, relockSeconds: Int? = nil, expectLock: Bool = false
+        _ app: XCUIApplication, fake: String?, relockSeconds: Int? = nil, expectLock: Bool = false,
+        hideDeveloper: Bool = false
     ) -> XCUIApplication {
         app.terminate()
-        let next = launch(fake: fake, relockSeconds: relockSeconds)
+        let next = launch(fake: fake, relockSeconds: relockSeconds, hideDeveloper: hideDeveloper)
         if expectLock {
             XCTAssertTrue(next.buttons["lock.anotherWay"].waitForExistence(timeout: 15), "No lock screen at launch")
         }
@@ -293,26 +320,52 @@ final class BiometricSignInQATests: XCTestCase {
         app.activate()
     }
 
-    /// The sign-in buttons share one size (build 120): Face ID, Apple and Google are the same
-    /// height and width, and line up.
+    /// The sign-in buttons share one size (build 120) and one title font (build 121): Face ID,
+    /// Apple and Google are the same height and width, line up, and their titles are drawn the
+    /// same size (measured from the screenshot, so a style that changes the font fails here).
     @MainActor
-    private func assertSignInButtonsMatch(_ app: XCUIApplication) {
-        let apple = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Apple'")).firstMatch
+    private func assertSignInButtonsMatch(_ app: XCUIApplication, faceID: Bool) {
+        let apple = app.buttons["signIn.apple"].firstMatch
         let google = app.buttons["signIn.google"].firstMatch
-        var buttons = [("Face ID", faceIDButton(app)), ("Apple", apple)]
+        var buttons = [("Apple", apple)]
+        if faceID { buttons.insert(("Face ID", faceIDButton(app)), at: 0) }
         if google.exists { buttons.append(("Google", google)) }
         XCTAssertTrue(apple.exists, "No Apple button")
-        let reference = faceIDButton(app).frame
-        XCTAssertEqual(reference.height, 50, accuracy: 6, "Sign In with Face ID is \(reference.height) pt tall")
+        let reference = buttons[0].1.frame
+        XCTAssertEqual(reference.height, 50, accuracy: 6, "\(buttons[0].0) is \(reference.height) pt tall")
         for (name, button) in buttons {
             let frame = button.frame
             XCTAssertEqual(
                 frame.height, reference.height, accuracy: 1,
-                "\(name) is \(frame.height) pt tall, Face ID \(reference.height)")
+                "\(name) is \(frame.height) pt tall, \(buttons[0].0) \(reference.height)")
             XCTAssertEqual(
                 frame.width, reference.width, accuracy: 1,
-                "\(name) is \(frame.width) pt wide, Face ID \(reference.width)")
-            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1, "\(name) doesn't line up with Face ID")
+                "\(name) is \(frame.width) pt wide, \(buttons[0].0) \(reference.width)")
+            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1, "\(name) doesn't line up with \(buttons[0].0)")
+        }
+        // The same upright image the screenshots keep (an iPad on its side included).
+        guard let shot = UIImage(data: Self.uprightPNG(XCUIScreen.main.screenshot().image)) else {
+            XCTFail("No screenshot to measure")
+            return
+        }
+        var heights: [(String, CGFloat)] = []
+        for (name, button) in buttons {
+            guard let height = SignInTitleMeasure.firstLetterHeight(of: button.frame, in: shot, screen: app.frame)
+            else {
+                XCTFail("Couldn't measure the \(name) title")
+                continue
+            }
+            heights.append((name, height))
+        }
+        let summary = heights.map { "\($0.0) \(String(format: "%.1f", $0.1)) pt" }.joined(separator: ", ")
+        let attachment = XCTAttachment(string: "Sign-in title letter heights: \(summary)")
+        attachment.name = "debug sign-in title heights (\(mode))"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        if let first = heights.first {
+            for (name, height) in heights.dropFirst() {
+                XCTAssertEqual(height, first.1, accuracy: 0.7, "\(name)'s title isn't the same size: \(summary)")
+            }
         }
     }
 

@@ -115,7 +115,7 @@ func normalizeProfile(p Profile) (Profile, error) {
 	for _, pair := range [][2][]string{{t.Likes.Cuisines, t.Dislikes.Cuisines}, {t.Likes.Tags, t.Dislikes.Tags}, {t.Likes.Proteins, t.Dislikes.Proteins}} {
 		for _, v := range pair[0] {
 			if slices.Contains(pair[1], v) {
-				return Profile{}, invalidf("taste: %q can't be both liked and disliked", v)
+				return Profile{}, invalidf("taste: %q can’t be both liked and disliked", v)
 			}
 		}
 	}
@@ -141,12 +141,12 @@ func normalizeProfile(p Profile) (Profile, error) {
 	}
 	for _, v := range t.Likes.Proteins {
 		if slices.Contains(r.ExcludedProteins, v) {
-			return Profile{}, invalidf("%q can't be both liked and excluded", v)
+			return Profile{}, invalidf("%q can’t be both liked and excluded", v)
 		}
 	}
 	for _, v := range t.Likes.Cuisines {
 		if slices.Contains(r.ExcludedCuisines, v) {
-			return Profile{}, invalidf("%q can't be both liked and excluded", v)
+			return Profile{}, invalidf("%q can’t be both liked and excluded", v)
 		}
 	}
 

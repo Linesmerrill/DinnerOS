@@ -62,8 +62,8 @@ private struct InviteLinkPrompt: ViewModifier {
         switch households.inviteStatus {
         case .awaitingConfirmation(let preview): preview.joinTitle
         case .invalid: String(localized: "This invitation is no longer valid")
-        case .joined: String(localized: "You're In")
-        case .failed: String(localized: "Couldn't Join Household")
+        case .joined: String(localized: "You’re In")
+        case .failed: String(localized: "Couldn’t Join Household")
         case .loadingPreview, .accepting, nil: ""
         }
     }

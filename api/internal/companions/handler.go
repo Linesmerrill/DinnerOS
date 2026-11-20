@@ -265,7 +265,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.As(err, &validation):
 		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", validation.Message)
 	case errors.Is(err, ErrNotFound):
-		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That companion isn't here anymore.")
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That companion isn’t here anymore.")
 	default:
 		h.logger.ErrorContext(r.Context(), msg, "error", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "Something went wrong. Try again.")

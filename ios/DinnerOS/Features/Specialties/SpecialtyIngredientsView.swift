@@ -63,7 +63,7 @@ struct SpecialtyIngredientsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(
-                    "Every specialty ingredient without a choice gets its suggested option. Choices already made don't change."
+                    "Every specialty ingredient without a choice gets its suggested option. Choices already made don’t change."
                 )
             }
             .alert(
@@ -76,7 +76,7 @@ struct SpecialtyIngredientsView: View {
                 Text(outcome.summary)
             }
             .alert(
-                "Couldn't Update Specialty Ingredients",
+                "Couldn’t Update Specialty Ingredients",
                 isPresented: Binding(presenting: $actionError),
                 presenting: actionError
             ) { _ in
@@ -94,7 +94,7 @@ struct SpecialtyIngredientsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Specialty Ingredients", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Specialty Ingredients", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -117,7 +117,7 @@ struct SpecialtyIngredientsView: View {
                 ContentUnavailableView(
                     "No Specialty Ingredients", systemImage: "takeoutbag.and.cup.and.straw",
                     description: Text(
-                        "None of this household's recipes call for meal-kit blends, sauces, or concentrates.")
+                        "None of this household’s recipes call for meal-kit blends, sauces, or concentrates.")
                 )
                 .listRowBackground(Color.clear)
             } else {
@@ -133,7 +133,7 @@ struct SpecialtyIngredientsView: View {
                 }
                 Section {
                     Text(
-                        "Meal-kit recipes call for blends, sauces, and concentrates that stores don't sell by that name. Choose a store alternative, a house-made batch, or keep one as is."
+                        "Meal-kit recipes call for blends, sauces, and concentrates that stores don’t sell by that name. Choose a store alternative, a house-made batch, or keep one as is."
                     )
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -147,9 +147,9 @@ struct SpecialtyIngredientsView: View {
                     if !canEdit {
                         Text("Your role in this household can see these choices but not change them.")
                     } else if specialties.needsChoiceCount == 1 {
-                        Text("1 specialty ingredient doesn't have a choice yet.")
+                        Text("1 specialty ingredient doesn’t have a choice yet.")
                     } else if specialties.needsChoiceCount > 1 {
-                        Text("\(specialties.needsChoiceCount) specialty ingredients don't have a choice yet.")
+                        Text("\(specialties.needsChoiceCount) specialty ingredients don’t have a choice yet.")
                     }
                 }
                 Section("Most Used") {
@@ -260,8 +260,8 @@ struct SpecialtyChoiceBadge: View {
     private var color: Color {
         guard let type = ingredient.choice?.type else { return .orange }
         if type == .asIs { return .gray }
-        if type == .houseMadeBatch { return .green }
-        return .blue
+        if type == .houseMadeBatch { return DS.Colors.success }
+        return DS.Colors.badge
     }
 }
 

@@ -73,7 +73,7 @@ func (r ReferralRules) HowItWorks() HowItWorks {
 			"Share your code with friends, family, even that one aunt.",
 			"They download DinnerOS, start a new household, and enter your code.",
 			fmt.Sprintf("Once they %s and %s, the invite counts.", r.dinnerPhrase(), r.recipePhrase()),
-			fmt.Sprintf("Within %d hours you both get a free month of Plus. We'll send you a notification when it's ready.", int(RewardWithin.Hours())),
+			fmt.Sprintf("Within %d hours you both get a free month of Plus. We’ll send you a notification when it’s ready.", int(RewardWithin.Hours())),
 			HowItWorksRedeem,
 		},
 	}
@@ -81,7 +81,7 @@ func (r ReferralRules) HowItWorks() HowItWorks {
 
 // SummaryFooter explains qualified and pending on the referral totals.
 func (r ReferralRules) SummaryFooter() string {
-	return fmt.Sprintf("An invite counts once the new household goes on to %s and %s. Until then it's pending, and it expires after %d days.",
+	return fmt.Sprintf("An invite counts once the new household goes on to %s and %s. Until then it’s pending, and it expires after %d days.",
 		r.dinnerPhrase(), r.recipePhrase(), r.QualifyDays)
 }
 
@@ -114,7 +114,7 @@ type ProgressStep struct {
 
 // Progress messages.
 const (
-	ProgressWaiting   = "Thanks for setting up. We'll let you know when your free month is on"
+	ProgressWaiting   = "Thanks for setting up. We’ll let you know when your free month is on"
 	ProgressQualified = "Your free month of Plus is on"
 	ProgressExpired   = "This invite has expired"
 	// StepHousehold is the first step, done by the time a code is in.
@@ -251,7 +251,7 @@ func (s *Service) ReferralProgress(ctx context.Context, householdID string) (*Pr
 const (
 	InviteCountsSoon    = "Counts within 24 hours"
 	InviteEarned        = "Free month earned"
-	InviteEarnedAtCap   = "Joined. You already have the most free months."
+	InviteEarnedAtCap   = "Joined. " + FreeMonthLimitText
 	InviteExpired       = "Expired"
 	InviteStatusPending = "Pending"
 )

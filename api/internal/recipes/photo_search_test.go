@@ -128,7 +128,7 @@ func TestPhotoSearchRoute(t *testing.T) {
 	searcher.err = errors.New("unsplash down")
 	rec = srv.do(t, http.MethodGet, path+"?q=brownies", "", userAda)
 	wantError(t, rec, http.StatusBadGateway, "photo_search_failed")
-	if !strings.Contains(rec.Body.String(), "Couldn't search for photos. Try again.") || strings.Contains(rec.Body.String(), "unsplash down") {
+	if !strings.Contains(rec.Body.String(), "Couldn’t search for photos. Try again.") || strings.Contains(rec.Body.String(), "unsplash down") {
 		t.Errorf("failure body = %s", rec.Body.String())
 	}
 }
@@ -195,7 +195,7 @@ func TestPickingAPhotoHotlinksItAndCreditsThePhotographer(t *testing.T) {
 		body, code, msg string
 		status          int
 	}{
-		{`{"id":"999"}`, "not_found", "That photo isn't there anymore. Pick another one.", http.StatusNotFound},
+		{`{"id":"999"}`, "not_found", "That photo isn’t there anymore. Pick another one.", http.StatusNotFound},
 		{`{"id":""}`, "validation_failed", "Pick a photo first.", http.StatusBadRequest},
 	} {
 		rec := srv.do(t, http.MethodPost, path, tc.body, userAda)
@@ -234,7 +234,7 @@ func TestPhotoSearchOffWithoutAKey(t *testing.T) {
 	} {
 		res := srv.do(t, rec.method, rec.path, rec.body, userAda)
 		wantError(t, res, http.StatusServiceUnavailable, "photo_search_off")
-		if !strings.Contains(res.Body.String(), "Photo search isn't available right now.") {
+		if !strings.Contains(res.Body.String(), "Photo search isn’t available right now.") {
 			t.Errorf("%s body = %s", rec.path, res.Body.String())
 		}
 	}

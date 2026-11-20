@@ -37,7 +37,7 @@ private struct HouseholdLoadFailedView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Couldn't Load Your Household", systemImage: "exclamationmark.triangle")
+            Label("Couldn’t Load Your Household", systemImage: "exclamationmark.triangle")
         } description: {
             Text(message)
         } actions: {

@@ -100,7 +100,7 @@ func (c Collection) Active(now time.Time) bool {
 // There is no sponsored row among them, and none ships.
 func DefaultCollections() []Collection {
 	return []Collection{
-		{ID: "chefs-picks", Title: "Chef's Picks This Week", Subtitle: "Our favorites right now", Type: TypeEditorial, Rule: RuleBest, Position: 10},
+		{ID: "chefs-picks", Title: "Chef’s Picks This Week", Subtitle: "Our favorites right now", Type: TypeEditorial, Rule: RuleBest, Position: 10},
 		{ID: "top-rated", Title: "Top Rated", Subtitle: "Households loved these", Type: TypeAlgorithmic, Rule: RuleTopRated, Position: 20},
 		{ID: "trending", Title: "Trending", Subtitle: "Saved most this week", Type: TypeAlgorithmic, Rule: RuleTrending, Position: 30},
 		{ID: "seasonal", Title: "Seasonal Favorites", Type: TypeAlgorithmic, Rule: RuleSeasonal, Position: 40},
@@ -132,7 +132,7 @@ func (c *Collection) Validate() error {
 	case !slices.Contains([]string{TypeEditorial, TypeAlgorithmic, TypeSponsored}, c.Type):
 		return bad("The type must be editorial, algorithmic, or sponsored.")
 	case c.Rule != "" && !slices.Contains(Rules, c.Rule):
-		return bad("That rule doesn't exist. Use one of: " + strings.Join(Rules, ", ") + ".")
+		return bad("That rule doesn’t exist. Use one of: " + strings.Join(Rules, ", ") + ".")
 	case c.Type == TypeAlgorithmic && c.Rule == "":
 		return bad("A computed row needs a rule.")
 	case c.Type != TypeAlgorithmic && len(c.RecipeIDs) == 0 && c.Rule == "":
@@ -146,7 +146,7 @@ func (c *Collection) Validate() error {
 	for _, id := range c.RecipeIDs {
 		id = strings.TrimSpace(id)
 		if _, err := mongodb.ParseID(id); err != nil {
-			return bad("One of the recipe IDs isn't a shared recipe ID.")
+			return bad("One of the recipe IDs isn’t a shared recipe ID.")
 		}
 		if !slices.Contains(ids, id) {
 			ids = append(ids, id)
@@ -155,13 +155,13 @@ func (c *Collection) Validate() error {
 	c.RecipeIDs = ids
 	if c.Type == TypeSponsored {
 		if c.Sponsor == nil || strings.TrimSpace(c.Sponsor.Name) == "" {
-			return bad("A sponsored row needs the sponsor's name.")
+			return bad("A sponsored row needs the sponsor’s name.")
 		}
 		c.Sponsor.Name = strings.TrimSpace(c.Sponsor.Name)
 		c.Sponsor.Label = strings.TrimSpace(c.Sponsor.Label)
 		c.Sponsor.URL = strings.TrimSpace(c.Sponsor.URL)
 		if c.Sponsor.URL != "" && !strings.HasPrefix(c.Sponsor.URL, "https://") {
-			return bad("The sponsor's link must start with https://.")
+			return bad("The sponsor’s link must start with https://.")
 		}
 	} else {
 		// Sponsor fields belong only to a sponsored row.

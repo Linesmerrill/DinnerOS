@@ -37,10 +37,10 @@ private struct RecipeDeletionModifier: ViewModifier {
             } message: { summary in
                 Text(
                     isPlanned(summary)
-                        ? "It also comes off this week's menu and shopping list. You can undo this right after."
+                        ? "It also comes off this week’s menu and shopping list. You can undo this right after."
                         : "You can undo this right after.")
             }
-            .alert("Couldn't Delete That", isPresented: Binding(presenting: $errorMessage)) {
+            .alert("Couldn’t Delete That", isPresented: Binding(presenting: $errorMessage)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")

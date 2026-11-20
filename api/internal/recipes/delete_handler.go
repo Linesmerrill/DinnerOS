@@ -31,7 +31,7 @@ func (h *Handler) deleteRecipe(w http.ResponseWriter, r *http.Request) {
 	result, err := h.opts.Service.Delete(r.Context(), actor.HouseholdID, actor.UserID, chi.URLParam(r, "recipeId"))
 	switch {
 	case errors.Is(err, ErrNotFound):
-		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That recipe isn't in your recipes.")
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That recipe isn’t in your recipes.")
 		return
 	case err != nil:
 		h.internalError(w, r, "delete recipe failed", err)
@@ -49,10 +49,10 @@ func (h *Handler) restoreRecipe(w http.ResponseWriter, r *http.Request) {
 	recipe, err := h.opts.Service.Restore(r.Context(), actor.HouseholdID, actor.UserID, chi.URLParam(r, "recipeId"))
 	switch {
 	case errors.Is(err, ErrNotFound):
-		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That recipe isn't in your recipes.")
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "That recipe isn’t in your recipes.")
 		return
 	case errors.Is(err, ErrRestoreExpired):
-		httpx.WriteError(w, r, http.StatusGone, "restore_expired", "It's too late to bring that recipe back.")
+		httpx.WriteError(w, r, http.StatusGone, "restore_expired", "It’s too late to bring that recipe back.")
 		return
 	case err != nil:
 		h.internalError(w, r, "restore recipe failed", err)

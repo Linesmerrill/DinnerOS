@@ -94,9 +94,11 @@ func TestFavoritesRankingAndReasons(t *testing.T) {
 func TestSectionLimitAndDeterministicOrder(t *testing.T) {
 	var catalog []recipes.Recipe
 	for i := range 30 {
-		name := "Quick Meal"
+		// Identical signals; names differ only in case after the number, so
+		// name order decides, case-insensitively.
+		name := "Quick Meal " + pad(i)
 		if i%2 == 0 {
-			name = "quick meal" // same name, different case
+			name = "quick meal " + pad(i)
 		}
 		catalog = append(catalog, newRecipe(pad(i), name, cookMinutes(10)))
 	}
@@ -105,7 +107,6 @@ func TestSectionLimitAndDeterministicOrder(t *testing.T) {
 	if len(sec.Cards) != sectionLimit {
 		t.Fatalf("quick section has %d cards, want %d", len(sec.Cards), sectionLimit)
 	}
-	// Identical signals and names: ID order decides, case-insensitively.
 	var ids []string
 	for _, c := range sec.Cards {
 		ids = append(ids, c.Recipe.ID)
@@ -117,6 +118,20 @@ func TestSectionLimitAndDeterministicOrder(t *testing.T) {
 	again, _ := findSection(newSnapshot(input(catalog...)).sections(TimingUpcoming), SectionQuick)
 	if !slices.Equal(cardNames(again.Cards), cardNames(sec.Cards)) {
 		t.Error("sections are not deterministic")
+	}
+
+	// The same name in any case is one card: the lowest ID, when the rest ties.
+	var same []recipes.Recipe
+	for i := range 30 {
+		name := "Quick Meal"
+		if i%2 == 0 {
+			name = "quick meal"
+		}
+		same = append(same, newRecipe(pad(i), name, cookMinutes(10)))
+	}
+	one, _ := findSection(newSnapshot(input(same...)).sections(TimingUpcoming), SectionQuick)
+	if len(one.Cards) != 1 || one.Cards[0].Recipe.ID != "r00" {
+		t.Errorf("same-name quick section = %v", cardNames(one.Cards))
 	}
 }
 
@@ -228,7 +243,7 @@ func TestNewToYouRanksByTasteFit(t *testing.T) {
 		newRecipe("r03", "Shrimp Scampi", withIngredients("Shrimp")),
 	))
 	sec, _ = findSection(plain.sections(TimingUpcoming), SectionNewToYou)
-	if len(sec.Cards) != 2 || sec.Subtitle != "Meals you haven't had yet" {
+	if len(sec.Cards) != 2 || sec.Subtitle != "Meals you haven’t had yet" {
 		t.Errorf("new_to_you without a profile = %+v", sec)
 	}
 }
@@ -269,5 +284,27 @@ func TestBadges(t *testing.T) {
 		if len(got) > maxBadges {
 			t.Errorf("badges(%s) returned %d badges", tt.id, len(got))
 		}
+	}
+}
+
+// The same add-on under several IDs (a meal kit re-lists it) is one card,
+// the most ordered copy.
+func TestSidesShowEachNameOnce(t *testing.T) {
+	snap := newSnapshot(input(
+		newRecipe("r01", "Garlic Bread", addon(), ordered(20, "2026-W33")),
+		newRecipe("r02", "Garlic Bread", addon(), ordered(4, "2026-W37")),
+		newRecipe("r03", "garlic  bread", addon(), ordered(2, "2026-W30")),
+		newRecipe("r04", "Buttery Dinner Rolls", addon(), ordered(3, "2026-W37")),
+	))
+	sides, ok := findSection(snap.sections(TimingUpcoming), SectionSides)
+	if !ok {
+		t.Fatal("no sides section")
+	}
+	var ids []string
+	for _, c := range sides.Cards {
+		ids = append(ids, c.Recipe.ID)
+	}
+	if !slices.Equal(ids, []string{"r01", "r04"}) || sides.Title != "Sides & Add-Ons" {
+		t.Errorf("sides = %v %q, want r01 then r04 under Sides & Add-Ons", ids, sides.Title)
 	}
 }

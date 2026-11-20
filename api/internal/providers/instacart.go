@@ -69,7 +69,7 @@ func (i *Instacart) AffiliateTracked() bool { return i.affiliate }
 // ParseProduct implements GroceryProvider: Instacart picks products itself,
 // so there is nothing to paste.
 func (*Instacart) ParseProduct(string) (ProductRef, error) {
-	return ProductRef{}, invalid("Instacart picks the products for you, so there's no product to save.")
+	return ProductRef{}, invalid("Instacart picks the products for you, so there’s no product to save.")
 }
 
 // ProductURL implements GroceryProvider: there are no product pages.

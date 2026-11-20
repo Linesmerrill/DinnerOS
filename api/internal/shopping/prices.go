@@ -64,7 +64,7 @@ func (s *Service) SetPrices(ctx context.Context, actor households.Membership, ha
 	byLine := make(map[string]*int64, len(prices))
 	for _, p := range prices {
 		if _, ok := h.Line(p.LineID); !ok {
-			return Handoff{}, invalid("line %q isn't in this handoff", p.LineID)
+			return Handoff{}, invalid("line %q isn’t in this handoff", p.LineID)
 		}
 		if _, dup := byLine[p.LineID]; dup {
 			return Handoff{}, invalid("lines lists %s more than once", p.LineID)

@@ -57,7 +57,7 @@ func TestRenderHouseholdInvitation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if msg.Subject != "You're invited to The Lines on Supper Club" || !strings.Contains(msg.Text, "as an admin") {
+	if msg.Subject != "You’re invited to The Lines on Supper Club" || !strings.Contains(msg.Text, "as an admin") {
 		t.Errorf("anonymous inviter: subject %q text %q", msg.Subject, msg.Text)
 	}
 }

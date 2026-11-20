@@ -92,7 +92,7 @@ struct HouseholdSettingsSections: View {
         } footer: {
             if settings.canEdit {
                 Text(
-                    "Weekly plans follow the household's time zone and start from its default servings. Changes save as you make them."
+                    "Weekly plans follow the household’s time zone and start from its default servings. Changes save as you make them."
                 )
             } else {
                 Text("Only a household admin can change these settings.")
@@ -123,7 +123,7 @@ struct HouseholdSettingsSections: View {
                     Button("Cancel", role: .cancel) {}
                 } message: { _ in
                     Text(
-                        "Meals keep their dates. A meal that now falls in a different week moves to that week's plan and grocery list, for everyone in the household."
+                        "Meals keep their dates. A meal that now falls in a different week moves to that week’s plan and grocery list, for everyone in the household."
                     )
                 }
             } else {
@@ -132,7 +132,7 @@ struct HouseholdSettingsSections: View {
         } header: {
             Text("Week")
         } footer: {
-            Text("Meals keep their dates; a meal that now falls in another week moves to that week's list.")
+            Text("Meals keep their dates; a meal that now falls in another week moves to that week’s list.")
         }
     }
 
@@ -163,7 +163,7 @@ struct HouseholdSettingsSections: View {
             Text("Grocery Order")
         } footer: {
             Text(
-                "Pick the day you usually order. From that day's reminder time, Shop reminds the household until someone marks the week ordered. Thaw reminders come at the same time. Next week starts fresh."
+                "Pick the day you usually order. From that day’s reminder time, Shop reminds the household until someone marks the week ordered. Thaw reminders come at the same time. Next week starts fresh."
             )
         }
     }
@@ -230,7 +230,7 @@ struct HouseholdSettingsSections: View {
             Text("Freezer")
         } footer: {
             Text(
-                "We remind you at your reminder time the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed.\nFrozen raw meat gets a best-by date from the FDA's freezer times. Vacuum sealed keeps longest."
+                "We remind you at your reminder time the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed.\nFrozen raw meat gets a best-by date from the FDA’s freezer times. Vacuum sealed keeps longest."
             )
         }
     }
@@ -264,7 +264,7 @@ struct HouseholdSettingsSections: View {
             )
         case .chosen:
             String(
-                localized: "Only recipes you mark as shared can be found by others. Turn it on from a recipe's page.")
+                localized: "Only recipes you mark as shared can be found by others. Turn it on from a recipe’s page.")
         }
     }
 
@@ -426,6 +426,7 @@ struct HouseholdSettingsForm: View {
                 HouseholdSettingsSections(settings: settings)
             }
         }
+        .dsReadableForm()
         .householdSettingsAutosave(households.settings)
         .navigationTitle("Household Settings")
         .navigationBarTitleDisplayMode(.inline)

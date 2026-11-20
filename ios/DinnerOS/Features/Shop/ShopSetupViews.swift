@@ -34,7 +34,7 @@ struct ShopSetupView: View {
         }
         return String(
             localized:
-                "Choose a \(storeName) product for each ingredient once. Then send the week's list to your \(storeName) cart, check out there, and tell \(configuration.displayName) what you ordered so the pantry stays current."
+                "Choose a \(storeName) product for each ingredient once. Then send the week’s list to your \(storeName) cart, check out there, and tell \(configuration.displayName) what you ordered so the pantry stays current."
         )
     }
 
@@ -43,14 +43,14 @@ struct ShopSetupView: View {
             Section {
                 VStack(spacing: DS.Space.m) {
                     Image(systemName: "cart.badge.plus")
-                        .font(.largeTitle)
-                        .imageScale(.large)
-                        .foregroundStyle(.tint)
+                        .font(DS.Typography.largeTitle)
+                        .foregroundStyle(DS.Colors.accent)
                         .accessibilityHidden(true)
-                    Text("Send this week's list to \(storeName)")
-                        .font(.title2.bold())
+                    Text("Send This Week’s List to \(storeName)")
+                        .font(DS.Typography.title)
                     Text(introText)
-                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.subheadline)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -63,8 +63,27 @@ struct ShopSetupView: View {
                 }
             }
             ShopStoreFields(storeNumber: $storeNumber, choice: $choice, isEditable: shopping.canEdit)
+            if !shopping.canEdit {
+                Section {
+                    Text("Ask a household admin or member to set up shopping.")
+                        .foregroundStyle(DS.Colors.secondaryText)
+                }
+            }
             Section {
-                if shopping.canEdit {
+                RequestStoreRow { isRequestingStore = true }
+            } footer: {
+                Text(
+                    shopping.kroger == nil && shopping.instacart == nil
+                        ? "Walmart is the only store we can send a list to today. Tell us where else you shop."
+                        : "Tell us where else you shop.")
+            }
+        }
+        .dsReadableForm()
+        // Use Walmart stays above the tab bar, and the last field scrolls clear of both bars
+        // (build 121).
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if shopping.canEdit {
+                DSBottomBar(background: DS.Colors.groupedBackground) {
                     Button(action: save) {
                         Group {
                             if isSaving {
@@ -76,20 +95,7 @@ struct ShopSetupView: View {
                     }
                     .buttonStyle(.dsPrimary(fullWidth: true))
                     .disabled(!canSave)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                } else {
-                    Text("Ask a household admin or member to set up shopping.")
-                        .foregroundStyle(.secondary)
                 }
-            }
-            Section {
-                RequestStoreRow { isRequestingStore = true }
-            } footer: {
-                Text(
-                    shopping.kroger == nil && shopping.instacart == nil
-                        ? "Walmart is the only store we can send a list to today. Tell us where else you shop."
-                        : "Tell us where else you shop.")
             }
         }
         .sheet(isPresented: $isRequestingStore) {
@@ -159,19 +165,19 @@ struct ShopStoreFields: View {
                                 .foregroundStyle(Color.primary)
                             if let summary = provider.bannerSummary {
                                 Text(summary)
-                                    .font(.footnote)
-                                    .foregroundStyle(Color.secondary)
+                                    .font(DS.Typography.footnote)
+                                    .foregroundStyle(DS.Colors.secondaryText)
                             }
                         }
                         Spacer()
                         if selected {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
+                                .foregroundStyle(DS.Colors.success)
                                 .accessibilityHidden(true)
                         } else if !provider.isSupported {
                             Text("Coming Soon")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(DS.Typography.subheadline)
+                                .foregroundStyle(DS.Colors.secondaryText)
                         }
                     }
                 }
@@ -181,7 +187,7 @@ struct ShopStoreFields: View {
             }
             if shopping.providers.isEmpty {
                 Text("No stores are available right now. Try again later.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.Colors.secondaryText)
             }
         } header: {
             Text("Store")
@@ -244,7 +250,7 @@ struct ShopStoreSettingsSheet: View {
                                 Button("Remove", role: .destructive) { removing = store }
                                 if !store.isDefault {
                                     Button("Make Default") { makeDefault(store) }
-                                        .tint(.accentColor)
+                                        .tint(DS.Colors.accent)
                                 }
                             }
                         }
@@ -272,12 +278,14 @@ struct ShopStoreSettingsSheet: View {
                             NavigationLink {
                                 ShopStoreEditForm(provider: provider.key, isNew: true)
                             } label: {
-                                VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                                    Label("Add \(provider.name)", systemImage: "plus")
-                                    if let summary = provider.bannerSummary {
-                                        Text(summary)
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
+                                DSIconRow(systemImage: "plus") {
+                                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                                        Text("Add \(provider.name)")
+                                        if let summary = provider.bannerSummary {
+                                            Text(summary)
+                                                .font(DS.Typography.footnote)
+                                                .foregroundStyle(DS.Colors.secondaryText)
+                                        }
                                     }
                                 }
                             }
@@ -287,6 +295,7 @@ struct ShopStoreSettingsSheet: View {
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle("Store Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -313,8 +322,8 @@ struct ShopStoreSettingsSheet: View {
                 Text(shopping.name(of: store.provider))
                 if let detail = detail(store) {
                     Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.footnote)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
             }
             Spacer()
@@ -322,8 +331,8 @@ struct ShopStoreSettingsSheet: View {
                 ProgressView()
             } else if store.isDefault {
                 Text("Default")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
             }
         }
         .accessibilityElement(children: .combine)
@@ -423,6 +432,7 @@ struct ShopStoreEditForm: View {
                 }
             }
         }
+        .dsReadableForm()
         .navigationTitle(isNew ? "Add \(name)" : name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -485,7 +495,7 @@ struct InstacartStoreSection: View {
 
     var body: some View {
         Section {
-            Label("You pick the store on Instacart each time you shop.", systemImage: "storefront")
+            DSIconRow(systemImage: "storefront") { Text("You pick the store on Instacart each time you shop.") }
         } footer: {
             VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text("Instacart finds a product for each item on your list. You can change any of them there.")
@@ -533,8 +543,7 @@ struct KrogerStoreFields: View {
                 FormErrorLabel(message: signInError)
             }
             if shopping.isSignedIn {
-                Label("Signed In", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.tint)
+                DSIconRow(systemImage: "checkmark.circle.fill", tint: DS.Colors.success) { Text("Signed In") }
                 if isEditable {
                     Button("Sign Out", role: .destructive) { run { try await shopping.signOut() } }
                 }
@@ -545,7 +554,7 @@ struct KrogerStoreFields: View {
                     if shopping.isConnecting {
                         ProgressView()
                     } else {
-                        Label("Sign In to \(name)", systemImage: "person.crop.circle")
+                        DSIconRow(systemImage: "person.crop.circle") { Text("Sign In to \(name)") }
                     }
                 }
                 .disabled(shopping.isConnecting)
@@ -606,7 +615,7 @@ struct KrogerStoreFields: View {
             if finder.isExpanded, selected == nil || finder.hasSearched {
                 Text("Pick the store you shop at. Your list goes to its cart for pickup or delivery.")
             } else {
-                Text("Your list goes to this store's cart for pickup or delivery.")
+                Text("Your list goes to this store’s cart for pickup or delivery.")
             }
         }
         .onAppear {
@@ -670,19 +679,19 @@ struct StoreLocationRow: View {
                     .foregroundStyle(Color.primary)
                 if !location.address.isEmpty {
                     Text(location.address)
-                        .font(.footnote)
-                        .foregroundStyle(Color.secondary)
+                        .font(DS.Typography.footnote)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
             }
             Spacer()
             if showsChange {
                 Text("Change")
-                    .font(.subheadline)
-                    .foregroundStyle(.tint)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.accent)
             }
             if isSelected {
                 Image(systemName: "checkmark")
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(DS.Colors.success)
                     .accessibilityHidden(true)
             }
         }
@@ -736,8 +745,10 @@ struct StoreFinderZIPRow: View {
             .buttonStyle(.borderless)
             .disabled(finder.isBusy)
             .accessibilityLabel("Use My Location")
+            // The shared small button: gray while the ZIP code isn't complete, never a faint link
+            // that reads like placeholder text (build 121).
             Button(findTitle, action: search)
-                .buttonStyle(.borderless)
+                .buttonStyle(.dsPrimary(.small))
                 .disabled(!finder.isValidZIP || finder.isBusy)
         }
         .disabled(!isEditable)
@@ -783,7 +794,8 @@ struct WalmartStoreNumberSection: View {
 
     var body: some View {
         Section {
-            TextField("Store Number", text: $storeNumber, prompt: Text("Optional, for example 1234"))
+            // "Optional" is in the footer, so it isn't said twice (build 121).
+            TextField("Store Number", text: $storeNumber, prompt: Text("For example, 1234"))
                 .keyboardType(.numberPad)
                 .keyboardDoneButton()
                 .disabled(!isEditable)
@@ -812,7 +824,7 @@ struct WalmartStoreNumberSection: View {
                 Text("Find Your Store Number")
             } footer: {
                 Text(
-                    "Opens Walmart's store finder. The number is on the store's page, in its web address (walmart.com/store/1234), and near the top of your receipt (ST# 1234)."
+                    "Opens Walmart’s store finder. The number is on the store’s page, in its web address (walmart.com/store/1234), and near the top of your receipt (ST# 1234)."
                 )
             }
             .onAppear {

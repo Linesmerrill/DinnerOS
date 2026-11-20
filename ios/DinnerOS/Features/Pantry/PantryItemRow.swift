@@ -90,7 +90,7 @@ struct PantryStatusPill: View {
 
     private var color: Color {
         switch status {
-        case .inStock: .green
+        case .inStock: DS.Colors.success
         case .low: .orange
         case .out: .red
         }

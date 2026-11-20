@@ -48,14 +48,14 @@ struct PlusPurchaseView: View {
                 }
                 VStack(alignment: .leading, spacing: DS.Space.s) {
                     Image(systemName: "sparkles")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tint)
+                        .font(DS.Typography.largeTitle)
+                        .foregroundStyle(DS.Colors.accent)
                         .accessibilityHidden(true)
                     Text(offer.title)
-                        .font(.largeTitle.bold())
+                        .font(DS.Typography.largeTitle)
                     Text(offer.subtitle)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.subtitle)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
                 VStack(alignment: .leading, spacing: DS.Space.m) {
                     ForEach(offer.benefits, id: \.self) { benefit in
@@ -63,7 +63,7 @@ struct PlusPurchaseView: View {
                             Text(benefit)
                         } icon: {
                             Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
+                                .foregroundStyle(DS.Colors.success)
                         }
                     }
                 }
@@ -77,77 +77,89 @@ struct PlusPurchaseView: View {
                         }
                     }
                 }
-                if let status = plus.status, status.active {
-                    // Plus came on while this screen was open: an invite code, or a purchase.
-                    VStack(spacing: DS.Space.m) {
-                        Label(PlusText.status(status), systemImage: "checkmark.seal.fill")
-                            .font(.headline)
-                        Button("Done") { dismiss() }
-                            .buttonStyle(.dsPrimary)
-                    }
-                    .frame(maxWidth: .infinity)
-                } else {
-                    VStack(spacing: DS.Space.m) {
-                        Button {
-                            buy(selectedID(offer))
-                        } label: {
-                            Group {
-                                if plus.isPurchasing {
-                                    ProgressView()
-                                } else {
-                                    Text(buttonTitle(offer))
-                                }
-                            }
-                        }
-                        .buttonStyle(.dsPrimary(fullWidth: true))
-                        .disabled(!plus.canPurchase || plus.isPurchasing)
-                        // Apple wants what's charged after the trial right by the button.
-                        Text(chargeLine(offer))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        if !plus.canPurchase {
-                            Text("DinnerOS Plus isn't for sale yet.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let error {
-                            FormErrorLabel(message: error)
-                        }
-                        if let notice {
-                            Text(notice)
-                                .font(.callout)
-                        }
-                        Text(offer.freeText)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
+                Text(offer.freeText)
+                    .font(DS.Typography.callout)
+                    .foregroundStyle(DS.Colors.secondaryText)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
-                }
-                VStack(spacing: DS.Space.s) {
-                    Text(offer.terms)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    HStack(spacing: DS.Space.xxl) {
-                        Button(offer.restoreText) { restore() }
-                            .disabled(!plus.canPurchase || plus.isPurchasing)
-                        Button("Have an invite code?") { showsInvite = true }
-                    }
-                    .font(.footnote)
-                    HStack(spacing: DS.Space.xxl) {
-                        ForEach(offer.shownLinks, id: \.self) { link in
-                            Link(link.title, destination: link.url)
-                        }
-                    }
-                    .font(.footnote)
-                }
-                .frame(maxWidth: .infinity)
+                Button("Have an Invite Code?") { showsInvite = true }
+                    .buttonStyle(.dsTextLink)
+                    .frame(maxWidth: .infinity)
             }
             .padding(DS.Space.l)
-            // Readable on iPad instead of stretching across the screen.
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
+            .dsReadableWidth()
+        }
+        // The button, the price, the renewal terms, Restore, and the Terms and Privacy links
+        // stay on screen however small the phone (Apple wants them by the button).
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DSBottomBar { purchaseBar(offer) }
+        }
+    }
+
+    @ViewBuilder
+    private func purchaseBar(_ offer: PlusOffer) -> some View {
+        if let status = plus.status, status.active {
+            // Plus came on while this screen was open: an invite code, or a purchase.
+            Label(
+                PlusText.status(
+                    status,
+                    testerThanks: BuildChannel.showsTesterThanks(BuildChannelStore.shared.channel, comp: status.comp)),
+                systemImage: "checkmark.seal.fill"
+            )
+            .font(DS.Typography.headline)
+            Button("Done") { dismiss() }
+                .buttonStyle(.dsPrimary(fullWidth: true))
+        } else {
+            Button {
+                buy(selectedID(offer))
+            } label: {
+                Group {
+                    if plus.isPurchasing {
+                        ProgressView()
+                    } else {
+                        Text(buttonTitle(offer))
+                    }
+                }
+            }
+            .buttonStyle(.dsPrimary(fullWidth: true))
+            .disabled(!plus.canPurchase || plus.isPurchasing)
+            Group {
+                // Apple wants what's charged after the trial right by the button.
+                Text(chargeLine(offer))
+                    .font(DS.Typography.subheadline.weight(.semibold))
+                if !plus.canPurchase {
+                    Text("DinnerOS Plus isn’t for sale yet.")
+                        .font(DS.Typography.footnote)
+                        .foregroundStyle(DS.Colors.secondaryText)
+                }
+                if let error {
+                    FormErrorLabel(message: error)
+                }
+                if let notice {
+                    Text(notice)
+                        .font(DS.Typography.footnote)
+                }
+                Text(offer.terms)
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(DS.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .multilineTextAlignment(.center)
+        }
+        // Restore and the two links on one line: Restore Purchases, Terms of Use, Privacy Policy.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: DS.Space.l) { legalLinks(offer) }
+            VStack(spacing: DS.Space.xxs) { legalLinks(offer) }
+        }
+        .font(DS.Typography.footnote)
+    }
+
+    @ViewBuilder
+    private func legalLinks(_ offer: PlusOffer) -> some View {
+        Button(offer.restoreText) { restore() }
+            .disabled(!plus.canPurchase || plus.isPurchasing)
+        ForEach(offer.shownLinks, id: \.self) { link in
+            Link(link.title, destination: link.url)
         }
     }
 
@@ -195,7 +207,7 @@ struct PlusPurchaseView: View {
                 if try await plus.restore() {
                     dismiss()
                 } else {
-                    notice = String(localized: "We didn't find a Plus purchase on this Apple account.")
+                    notice = String(localized: "We didn’t find a Plus purchase on this Apple account.")
                 }
             } catch {
                 self.error = error.localizedDescription
@@ -215,29 +227,29 @@ private struct PlanRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(plan.name)
-                        .font(.headline)
+                        .font(DS.Typography.headline)
                     Text(price)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
                 Spacer()
                 if let note = plan.note {
                     Text(note)
-                        .font(.caption.bold())
+                        .font(DS.Typography.caption.bold())
                         .padding(.horizontal, DS.Space.s)
                         .padding(.vertical, DS.Space.xxs)
-                        .background(.tint.opacity(0.15), in: .capsule)
+                        .background(DS.Colors.badge.opacity(0.15), in: .capsule)
                 }
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                    .font(DS.Typography.title)
+                    .foregroundStyle(isSelected ? DS.Colors.accent : DS.Colors.secondaryText)
                     .accessibilityHidden(true)
             }
             .padding(DS.Space.l)
             .contentShape(.rect)
-            .background(.background.secondary, in: .rect(cornerRadius: DS.Radius.medium))
+            .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.medium))
             .overlay {
                 RoundedRectangle(cornerRadius: DS.Radius.medium)
-                    .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2)
+                    .strokeBorder(isSelected ? DS.Colors.accent : .clear, lineWidth: 2)
             }
         }
         .buttonStyle(.plain)
@@ -270,7 +282,7 @@ struct PlusPurchasePresenter: ViewModifier {
             // included, without stopping what the person is doing.
             .freeMonthMoments()
             .alert(
-                "Couldn't Use Your Invite Code",
+                "Couldn’t Use Your Invite Code",
                 isPresented: Binding(get: { plus.inviteError != nil }, set: { if !$0 { plus.inviteError = nil } })
             ) {
                 Button("OK", role: .cancel) {}
@@ -310,10 +322,10 @@ extension View {
                     productID: "com.linesmerrill.dinneros.plus.monthly", name: "Monthly", priceText: "$4.99 a month",
                     note: nil),
             ],
-            trialDays: 14, trialText: "Try it free for 14 days", buyText: "Get DinnerOS Plus",
+            trialDays: 14, trialText: "Try It Free for 14 Days", buyText: "Get DinnerOS Plus",
             terms:
                 "Payment goes through your Apple account. Plus renews automatically until you cancel. Cancel in your Apple account settings at least 24 hours before the free trial or the current period ends.",
-            restoreText: "Restore purchases", freeText: "Sending your list to a store is always free.")
+            restoreText: "Restore Purchases", freeText: "Sending your list to a store is always free.")
         static let free = PlusStatus(
             enabled: true, active: false, trial: false, expiresAt: nil, willRenew: false, billingIssue: false,
             freeUntil: nil, offer: offer)

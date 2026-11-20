@@ -11,6 +11,7 @@ qa-screenshots-<build> and deletes the draft. Prints "SCREENSHOTS READY build <n
 Nothing is committed. Set DRY_RUN=1 to stop after writing the folder and zip.
 """
 import calendar
+import collections
 import json
 import os
 import re
@@ -35,6 +36,27 @@ DEVICES = {
 
 def run(*args, **kw):
     return subprocess.run(args, check=True, text=True, capture_output=True, **kw).stdout
+
+
+def clean_png(path, landscape):
+    """Drops EXIF and XMP chunks (an iPad landscape shot once carried an EXIF rotation that showed
+    it sideways, build 120) and checks the image is the right way round. Returns (width, height)."""
+    data = open(path, "rb").read()
+    out, i = data[:8], 8
+    width = height = 0
+    while i < len(data):
+        n = int.from_bytes(data[i:i + 4], "big")
+        kind = data[i + 4:i + 8]
+        if kind == b"IHDR":
+            width = int.from_bytes(data[i + 8:i + 12], "big")
+            height = int.from_bytes(data[i + 12:i + 16], "big")
+        if kind not in (b"eXIf", b"iTXt"):
+            out += data[i:i + 12 + n]
+        i += 12 + n
+    open(path, "wb").write(out)
+    if landscape and width < height:
+        raise SystemExit(f"{path} is {width}x{height}: a landscape screenshot must be wider than tall")
+    return width, height
 
 
 def slug(text):
@@ -93,12 +115,14 @@ def main():
                 seen.add(name)
                 os.makedirs(os.path.join(out, config), exist_ok=True)
                 shutil.copy(os.path.join(export, a["exportedFileName"]), os.path.join(out, name))
+                size = clean_png(os.path.join(out, name), orientation == "landscape")
                 manifest.append({
                     "file": name,
                     "screen": screen,
                     "config": config,
                     "device": device,
                     "state": f"{appearance}, {orientation}",
+                    "size": f"{size[0]}x{size[1]}",
                     "test": test,
                 })
     if not manifest:
@@ -106,6 +130,24 @@ def main():
     json.dump({"build": int(build), "screenshots": manifest}, open(os.path.join(out, "manifest.json"), "w"), indent=1)
     configs = sorted({m["config"] for m in manifest})
     print(f"{len(manifest)} screenshots across {len(configs)} configs: {', '.join(configs)}")
+    # Coverage: every config (each device in light and dark) and, per config, the screens every
+    # config must have (build 121: duo-dark and three configs' Start Cooking were missing).
+    expected = {f"{d}-{m}" for d in DEVICES for m in ("light", "dark")}
+    problems = [f"no screenshots for {c}" for c in sorted(expected - set(configs))]
+    screens = collections.defaultdict(set)
+    for m in manifest:
+        screens[m["config"]].add(re.sub(r" \((light|dark)\)$", "", m["screen"]))
+    required = ("Sign-in", "Sign-in › Face ID", "Menu", "Shop", "Pantry", "Household", "Plus paywall")
+    for c in configs:
+        missing = [r for r in required if r not in screens[c]]
+        if not any(s.startswith("Start Cooking") or "Start Cooking" in s for s in screens[c]):
+            missing.append("Start Cooking")
+        if missing:
+            problems.append(f"{c} is missing: {', '.join(missing)}")
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        if os.environ.get("MISSING_OK") != "1":
+            sys.exit("Screenshot coverage is incomplete (MISSING_OK=1 to publish anyway)")
     archive = shutil.make_archive(out, "zip", out)
     print(f"Folder: {out}\nZip: {archive} ({os.path.getsize(archive) // 1_000_000} MB)")
     if os.environ.get("DRY_RUN") == "1":

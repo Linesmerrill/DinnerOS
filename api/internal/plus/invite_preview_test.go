@@ -32,13 +32,13 @@ func TestInvitePreviewRoute(t *testing.T) {
 	}
 	rec, p := get(info.Code)
 	if rec.Code != http.StatusOK || p.Title != "Lines invited you to DinnerOS" || p.HouseholdName != "Lines" ||
-		p.Message != "You both get a free month of Plus once you're set up." || p.Code != info.Code {
+		p.Message != "You both get a free month of Plus once you’re set up." || p.Code != info.Code {
 		t.Fatalf("preview = %d %s", rec.Code, rec.Body.String())
 	}
 	if strings.Join(p.Steps, "|") != "Create your household|Add a recipe|Plan a dinner" {
 		t.Errorf("steps = %q", p.Steps)
 	}
-	if p.ForExisting.Title != "This code is for new households" || p.ForOwn.Title != "That's your own code" ||
+	if p.ForExisting.Title != "This code is for new households" || p.ForOwn.Title != "That’s your own code" ||
 		p.ForExisting.Message == "" || p.ForOwn.Message == "" {
 		t.Errorf("notices = %+v %+v", p.ForExisting, p.ForOwn)
 	}
@@ -48,7 +48,7 @@ func TestInvitePreviewRoute(t *testing.T) {
 	}
 
 	if rec, _ := get("ZZZZZZZZ"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"code_not_found"`) ||
-		!strings.Contains(rec.Body.String(), "couldn't find that code") {
+		!strings.Contains(rec.Body.String(), "couldn’t find that code") {
 		t.Errorf("unknown = %d %s", rec.Code, rec.Body.String())
 	}
 
@@ -65,7 +65,7 @@ func TestInvitePreviewRoute(t *testing.T) {
 }
 
 func TestInviteTitleWithoutAName(t *testing.T) {
-	if got := InviteTitle("  "); got != "You're invited to DinnerOS" {
+	if got := InviteTitle("  "); got != "You’re invited to DinnerOS" {
 		t.Errorf("no name = %q", got)
 	}
 }

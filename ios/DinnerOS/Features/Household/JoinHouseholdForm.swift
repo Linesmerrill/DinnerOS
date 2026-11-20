@@ -24,7 +24,7 @@ struct JoinHouseholdForm: View {
         Form {
             Section {
                 TextField("XXXXX-XXXXX", text: $code)
-                    .font(.title3.monospaced())
+                    .font(DS.Typography.subtitle.monospaced())
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
@@ -36,7 +36,7 @@ struct JoinHouseholdForm: View {
                 Text("Invite Code")
             } footer: {
                 Text(
-                    "Enter the 10-character code from your invitation. Joining shares your name with the household's members."
+                    "Enter the 10-character code from your invitation. Joining shares your name with the household’s members."
                 )
             }
             if let errorMessage {
@@ -45,6 +45,7 @@ struct JoinHouseholdForm: View {
                 }
             }
         }
+        .dsReadableForm()
         .navigationTitle("Join a Household")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

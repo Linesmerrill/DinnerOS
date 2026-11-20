@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// Everything else Autopilot knows — the cook-time mix, equipment, weekday rules, novelty,
 /// and pairings — lives in Autopilot Preferences instead, reachable from the summary's
-/// **Fine-tune Autopilot** row (#330).
+/// **Fine-Tune Autopilot** row (#330).
 struct AutopilotOnboardingView: View {
     /// Called after the profile is saved, when the member chooses to plan this week.
     /// `nil` hides that offer.
@@ -24,12 +24,10 @@ struct AutopilotOnboardingView: View {
     }
 
     /// Setup opens on the first question: a welcome screen was one more tap before anything
-    /// happened, and "Skip" and "Set Up Later" are on the step itself (#336).
+    /// happened. "Set Up Later" is the one way out (#336); a question left alone keeps the
+    /// usual settings, so Next is all a skip needs (build 121).
     @State private var stage = Stage.step(.taste)
     @State private var settings: AutopilotSettings?
-    /// What skipping a step restores: the profile as loaded, which is the API's defaults
-    /// for a household that never saved one.
-    @State private var baseline = AutopilotSettings.defaults
     @State private var tiles = CuisineTileLoader()
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -39,7 +37,6 @@ struct AutopilotOnboardingView: View {
         NavigationStack {
             content
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { toolbar }
                 .alert(
                     explaining?.question ?? "", isPresented: Binding(presenting: $explaining), presenting: explaining
                 ) { _ in
@@ -63,7 +60,7 @@ struct AutopilotOnboardingView: View {
             }
         } else if case .failed(let message) = autopilot.phase {
             ContentUnavailableView {
-                Label("Couldn't Load Autopilot", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Autopilot", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -75,18 +72,6 @@ struct AutopilotOnboardingView: View {
         } else {
             ProgressView("Getting Autopilot ready…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            if case .step = stage {
-                // Every step can be skipped; a skipped one keeps the server's defaults.
-                Button("Skip") { skipCurrent() }
-                    .disabled(isSaving)
-                    .accessibilityHint("Keeps the usual settings for this question")
-            }
         }
     }
 
@@ -106,8 +91,9 @@ struct AutopilotOnboardingView: View {
                 AutopilotWeekStep(settings: settings)
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            bottomBar {
+        .dsReadableWidth()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DSBottomBar {
                 if let errorMessage {
                     FormErrorLabel(message: errorMessage)
                         .font(.footnote)
@@ -147,27 +133,27 @@ struct AutopilotOnboardingView: View {
                 .accessibilityLabel("Step \(step.positionText)")
             HStack(alignment: .firstTextBaseline) {
                 Text(step.positionText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline.weight(.semibold))
+                    .foregroundStyle(DS.Colors.secondaryText)
                 Spacer()
             }
             HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                 Text(step.question)
-                    .font(.title2.bold())
+                    .font(DS.Typography.title)
                 Button {
                     explaining = step
                 } label: {
                     Image(systemName: "info.circle")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.tint)
+                .foregroundStyle(DS.Colors.accent)
                 .accessibilityLabel("About this question")
             }
             Text(step.subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(DS.Typography.subheadline)
+                .foregroundStyle(DS.Colors.secondaryText)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, DS.Space.l)
         .padding(.bottom, DS.Space.m)
         .accessibilityElement(children: .contain)
     }
@@ -176,26 +162,27 @@ struct AutopilotOnboardingView: View {
         VStack(spacing: DS.Space.xl) {
             Spacer()
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.green)
+                .font(DS.Typography.largeTitle)
+                .imageScale(.large)
+                .foregroundStyle(DS.Colors.success)
                 .accessibilityHidden(true)
-            Text("You're All Set")
-                .font(.largeTitle.bold())
+            Text("You’re All Set")
+                .font(DS.Typography.largeTitle)
             Text(
                 onPlanWeek == nil
                     ? "Autopilot will use these preferences when it plans a week."
                     : "Autopilot can plan this week now. Nothing is added until you review it."
             )
-            .font(.title3)
+            .font(DS.Typography.subtitle)
             .multilineTextAlignment(.center)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DS.Colors.secondaryText)
             fineTuneRow
             Spacer()
         }
         .padding(DS.Space.l)
-        .frame(maxWidth: .infinity)
-        .safeAreaInset(edge: .bottom) {
-            bottomBar {
+        .dsReadableWidth()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DSBottomBar {
                 if let onPlanWeek {
                     Button {
                         dismiss()
@@ -221,18 +208,10 @@ struct AutopilotOnboardingView: View {
         NavigationLink {
             AutopilotPreferencesView()
         } label: {
-            Label("Fine-tune Autopilot", systemImage: "slider.horizontal.3")
-                .font(.subheadline)
+            Label("Fine-Tune Autopilot", systemImage: "slider.horizontal.3")
+                .font(DS.Typography.subheadline)
         }
         .padding(.top, DS.Space.xxs)
-    }
-
-    private func bottomBar(@ViewBuilder content: () -> some View) -> some View {
-        VStack(spacing: DS.Space.sm) {
-            content()
-        }
-        .padding(DS.Space.l)
-        .background(.bar)
     }
 
     // MARK: - Actions
@@ -242,14 +221,7 @@ struct AutopilotOnboardingView: View {
             await autopilot.activate(householdID: householdID)
         }
         guard settings == nil, let profile = autopilot.profile else { return }
-        baseline = profile.settings
         settings = profile.settings
-    }
-
-    private func skipCurrent() {
-        guard case .step(let step) = stage, let current = settings else { return }
-        settings = current.replacing(step.section, from: baseline)
-        move(to: step.index + 1)
     }
 
     private func move(to index: Int) {

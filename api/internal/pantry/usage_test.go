@@ -121,7 +121,7 @@ func TestEstimateExplainsRecipeAndOtherUse(t *testing.T) {
 	}
 	skipped := trackedButter()
 	skipped.Tracking.SkippedUses, skipped.Tracking.SegmentSkippedUses = 1, 1
-	if e := estimateItem(skipped, 0, testNow); e.Summary != "About 100% left. 1 recipe couldn't be counted." || e.ThresholdPct != DefaultLowThresholdPercent {
+	if e := estimateItem(skipped, 0, testNow); e.Summary != "About 100% left. 1 recipe couldn’t be counted." || e.ThresholdPct != DefaultLowThresholdPercent {
 		t.Errorf("skipped summary = %q (threshold %d)", e.Summary, e.ThresholdPct)
 	}
 }

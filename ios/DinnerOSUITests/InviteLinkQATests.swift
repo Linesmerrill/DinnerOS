@@ -188,7 +188,7 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(screen.waitForExistence(timeout: 30), "A cold start didn't open the invite screen")
         // A cold start in a QA build is signed out; the code check needs no sign-in.
         XCTAssertTrue(
-            app.staticTexts["We couldn't find that code. Check it and try again."].waitForExistence(timeout: 15),
+            app.staticTexts["We couldn’t find that code. Check it and try again."].waitForExistence(timeout: 15),
             "A bad code didn't show the server's message")
         snap(app, "Invite link, code not found (\(mode))")
         screen.buttons["Close"].tap()

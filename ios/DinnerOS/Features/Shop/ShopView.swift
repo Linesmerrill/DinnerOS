@@ -40,8 +40,7 @@ struct ShopView: View {
 
     var body: some View {
         content
-            .navigationTitle("Shop")
-            .navigationBarTitleDisplayMode(.inline)
+            .tabHeader(String(localized: "Shop"))
             .safeAreaInset(edge: .top, spacing: 0) {
                 if isReady {
                     VStack(spacing: 0) {
@@ -53,7 +52,9 @@ struct ShopView: View {
                     .background(.bar)
                 }
             }
+            // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.
             .toolbar { toolbar }
+            .notificationsToolbar()
             .sheet(isPresented: $isMatchingProducts) {
                 MatchProductsSheet()
             }
@@ -134,7 +135,7 @@ struct ShopView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Shopping", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Shopping", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -157,13 +158,15 @@ struct ShopView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         if isReady {
+            if canEditPlan, usuals != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add Item", systemImage: TabHeader.addSystemImage) {
+                        isAddingItem = true
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    if canEditPlan, usuals != nil {
-                        Button("Add Item", systemImage: "plus") {
-                            isAddingItem = true
-                        }
-                    }
                     if usuals != nil {
                         Button("Your Usuals", systemImage: "arrow.clockwise.heart") {
                             isShowingUsuals = true
@@ -183,7 +186,7 @@ struct ShopView: View {
                         }
                     }
                 } label: {
-                    Label("Shop Options", systemImage: "ellipsis.circle")
+                    Label("Shop Options", systemImage: TabHeader.moreSystemImage)
                 }
             }
         }
@@ -254,7 +257,7 @@ private struct ShopWeekList: View {
             case .idle, .loading:
                 HStack(spacing: DS.Space.s) {
                     ProgressView()
-                    Text("Matching this week's list…")
+                    Text("Matching this week’s list…")
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
@@ -306,7 +309,7 @@ private struct ShopWeekList: View {
                 link(target, to: choice)
             }
         }
-        .alert("Couldn't Change That", isPresented: Binding(presenting: $leaveOutError)) {
+        .alert("Couldn’t Change That", isPresented: Binding(presenting: $leaveOutError)) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(leaveOutError ?? "")
@@ -358,7 +361,7 @@ private struct ShopWeekList: View {
                 Label("Nothing to Buy", systemImage: "cart")
             } description: {
                 Text(
-                    "You have everything on this week's grocery list. Add recipes to your plan, or uncheck items on the grocery list."
+                    "You have everything on this week’s grocery list. Add recipes to your plan, or uncheck items on the grocery list."
                 )
             }
             .listRowBackground(Color.clear)
@@ -454,7 +457,7 @@ private struct ShopWeekList: View {
                 }
             } footer: {
                 Text(
-                    "Items you already have at home, or already checked off on your grocery list, won't be added to your \(shopping.providerName) cart."
+                    "Items you already have at home, or already checked off on your grocery list, won’t be added to your \(shopping.providerName) cart."
                 )
             }
         }
@@ -467,15 +470,15 @@ private struct ShopWeekList: View {
             if hasMeals {
                 Text(
                     shopping.opensListPage
-                        ? "If several meals use an item, it's bought once and listed under the first meal. \(shopping.providerName) picks the size."
-                        : "If several meals use an item, it's bought once and listed under the first meal. We work out how many to buy from the package size."
+                        ? "If several meals use an item, it’s bought once and listed under the first meal. \(shopping.providerName) picks the size."
+                        : "If several meals use an item, it’s bought once and listed under the first meal. We work out how many to buy from the package size."
                 )
             }
             if needsProduct {
                 Text(
                     shopping.canEdit
-                        ? "Choose a \(shopping.providerName) product once and it's used every week."
-                        : "Your role can't choose products.")
+                        ? "Choose a \(shopping.providerName) product once and it’s used every week."
+                        : "Your role can’t choose products.")
             }
         }
     }
@@ -739,8 +742,12 @@ private struct NeedsProductRow: View {
                 Spacer(minLength: DS.Space.s)
             }
             if canChoose {
+                // Its own full width in every row: a long name never squeezes it smaller than
+                // the others (build 121).
                 Button("Choose Product", action: choose)
                     .buttonStyle(.dsSecondary(.small))
+                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
+                    .layoutPriority(1)
                     .accessibilityLabel("Choose Product for \(line.name)")
             }
             if let remove {
@@ -774,7 +781,7 @@ private struct NeedsDecisionRow: View {
                         .strikethrough(line.reason == .productGone)
                 }
                 Label(
-                    line.reason == .productGone ? "No longer on Walmart" : "Couldn't check it on Walmart",
+                    line.reason == .productGone ? "No longer on Walmart" : "Couldn’t check it on Walmart",
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.footnote.weight(.semibold))
@@ -1063,7 +1070,7 @@ private struct LeftOutShopRow: View {
                 if let notTheSame, !row.alsoCalled.isEmpty {
                     Menu {
                         ForEach(row.alsoCalled, id: \.linkID) { other in
-                            Button("\(other.name) Isn't the Same", systemImage: "arrow.uturn.backward") {
+                            Button("\(other.name) Isn’t the Same", systemImage: "arrow.uturn.backward") {
                                 notTheSame(other)
                             }
                         }
@@ -1109,7 +1116,7 @@ private struct ShopComponentHeader: View {
                     .accessibilityLabel("Make \(component.name) Again")
             } else if canEdit {
                 Menu {
-                    Section("Don't Make \(component.name)") {
+                    Section("Don’t Make \(component.name)") {
                         // A taste preference about this dish, so that's the first choice.
                         Button("This Dish, Always", systemImage: "fork.knife") { leaveOut(.recipe) }
                     }
@@ -1121,7 +1128,7 @@ private struct ShopComponentHeader: View {
                         .imageScale(.large)
                         .frame(minWidth: 44, minHeight: 44)
                 }
-                .accessibilityLabel("Don't Make \(component.name)")
+                .accessibilityLabel("Don’t Make \(component.name)")
             }
         }
     }
@@ -1189,7 +1196,7 @@ private struct ShopRemoveMenuItems: View {
                 }
                 if let notTheSame = options.notTheSame {
                     ForEach(options.alsoCalled, id: \.linkID) { other in
-                        Button("\(other.name) Isn't the Same", systemImage: "arrow.uturn.backward") {
+                        Button("\(other.name) Isn’t the Same", systemImage: "arrow.uturn.backward") {
                             notTheSame(other)
                         }
                     }
@@ -1283,8 +1290,8 @@ private struct InWalmartCartSection: View {
         } footer: {
             Text(
                 shopping.opensListPage
-                    ? "Already sent to \(shopping.providerName), so sending again only adds what's new. Once you mark the week ordered, the next list starts fresh."
-                    : "Already in your \(shopping.providerName) cart, so sending again won't add them twice. Once you mark the week ordered, the next list starts fresh."
+                    ? "Already sent to \(shopping.providerName), so sending again only adds what’s new. Once you mark the week ordered, the next list starts fresh."
+                    : "Already in your \(shopping.providerName) cart, so sending again won’t add them twice. Once you mark the week ordered, the next list starts fresh."
             )
         }
     }
@@ -1479,7 +1486,7 @@ private struct OrderReminderBanner: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.subheadline)
-                    .accessibilityHint("Asks to send a notification when it's time to order.")
+                    .accessibilityHint("Asks to send a notification when it’s time to order.")
                 }
             }
             .padding(.vertical, DS.Space.xxs)
@@ -1492,7 +1499,7 @@ private struct OrderReminderBanner: View {
             Button("Not Ordered Yet") { setOrdered(false) }
                 .buttonStyle(.dsSecondary(.small))
                 .disabled(shopping.isSettingOrdered)
-                .accessibilityHint("Brings this week's reminder back.")
+                .accessibilityHint("Brings this week’s reminder back.")
         } else {
             Button("Mark as Ordered") { setOrdered(true) }
                 .buttonStyle(.dsPrimary(.small))
@@ -1504,7 +1511,7 @@ private struct OrderReminderBanner: View {
     private var title: String {
         reminder.ordered
             ? String(localized: "Ordered this week")
-            : String(localized: "Time to order this week's groceries")
+            : String(localized: "Time to order this week’s groceries")
     }
 
     private var summary: String {
@@ -1515,7 +1522,7 @@ private struct OrderReminderBanner: View {
             return String(localized: "Send your list to \(shopping.providerName), then mark the week ordered.")
         }
         return String(
-            localized: "\(day) is your order day. Mark the week ordered once you've placed your order.")
+            localized: "\(day) is your order day. Mark the week ordered once you’ve placed your order.")
     }
 
     private func setOrdered(_ ordered: Bool) {
@@ -1547,7 +1554,7 @@ private struct OpenHandoffBanner: View {
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: DS.Space.s) {
-                Label("Did you order these?", systemImage: "shippingbox")
+                Label("Did You Order These?", systemImage: "shippingbox")
                     .font(.headline)
                 Text(summary)
                     .font(.subheadline)
@@ -1594,7 +1601,7 @@ private struct ShopHandoffBar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if !shopping.canEdit {
-                Text("Your role can see this list but can't send it to \(store).")
+                Text("Your role can see this list but can’t send it to \(store).")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else if shopping.writesCart, !shopping.isSignedIn {
@@ -1687,8 +1694,9 @@ private struct ShopHandoffBar: View {
         }
         .multilineTextAlignment(.center)
         .padding(DS.Space.l)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
+        .dsReadableWidth()
+        .background(DS.Colors.groupedBackground)
+        .overlay(alignment: .top) { Divider() }
         .onChange(of: usuals?.prompt == nil) { _, closed in
             guard closed, sendsAfterUsuals else { return }
             sendsAfterUsuals = false
@@ -1712,8 +1720,8 @@ private struct ShopHandoffBar: View {
         if shopping.opensListPage {
             if proposal.cart != nil {
                 return count == 1
-                    ? String(localized: "Sends 1 new item to \(store). What you sent before isn't sent again.")
-                    : String(localized: "Sends \(count) new items to \(store). What you sent before isn't sent again.")
+                    ? String(localized: "Sends 1 new item to \(store). What you sent before isn’t sent again.")
+                    : String(localized: "Sends \(count) new items to \(store). What you sent before isn’t sent again.")
             }
             return count == 1
                 ? String(localized: "Sends 1 item to \(store). You pick the store and check out there.")
@@ -1721,9 +1729,9 @@ private struct ShopHandoffBar: View {
         }
         if proposal.cart != nil {
             return count == 1
-                ? String(localized: "Adds 1 new item to your \(store) cart. What's already there isn't added again.")
+                ? String(localized: "Adds 1 new item to your \(store) cart. What’s already there isn’t added again.")
                 : String(
-                    localized: "Adds \(count) new items to your \(store) cart. What's already there isn't added again.")
+                    localized: "Adds \(count) new items to your \(store) cart. What’s already there isn’t added again.")
         }
         return count == 1
             ? String(localized: "Adds 1 item to your \(store) cart. You check out in \(store).")
@@ -1883,7 +1891,7 @@ private struct ShopTripStorePicker: View {
             .disabled(!shopping.canEdit || isSwitching)
             .accessibilityHint("Picks the store for this week")
             if shopping.tripPickIsPending {
-                Text("Saves when you're back online.")
+                Text("Saves when you’re back online.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -1988,7 +1996,7 @@ private struct SameItemSheet: View {
                         .accessibilityHint("Buys \(target.name) as \(choice.name)")
                     }
                 } footer: {
-                    Text("Pick the item \(target.name) is the same as. You'll buy it once, with that item's product.")
+                    Text("Pick the item \(target.name) is the same as. You’ll buy it once, with that item’s product.")
                 }
             }
             .overlay {
@@ -1998,12 +2006,12 @@ private struct SameItemSheet: View {
                         systemImage: "magnifyingglass",
                         description: Text(
                             choices.isEmpty
-                                ? "Nothing else is on this week's list or in your pantry."
+                                ? "Nothing else is on this week’s list or in your pantry."
                                 : "Try another name."))
                 }
             }
             .searchable(text: $query, prompt: "Search")
-            .navigationTitle("Same as…")
+            .navigationTitle("Same As…")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -78,8 +78,8 @@ struct CompanionEditorView: View {
                         Text("Pick what it goes with, or how often you buy it.")
                     }
                 }
-                Section("When It's Due") {
-                    Picker("When It's Due", selection: $draft.mode) {
+                Section("When It’s Due") {
+                    Picker("When It’s Due", selection: $draft.mode) {
                         ForEach(modes) { option in
                             Text(option.label).tag(option.value)
                         }
@@ -101,6 +101,7 @@ struct CompanionEditorView: View {
                     }
                 }
             }
+            .dsReadableForm()
             .navigationTitle(existing == nil ? "New Companion" : "Edit Companion")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -124,7 +125,7 @@ struct CompanionEditorView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 if draft.linkedRecipe != nil {
-                    Text("Your recipe stays. It just won't be suggested as a companion.")
+                    Text("Your recipe stays. It just won’t be suggested as a companion.")
                 }
             }
             .interactiveDismissDisabled(isSaving)
@@ -176,7 +177,7 @@ struct CompanionEditorView: View {
         } header: {
             Text("Goes With")
         } footer: {
-            Text("Pick cuisines or recipes. It's suggested when one of them is on the menu.")
+            Text("Pick cuisines or recipes. It’s suggested when one of them is on the menu.")
         }
     }
 

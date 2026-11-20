@@ -177,7 +177,7 @@ func methodUnmet(s *slot) autopilot.Message {
 	kind, day := strings.Join(names, " or ")+"-friendly", autopilot.Days[s.day].Name()
 	text := fmt.Sprintf("No %s recipe fits %s, so we picked the next best.", kind, day)
 	if slices.ContainsFunc(s.cands, func(c cand) bool { return suitsMethod(c.it, s.rule) }) {
-		text = fmt.Sprintf("%s's %s recipes didn't fit this week, so we picked the next best.", day, kind)
+		text = fmt.Sprintf("%s’s %s recipes didn’t fit this week, so we picked the next best.", day, kind)
 	}
 	return autopilot.Message{Code: "rule_method_unmet", Text: text}
 }
@@ -583,7 +583,7 @@ func (m *model) generate() autopilot.WeekResult {
 	switch {
 	case m.ctx.skip:
 		res.Requested = 0
-		res.Messages = append(res.Messages, autopilot.Message{Code: "week_skipped", Text: "You're skipping this week, so there's nothing to plan."})
+		res.Messages = append(res.Messages, autopilot.Message{Code: "week_skipped", Text: "You’re skipping this week, so there’s nothing to plan."})
 		return res
 	case len(m.items) == 0:
 		res.Messages = append(res.Messages, autopilot.Message{Code: "empty_catalog", Text: "Add or import recipes so Autopilot has meals to choose from."})

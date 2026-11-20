@@ -59,7 +59,8 @@ struct PantryView: View {
 
     var body: some View {
         content
-            .navigationTitle("Pantry")
+            .tabHeader(String(localized: "Pantry"))
+            // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.
             .toolbar { toolbar }
             .notificationsToolbar(isHidden: isSelecting)
             .navigationDestination(for: PantryItemRoute.self) { route in
@@ -88,7 +89,7 @@ struct PantryView: View {
                 }
             }
             .alert(
-                "Couldn't Update the Pantry",
+                "Couldn’t Update the Pantry",
                 isPresented: Binding(presenting: $actionError),
                 presenting: actionError
             ) { _ in
@@ -115,7 +116,7 @@ struct PantryView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load the Pantry", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load the Pantry", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -217,7 +218,7 @@ struct PantryView: View {
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 if item.status != .inStock {
                     Button("In Stock", systemImage: "checkmark.circle") { mark(item, .inStock) }
-                        .tint(.green)
+                        .tint(DS.Colors.success)
                 }
             }
             .tag(item.id)
@@ -294,13 +295,13 @@ struct PantryView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add Item", systemImage: "plus") { sheet = .add }
+                    Button("Add Item", systemImage: TabHeader.addSystemImage) { sheet = .add }
                 }
             }
         }
         if !isSelecting && pantry.phase == .loaded {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu("More", systemImage: "ellipsis.circle") {
+                Menu("More", systemImage: TabHeader.moreSystemImage) {
                     Button("Low-Stock Alerts…", systemImage: "gauge.with.dots.needle.33percent") {
                         sheet = .lowStockSettings
                     }

@@ -62,13 +62,24 @@ struct InstructionStepText: View {
     /// before it ("a pinch of") as written.
     static func itemText(_ segments: [InstructionSegment]) -> Text {
         segments.reduce(Text(verbatim: "")) { text, segment in
-            guard segment.isIngredient, !segment.leftOut, !segment.spicy, let amount = segment.amount?.text,
+            guard segment.isIngredient, !segment.leftOut, !segment.spicy,
+                let amount = segment.amount?.text ?? leadingAmount(segment.text),
                 segment.text.hasPrefix(amount + " ")
             else { return text + Self.text(for: segment) }
             return text
                 + Text(verbatim: amount + "\u{00A0}").foregroundStyle(Color.secondary)
                 + Text(verbatim: String(segment.text.dropFirst(amount.count + 1))).fontWeight(.semibold)
         }
+    }
+
+    /// The amount a step writes before a name the recipe doesn't list ("¾ cup" of "¾ cup
+    /// water"), so it gets the same quiet amount as the others; `nil` when there's none.
+    static func leadingAmount(_ text: String) -> String? {
+        let pattern =
+            #"^[0-9¼½¾⅓⅔⅛⅜⅝⅞]+(?:[./][0-9]+)?(?: ?[¼½¾⅓⅔⅛⅜⅝⅞])?"#
+            + #"(?: (?:cups?|tsp|Tbsp|tbsp|oz|lbs?|g|kg|mL|ml|L|cloves?|cans?|pinch(?:es)?))?(?= )"#
+        guard let range = text.range(of: pattern, options: .regularExpression) else { return nil }
+        return String(text[range])
     }
 
     /// `Text` concatenation keeps one paragraph that wraps and scales with Dynamic Type.

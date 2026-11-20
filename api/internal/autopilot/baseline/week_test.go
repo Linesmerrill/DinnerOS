@@ -245,7 +245,7 @@ func TestMethodRules(t *testing.T) {
 			t.Fatalf("sunday = %s", describe(res))
 		}
 		i = slices.IndexFunc(res.Messages, func(m autopilot.Message) bool { return m.Code == "rule_method_unmet" })
-		if i < 0 || res.Messages[i].Text != "Sunday's smoker-friendly recipes didn't fit this week, so we picked the next best." {
+		if i < 0 || res.Messages[i].Text != "Sunday’s smoker-friendly recipes didn’t fit this week, so we picked the next best." {
 			t.Errorf("messages = %+v", res.Messages)
 		}
 	})

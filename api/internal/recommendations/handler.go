@@ -944,7 +944,7 @@ func (h *Handler) getProposal(w http.ResponseWriter, r *http.Request) {
 
 func decodeVersion(w http.ResponseWriter, r *http.Request, v *int64) (int64, bool) {
 	if v == nil {
-		validationFailed(w, r, "version is required: send the proposal's current version")
+		validationFailed(w, r, "version is required: send the proposal’s current version")
 		return 0, false
 	}
 	return *v, true
@@ -1172,7 +1172,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.Is(err, ErrConflict):
 		httpx.WriteError(w, r, http.StatusConflict, "conflict", "the preferences kept changing; try again")
 	case errors.Is(err, ErrLearningUnsupported):
-		httpx.WriteError(w, r, http.StatusNotImplemented, "not_supported", "the recommendation provider doesn't report what it learned")
+		httpx.WriteError(w, r, http.StatusNotImplemented, "not_supported", "the recommendation provider doesn’t report what it learned")
 	case errors.Is(err, ErrPairingsUnavailable):
 		httpx.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "pairings are unavailable")
 	default:

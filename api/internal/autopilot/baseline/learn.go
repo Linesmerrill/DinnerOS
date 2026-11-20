@@ -336,7 +336,7 @@ func itemText(il *itemLearning, value float64) string {
 	case il.accepts > 1:
 		return fmt.Sprintf("You kept it the last %d times Autopilot suggested it", il.accepts)
 	}
-	return fmt.Sprintf("You've looked at it %s lately", times(il.views))
+	return fmt.Sprintf("You’ve looked at it %s lately", times(il.views))
 }
 
 func featureLabel(kind, key string) string {
@@ -367,9 +367,9 @@ func featureText(kind, key string, value float64) string {
 		label = strings.ToLower(label)
 	}
 	if value < 0 {
-		return "You've been skipping " + label + " lately"
+		return "You’ve been skipping " + label + " lately"
 	}
-	return "You've been choosing more " + label + " lately"
+	return "You’ve been choosing more " + label + " lately"
 }
 
 // Learning implements autopilot.LearningReporter.

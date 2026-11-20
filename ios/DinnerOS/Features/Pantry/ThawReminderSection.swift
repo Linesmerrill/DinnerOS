@@ -16,13 +16,13 @@ struct ThawReminderSection: View {
                     ThawReminderRow(item: item)
                         .swipeActions(edge: .trailing) {
                             Button("Done") { dismiss(item) }
-                                .tint(.green)
+                                .tint(DS.Colors.success)
                         }
                 }
             } header: {
                 Label("Take Out to Thaw", systemImage: "snowflake")
             } footer: {
-                Text("Swipe a reminder away once it's in the fridge.")
+                Text("Swipe a reminder away once it’s in the fridge.")
             }
         }
     }

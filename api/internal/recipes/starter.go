@@ -31,6 +31,10 @@ type StarterResult struct {
 	// Existing counts source recipes the household already has, matched by
 	// source and source recipe ID or alias.
 	Existing int
+	// Mismatched names source recipes whose name doesn't name the dish
+	// their source page or photo shows (NameMismatch), as "Name (slug)".
+	// They are still copied: a person fixes the starter library.
+	Mismatched []string
 }
 
 // CopyStarterRecipes copies the recipes of sourceHouseholdID into
@@ -83,6 +87,9 @@ func (s *Service) CopyStarterRecipes(ctx context.Context, sourceHouseholdID, tar
 
 		var writes []Recipe
 		for _, r := range page {
+			if slug := NameMismatch(r); slug != "" {
+				res.Mismatched = append(res.Mismatched, r.Name+" ("+slug+")")
+			}
 			if slices.ContainsFunc(sourceIDs(r), func(id string) bool { return have[sourceRecipeKey{source: r.Source, id: id}] }) {
 				res.Existing++
 				continue
@@ -223,6 +230,10 @@ func (st *Starter) HouseholdCreated(ctx context.Context, householdID string) {
 		}
 		st.logger.InfoContext(copyCtx, "starter recipes copied",
 			"householdId", householdID, "copied", res.Copied, "existing", res.Existing, "durationMs", time.Since(started).Milliseconds())
+		if len(res.Mismatched) > 0 {
+			st.logger.WarnContext(copyCtx, "starter recipes whose name doesn't match their photo; fix the starter library",
+				"recipes", res.Mismatched)
+		}
 	}()
 	if st.hold < 0 {
 		return

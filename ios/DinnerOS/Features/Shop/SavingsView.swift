@@ -25,7 +25,7 @@ struct SavingsView: View {
                         Text("Items")
                     } footer: {
                         Text(
-                            "Used this week counts what this week's meals needed. The rest stays in your pantry and counts toward the weeks you use it."
+                            "Used this week counts what this week’s meals needed. The rest stays in your pantry and counts toward the weeks you use it."
                         )
                     }
                 }
@@ -146,7 +146,7 @@ private struct SavingsWeekRow: View {
             if comparesMealKit, let saved = week.savedCents {
                 Text(WeekCostText.comparison(savedCents: saved))
                     .font(.footnote)
-                    .foregroundStyle(saved >= 0 ? AnyShapeStyle(Color.green) : AnyShapeStyle(Color.orange))
+                    .foregroundStyle(saved >= 0 ? DS.Colors.success : DS.Colors.warning)
             }
         }
         .accessibilityElement(children: .combine)

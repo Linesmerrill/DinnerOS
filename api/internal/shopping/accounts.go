@@ -166,7 +166,7 @@ func (s *Service) accountProvider(key string) (providers.GroceryProvider, provid
 	}
 	account, ok := p.(providers.CustomerAccount)
 	if !ok || s.tokens == nil || s.members == nil {
-		return nil, nil, invalid("%s doesn't use a sign-in", p.Name())
+		return nil, nil, invalid("%s doesn’t use a sign-in", p.Name())
 	}
 	return p, account, nil
 }
@@ -232,7 +232,7 @@ func (s *Service) CompleteConnection(ctx context.Context, provider, state, code 
 		return Connection{}, err
 	}
 	if strings.TrimSpace(code) == "" {
-		return Connection{}, invalid("The sign-in didn't finish. Try again.")
+		return Connection{}, invalid("The sign-in didn’t finish. Try again.")
 	}
 	token, err := account.ExchangeCode(ctx, code)
 	if err != nil {

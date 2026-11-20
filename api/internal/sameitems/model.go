@@ -97,12 +97,12 @@ func (in Input) normalize() (Input, error) {
 	in.VariantName, in.KeptName = strings.TrimSpace(in.VariantName), strings.TrimSpace(in.KeptName)
 	for _, key := range []string{in.VariantKey, in.KeptKey} {
 		if key == "" || utf8.RuneCountInString(key) > MaxKeyLength {
-			return Input{}, invalid("That item can't be linked. Try another one.")
+			return Input{}, invalid("That item can’t be linked. Try another one.")
 		}
 	}
 	for _, name := range []string{in.VariantName, in.KeptName} {
 		if ingredients.NormalizeName(name) == "" || utf8.RuneCountInString(name) > MaxNameLength {
-			return Input{}, invalid("That item can't be linked. Try another one.")
+			return Input{}, invalid("That item can’t be linked. Try another one.")
 		}
 	}
 	if in.VariantKey == in.KeptKey {

@@ -157,7 +157,7 @@ struct StepDoneCard: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: markSize))
                 .symbolRenderingMode(.palette)
-                .foregroundStyle(.white, .green)
+                .foregroundStyle(DS.Colors.onAccent, DS.Colors.success)
                 .symbolEffect(.bounce, value: shown && !reduceMotion)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DS.Space.xxs) {
@@ -180,7 +180,7 @@ struct StepDoneCard: View {
         .frame(maxWidth: 520)
         .background(DS.Colors.raisedSurface, in: .rect(cornerRadius: DS.Radius.xLarge))
         .overlay {
-            RoundedRectangle(cornerRadius: DS.Radius.xLarge).strokeBorder(Color.green.opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.xLarge).strokeBorder(DS.Colors.success.opacity(0.35), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
         .overlay {
@@ -227,7 +227,7 @@ private struct StepDots: View {
         HStack(spacing: DS.Space.xxs) {
             ForEach(0..<max(total, 0), id: \.self) { index in
                 Circle()
-                    .fill(index < done ? Color.green : Color.secondary.opacity(0.3))
+                    .fill(index < done ? DS.Colors.success : DS.Colors.secondaryText.opacity(0.3))
                     .frame(width: size, height: size)
             }
         }
@@ -300,7 +300,9 @@ struct FreeMonthUnlockedCard: View {
                     Image(systemName: month?.isOwed == true ? "hourglass.circle.fill" : "checkmark.circle.fill")
                         .font(.system(size: markSize * 0.42))
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, month?.isOwed == true ? .orange : .green)
+                        .foregroundStyle(
+                            DS.Colors.onAccent, month?.isOwed == true ? DS.Colors.warning : DS.Colors.success
+                        )
                         .offset(x: markSize * 0.18, y: markSize * 0.12)
                 }
                 .symbolEffect(.bounce, value: shown && !reduceMotion)

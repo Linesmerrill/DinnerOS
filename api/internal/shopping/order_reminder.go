@@ -184,7 +184,7 @@ func (s *Service) Refresh(ctx context.Context, householdID string) error {
 	if _, _, err := s.notifier.Create(ctx, notifications.New{
 		HouseholdID: householdID,
 		Type:        notifications.TypeShoppingOrderDue,
-		Title:       "Time to order this week's groceries",
+		Title:       "Time to order this week’s groceries",
 		Body:        orderReminderBody(reminder),
 		Subject:     notifications.Subject{Kind: notifications.SubjectShoppingWeek, ID: week.String()},
 		DedupeKey:   orderDueDedupeKey(week.String()),

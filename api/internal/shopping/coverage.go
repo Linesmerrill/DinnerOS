@@ -54,6 +54,6 @@ func normalizeCoverage(c providers.Coverage) (providers.Coverage, error) {
 	case providers.CoverageAuto, providers.CoveragePerWeek, providers.CoveragePerAmount:
 		return c, nil
 	}
-	return "", invalid("coverage must be %q or %q, or omitted to follow the ingredient's category",
+	return "", invalid("coverage must be %q or %q, or omitted to follow the ingredient’s category",
 		providers.CoveragePerWeek, providers.CoveragePerAmount)
 }

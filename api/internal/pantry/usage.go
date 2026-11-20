@@ -552,7 +552,7 @@ func (e *Estimate) summary() string {
 	}
 	b.WriteString(".")
 	if e.SkippedUses > 0 {
-		fmt.Fprintf(&b, " %s couldn't be counted.", countText(e.SkippedUses, "recipe", "recipes"))
+		fmt.Fprintf(&b, " %s couldn’t be counted.", countText(e.SkippedUses, "recipe", "recipes"))
 	}
 	return b.String()
 }

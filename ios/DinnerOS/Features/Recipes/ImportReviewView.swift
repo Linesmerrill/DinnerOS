@@ -55,7 +55,7 @@ struct ImportReviewView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Import Review", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Import Review", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -142,7 +142,7 @@ struct ImportReviewView: View {
                 bulk = .sameRecipe(groups, spelling: true)
             }
         } footer: {
-            Text("Only case, spacing, or punctuation differs. That's this screen's guess.")
+            Text("Only case, spacing, or punctuation differs. That’s this screen’s guess.")
         }
     }
 
@@ -161,7 +161,7 @@ struct ImportReviewView: View {
         } header: {
             Text("Other Gaps")
         } footer: {
-            Text("Things the recipe page didn't include. We can't fill them in.")
+            Text("Things the recipe page didn’t include. We can’t fill them in.")
         }
     }
 
@@ -218,7 +218,7 @@ private enum BulkAction {
         case .sameRecipe(_, spelling: false):
             String(localized: "Each delivery counts toward the recipe in your library. Check any protein swaps first.")
         case .dismissAll:
-            String(localized: "They leave this list. Your recipes don't change.")
+            String(localized: "They leave this list. Your recipes don’t change.")
         }
     }
 }
@@ -417,7 +417,7 @@ struct ImportVariantDetailView: View {
             ) { Task { await resolve(.sameRecipe) } }
         case .addAsNewRecipe(let name):
             ImportReviewActionButton(
-                title: "It's a Different Recipe",
+                title: "It’s a Different Recipe",
                 detail: "Add \u{201C}\(name)\u{201D} yourself. We only know its name, not its ingredients.",
                 systemImage: "plus.circle"
             ) { addingName = AddingName(name: name) }

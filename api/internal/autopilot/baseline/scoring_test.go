@@ -41,7 +41,7 @@ func TestSignals(t *testing.T) {
 		}, SignalRecency, -0.4, ""},
 		{"a favorite not had in a while", autopilot.Monday, meal("m"), func(in *autopilot.Input) {
 			in.History = []autopilot.Interaction{history(autopilot.KindOrdered, "2026-W20", ""), history(autopilot.KindOrdered, "2026-W25", "")}
-		}, SignalRecency, 0.3, "Haven't had it in 13 weeks"},
+		}, SignalRecency, 0.3, "Haven’t had it in 13 weeks"},
 		{"skips don't count as having it", autopilot.Monday, meal("m"), func(in *autopilot.Input) {
 			in.History = []autopilot.Interaction{history(autopilot.KindSkipped, "2026-W37", "")}
 		}, SignalRecency, 0, ""},
@@ -54,7 +54,7 @@ func TestSignals(t *testing.T) {
 			for _, w := range []string{"2026-W10", "2026-W20", "2026-W28"} {
 				in.History = append(in.History, history(autopilot.KindCooked, w, ""))
 			}
-		}, SignalConversion, 0.6, "You usually cook it when it's planned"},
+		}, SignalConversion, 0.6, "You usually cook it when it’s planned"},
 		{"skipped more than cooked", autopilot.Monday, meal("m"), func(in *autopilot.Input) {
 			in.History = []autopilot.Interaction{history(autopilot.KindSkipped, "2026-W10", ""), history(autopilot.KindSkipped, "2026-W20", "")}
 		}, SignalConversion, -0.5, ""},
@@ -76,7 +76,7 @@ func TestSignals(t *testing.T) {
 				history(autopilot.KindCooked, "2026-W10", ""),
 				{ItemID: "m", Kind: autopilot.KindSkipped, Week: "2026-W20", Reason: autopilot.SkipAteOut},
 			}
-		}, SignalConversion, 0.333, "You usually cook it when it's planned"},
+		}, SignalConversion, 0.333, "You usually cook it when it’s planned"},
 		{"weekday affinity", autopilot.Tuesday, meal("m"), func(in *autopilot.Input) {
 			in.History = []autopilot.Interaction{history(autopilot.KindPlanned, "2026-W20", autopilot.Tuesday), history(autopilot.KindPlanned, "2026-W26", autopilot.Tuesday)}
 		}, SignalWeekdayAffinity, 1, "Often on Tuesdays"},

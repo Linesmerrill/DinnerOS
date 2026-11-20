@@ -19,11 +19,10 @@ final class AccountDeletionQATests: XCTestCase {
         addPastedRecipe(app, name: "QA Delete Soup")
         snap(app, "Account deletion › household with a recipe")
 
-        // A new household can get the Autopilot questions over the Menu; skip through them.
-        for _ in 0..<5 {
-            let skip = app.buttons["Skip"].firstMatch
-            guard skip.waitForExistence(timeout: 3), skip.isHittable else { break }
-            skip.tap()
+        // A new household can get the Autopilot questions over the Menu; put them off.
+        let later = app.buttons["Set Up Later"].firstMatch
+        if later.waitForExistence(timeout: 3), later.isHittable {
+            later.tap()
             sleep(1)
         }
         // A tap while the recipe screen is still closing can be lost; try again until it opens.

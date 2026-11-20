@@ -64,6 +64,43 @@ struct DesignSystemTests {
         #expect(huge >= larger)
     }
 
+    /// WCAG contrast ratio of two colors resolved for a light or dark trait.
+    private func contrast(_ a: Color, _ b: Color, dark: Bool) -> CGFloat {
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        func luminance(_ color: Color) -> CGFloat {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, alpha: CGFloat = 0
+            UIColor(color).resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &alpha)
+            func channel(_ c: CGFloat) -> CGFloat { c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+            return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+        }
+        let (l1, l2) = (luminance(a), luminance(b))
+        return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+    }
+
+    /// Hark's build 120 review: white on dark mode's light green was about 2.2:1.
+    @Test func textOnTheAccentIsReadableInLightAndDark() {
+        let accent = Color("AccentColor")
+        #expect(contrast(DS.Colors.onAccent, accent, dark: false) >= 4.5)
+        #expect(contrast(DS.Colors.onAccent, accent, dark: true) >= 4.5)
+    }
+
+    @Test func theSignInButtonsShareOneHeight() {
+        let faceID = Button {
+        } label: {
+            SignInButtonLabel(title: Text("Sign in with Face ID"), height: 50) { Image(systemName: "faceid") }
+        }
+        let google = Button {
+        } label: {
+            SignInButtonLabel(title: Text("Continue with Google"), height: 50) { Image(systemName: "g.circle") }
+        }
+        #expect(abs(size(faceID.buttonStyle(.dsSignInPrimary)).height - 50) < 1)
+        #expect(abs(size(google.buttonStyle(.dsOutline(fullWidth: true))).height - 50) < 1)
+    }
+
+    @Test func theSignInButtonTitlesAreSentenceCase() {
+        #expect(BiometryKind.faceID.signInTitle == "Sign in with Face ID")
+    }
+
     @Test func theSignInTitleMatchesSignInWithApple() {
         // Apple's button title is 43% of its height: 21.5 pt at 50.
         #expect(DS.Typography.signInButton(height: 50) == .system(size: 22, weight: .medium))

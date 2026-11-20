@@ -187,7 +187,7 @@ private struct RestrictionsSectionForm: View {
         } header: {
             Text("Diets")
         } footer: {
-            Text("Autopilot never suggests a recipe that doesn't fit every diet you choose.")
+            Text("Autopilot never suggests a recipe that doesn’t fit every diet you choose.")
         }
         Section {
             ValueChipGroup(
@@ -264,7 +264,7 @@ private struct ScheduleSectionForm: View {
         } header: {
             Text("Days to Plan")
         } footer: {
-            Text("Autopilot fills up to this many of the chosen days. Days you've already planned count.")
+            Text("Autopilot fills up to this many of the chosen days. Days you’ve already planned count.")
         }
         Section {
             Picker("Servings", selection: $settings.schedule.defaultServings) {
@@ -302,7 +302,7 @@ private struct CookTimeSectionForm: View {
     var body: some View {
         let cookTime = settings.cookTime
         Section {
-            Text("Mix quick and longer meals so you're not cooking 40-minute recipes every night.")
+            Text("Mix quick and longer meals so you’re not cooking 40-minute recipes every night.")
                 .foregroundStyle(.secondary)
         }
         Section {
@@ -521,6 +521,7 @@ struct WeekdayRuleEditor: View {
                 }
             }
         }
+        .dsReadableForm()
         .navigationTitle(day.name())
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: rule) { _, updated in
@@ -608,6 +609,7 @@ private struct NoveltySectionForm: View {
                 AutopilotSectionForm(section: .weekdayRules, settings: $settings, vocabulary: vocabulary)
             }
         }
+        .dsReadableForm()
     }
     .environment(session)
     .environment(HouseholdPreviewData.store(session: session))

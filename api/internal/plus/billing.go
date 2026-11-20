@@ -57,7 +57,7 @@ func (e BillingEvent) Title() string {
 	case "EXPIRATION":
 		return "Ended"
 	case "BILLING_ISSUE":
-		return "Apple couldn't charge the renewal"
+		return "Apple couldn’t charge the renewal"
 	case "REFUND_REVERSED":
 		return "Refund reversed"
 	case "NON_RENEWING_PURCHASE":

@@ -35,7 +35,7 @@ struct AutopilotPreferencesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Preferences", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Preferences", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -61,7 +61,7 @@ struct AutopilotPreferencesView: View {
             if !profile.configured {
                 Section {
                     VStack(alignment: .leading, spacing: DS.Space.sm) {
-                        Label("Autopilot isn't set up yet", systemImage: "sparkles")
+                        Label("Autopilot Isn’t Set Up Yet", systemImage: "sparkles")
                             .font(.headline)
                         Text("Until it is, Autopilot uses the usual settings below.")
                             .foregroundStyle(.secondary)
@@ -90,7 +90,7 @@ struct AutopilotPreferencesView: View {
                 Text("Fine-tune Autopilot")
             } footer: {
                 Text(
-                    "Setup doesn't ask about these. Autopilot uses the usual settings until you change them, and each change shows who made it."
+                    "Setup doesn’t ask about these. Autopilot uses the usual settings until you change them, and each change shows who made it."
                 )
             }
             // Per device and per member, so it shows whatever the member's role.
@@ -203,6 +203,7 @@ struct AutopilotSectionEditor: View {
                 }
             }
         }
+        .dsReadableForm()
         .disabled(!canEdit || isSaving)
         .navigationTitle(section.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -271,7 +272,7 @@ struct AutopilotHistoryView: View {
                 }
             } else if let loadError {
                 ContentUnavailableView {
-                    Label("Couldn't Load History", systemImage: "exclamationmark.triangle")
+                    Label("Couldn’t Load History", systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(loadError)
                 } actions: {

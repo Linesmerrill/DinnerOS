@@ -143,7 +143,7 @@ func (h *Handler) parseRecipe(w http.ResponseWriter, r *http.Request) {
 	if req.HTML != "" {
 		target, err := parseLooseURL(link)
 		if err != nil {
-			validationFailed(w, r, "That link doesn't look like a web address.")
+			validationFailed(w, r, "That link doesn’t look like a web address.")
 			return
 		}
 		d, _, ok := ParsePage(req.HTML)

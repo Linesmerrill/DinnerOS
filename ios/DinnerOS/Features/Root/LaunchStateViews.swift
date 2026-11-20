@@ -26,7 +26,7 @@ struct ConfigurationErrorView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Can't Connect", systemImage: "wrench.and.screwdriver")
+            Label("Can’t Connect", systemImage: "wrench.and.screwdriver")
         } description: {
             Text(message)
         }

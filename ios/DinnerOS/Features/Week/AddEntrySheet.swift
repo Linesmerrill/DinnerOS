@@ -167,7 +167,7 @@ struct AddEntrySheet: View {
             let recipe = try await library.recipe(id: recipeID)
             servingOptions = recipe.servingOptions
             if servingOptions.isEmpty {
-                loadError = String(localized: "This recipe has no serving sizes, so it can't be planned.")
+                loadError = String(localized: "This recipe has no serving sizes, so it can’t be planned.")
             } else if servings == nil || !servingOptions.contains(servings ?? 0) {
                 servings = recipe.preferredServings(householdDefault: households.current?.household.defaultServings)
             }

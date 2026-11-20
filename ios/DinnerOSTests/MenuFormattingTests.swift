@@ -73,7 +73,7 @@ struct MenuFormattingTests {
     @Test func recipeStatsLeaveOutUnknownValues() {
         let stats = MenuFormat.stats(minutes: 40, calories: 820, proteinGrams: 43, difficulty: "Easy")
         #expect(stats.map(\.title) == ["Total Time", "Calories", "Protein", "Difficulty"])
-        #expect(stats.map(\.value) == ["40 min", "820 Cal", "43g", "Easy"])
+        #expect(stats.map(\.value) == ["40 min", "820 Cal", "43 g", "Easy"])
         #expect(stats.first?.accessibilityValue == "40 minutes")
 
         let partial = MenuFormat.stats(minutes: nil, calories: 0, proteinGrams: 12, difficulty: nil)

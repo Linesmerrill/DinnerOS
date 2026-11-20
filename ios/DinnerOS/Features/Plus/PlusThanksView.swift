@@ -57,7 +57,7 @@ struct PlusThanksView: View {
                     Button {
                         showsYourPlus = true
                     } label: {
-                        Text("Let's go")
+                        Text("Let’s go")
                     }
                     .buttonStyle(.dsPrimary(fullWidth: true))
                     .frame(maxWidth: 520)

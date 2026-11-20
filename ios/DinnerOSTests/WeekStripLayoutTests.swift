@@ -22,9 +22,11 @@ struct WeekStripLayoutTests {
         for width in [iPadPortrait, iPadLandscape, iPad11Landscape] {
             #expect(WeekStripMetrics.isWide(width))
             let pill = WeekStripMetrics.pillWidth(stripWidth: width, typeSize: .large)
-            #expect(pill == WeekStripMetrics.widePillWidth)
+            // About the wide width, stretched just enough that whole pills fill the row (build 121).
+            #expect(pill >= WeekStripMetrics.widePillWidth)
+            #expect(pill < WeekStripMetrics.widePillWidth * 1.25)
             // At least four weeks across, where there were two and a half.
-            #expect((width - 32) / (pill + 8) >= 4)
+            #expect((width - 32 + 8) / (pill + 8) >= 4)
         }
     }
 

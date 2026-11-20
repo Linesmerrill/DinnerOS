@@ -50,7 +50,7 @@ func TestLearnedMealFeedback(t *testing.T) {
 		"swapped":  "You swapped this out twice recently",
 		"left-out": "You skipped this once recently",
 		"kept":     "You kept it when Autopilot suggested it",
-		"viewed":   "You've looked at it 3 times lately",
+		"viewed":   "You’ve looked at it 3 times lately",
 	} {
 		r := recommendationFor(t, res, id)
 		if !hasReason(r.Reasons, want) {
@@ -115,10 +115,10 @@ func TestLearnedAttributeAffinities(t *testing.T) {
 			interaction("pasta-"+w, autopilot.KindSwappedOut, w), interaction("pasta-"+w, autopilot.KindCooked, w))
 	}
 	res := rank(t, p, in, autopilot.Tuesday)
-	if r := recommendationFor(t, res, "taco-new"); !hasReason(r.Reasons, "You've been choosing more Mexican food lately") {
+	if r := recommendationFor(t, res, "taco-new"); !hasReason(r.Reasons, "You’ve been choosing more Mexican food lately") {
 		t.Errorf("taco reasons = %v", reasonTexts(r.Reasons))
 	}
-	if r := recommendationFor(t, res, "pasta-new"); !hasReason(r.Reasons, "You've been skipping Italian food lately") {
+	if r := recommendationFor(t, res, "pasta-new"); !hasReason(r.Reasons, "You’ve been skipping Italian food lately") {
 		t.Errorf("pasta reasons = %v", reasonTexts(r.Reasons))
 	}
 	if position(res, "taco-new") > position(res, "neutral") || position(res, "pasta-new") < position(res, "neutral") {
@@ -127,7 +127,7 @@ func TestLearnedAttributeAffinities(t *testing.T) {
 
 	// A stated like or dislike wins: the attribute isn't learned on top.
 	in.Preferences.Likes.Cuisines = []string{"italian"}
-	if r := recommendationFor(t, rank(t, p, in, autopilot.Tuesday), "pasta-new"); hasReason(r.Reasons, "You've been skipping Italian food lately") {
+	if r := recommendationFor(t, rank(t, p, in, autopilot.Tuesday), "pasta-new"); hasReason(r.Reasons, "You’ve been skipping Italian food lately") {
 		t.Errorf("learned a stated like: %v", reasonTexts(r.Reasons))
 	}
 }
@@ -267,9 +267,9 @@ func TestLearningReport(t *testing.T) {
 	for key, text := range map[string]string{
 		"item/swapped":      "You swapped this out twice recently",
 		"busySkips/swapped": "Often skipped on busy weeks",
-		"cuisine/mexican":   "You've been choosing more Mexican food lately",
-		"cuisine/thai":      "You've been skipping Thai food lately",
-		"timeBand/quick":    "You've been choosing more quick meals lately",
+		"cuisine/mexican":   "You’ve been choosing more Mexican food lately",
+		"cuisine/thai":      "You’ve been skipping Thai food lately",
+		"timeBand/quick":    "You’ve been choosing more quick meals lately",
 	} {
 		if a, ok := byKind[key]; !ok || a.Text != text || a.Evidence == 0 {
 			t.Errorf("%s = %+v, want %q (all: %+v)", key, a, text, res.Adjustments)

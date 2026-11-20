@@ -81,7 +81,7 @@ struct RequestStoreSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Stores", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Stores", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -138,7 +138,7 @@ struct RequestStoreSheet: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 case .failed where nearby.isEmpty:
-                    Text("Couldn't load stores near \(zip). Check your connection.")
+                    Text("Couldn’t load stores near \(zip). Check your connection.")
                         .foregroundStyle(.secondary)
                 default:
                     if nearby.isEmpty {
@@ -165,7 +165,7 @@ struct RequestStoreSheet: View {
                     .textCase(nil)
                 }
             } footer: {
-                Text("Pick your store and we'll ask to add it. Closest first.")
+                Text("Pick your store and we’ll ask to add it. Closest first.")
             }
         } else if shopping.canRequestStore {
             Section {
@@ -267,7 +267,7 @@ struct RequestStoreSheet: View {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
-                    Text("Can't find it? Add “\(typedName)”")
+                    Text("Can’t find it? Add “\(typedName)”")
                         .foregroundStyle(Color.primary)
                     Spacer(minLength: 0)
                     if working.contains(typedName) {
@@ -285,7 +285,7 @@ struct RequestStoreSheet: View {
                     }
                 }
         } footer: {
-            Text("Only if your store isn't listed above.")
+            Text("Only if your store isn’t listed above.")
         }
     }
 
@@ -376,7 +376,7 @@ private struct NearbyStoreRow: View {
                                 .foregroundStyle(.secondary)
                         }
                         if status == .available {
-                            StatusChip(text: "Available now", color: .green)
+                            StatusChip(text: "Available now", color: DS.Colors.success)
                         }
                     }
                     .foregroundStyle(Color.primary)
@@ -448,7 +448,7 @@ struct RequestStoreRow: View {
     var body: some View {
         if shopping.isCatalogAvailable, shopping.canRequestStore {
             Button(action: open) {
-                Label("Don't see your store?", systemImage: "questionmark.circle")
+                Label("Don’t See Your Store?", systemImage: "questionmark.circle")
             }
             .accessibilityHint("Asks us to add a store")
         }
@@ -529,7 +529,7 @@ private struct CatalogRow: View {
     private var statusChip: some View {
         switch item.status {
         case .available:
-            chip(text: "Available now", color: .green)
+            chip(text: "Available now", color: DS.Colors.success)
         case .researched:
             chip(text: "Looking into it", color: .orange)
         default:

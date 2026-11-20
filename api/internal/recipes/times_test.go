@@ -22,7 +22,7 @@ func TestDraftTimesUpToADay(t *testing.T) {
 		prep, total int
 		want        string
 	}{
-		{-5, 10, "Times can't be less than zero."},
+		{-5, 10, "Times can’t be less than zero."},
 		{25 * 60, 25 * 60, "Prep time can be up to 24 hours."},
 		{60, 49 * 60, "Cook time can be up to 24 hours."},
 	} {

@@ -275,7 +275,7 @@ func TestDeleteAndRestoreRoutes(t *testing.T) {
 	other := recipesPath(hhBob) + "/" + created.ID
 	rec = srv.do(t, http.MethodDelete, other, "", userBob)
 	wantError(t, rec, http.StatusNotFound, "not_found")
-	if !strings.Contains(rec.Body.String(), "That recipe isn't in your recipes.") {
+	if !strings.Contains(rec.Body.String(), "That recipe isn’t in your recipes.") {
 		t.Errorf("other household body = %s", rec.Body.String())
 	}
 }
@@ -294,7 +294,7 @@ func TestRestoreRouteAfterTheWindow(t *testing.T) {
 	}
 	rec := srv.do(t, http.MethodPost, path+"/restore", "{}", userAda)
 	wantError(t, rec, http.StatusGone, "restore_expired")
-	if !strings.Contains(rec.Body.String(), "It's too late to bring that recipe back.") {
+	if !strings.Contains(rec.Body.String(), "It’s too late to bring that recipe back.") {
 		t.Errorf("body = %s", rec.Body.String())
 	}
 }

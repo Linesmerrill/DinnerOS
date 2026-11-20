@@ -61,7 +61,7 @@ struct StoreProductSearchView: View {
             await search()
         }
         .alert(
-            "Couldn't Save That",
+            "Couldn’t Save That",
             isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
         ) {
             Button("OK", role: .cancel) {}

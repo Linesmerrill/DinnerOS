@@ -79,14 +79,14 @@ struct HouseholdView: View {
                             }
                         }
                     } label: {
-                        Label("Members", systemImage: "person.2")
+                        DSIconRow(systemImage: "person.2") { Text("Members") }
                             .badge(detail.members?.count ?? 0)
                     }
                     if let plus, plus.isEnabled {
                         NavigationLink {
                             PlusInviteView()
                         } label: {
-                            Label("Give a Free Month", systemImage: "gift")
+                            DSIconRow(systemImage: "gift") { Text("Give a Free Month") }
                                 .nextStepDot(.giveFreeMonth)
                         }
                         plusRow(plus)
@@ -105,7 +105,7 @@ struct HouseholdView: View {
                                 NavigationLink {
                                     AutopilotPreferencesView()
                                 } label: {
-                                    Label("Autopilot Preferences", systemImage: "sparkles")
+                                    DSIconRow(systemImage: "sparkles") { Text("Autopilot Preferences") }
                                         .nextStepDot(.autopilotPreferences)
                                 }
                                 // Import bookkeeping follows `recipes.import`, and hides against an
@@ -114,12 +114,12 @@ struct HouseholdView: View {
                                     NavigationLink {
                                         ImportReviewView()
                                     } label: {
-                                        Label("Import Review", systemImage: "tray.full")
+                                        DSIconRow(systemImage: "tray.full") { Text("Import Review") }
                                             .nextStepDot(.importReview)
                                     }
                                 }
                             } footer: {
-                                Text("What your household likes, your schedule, and recipes we weren't sure about.")
+                                Text("What your household likes, your schedule, and recipes we weren’t sure about.")
                             }
                             if let settings = households.settings {
                                 HouseholdSettingsSections(settings: settings, role: detail.role)
@@ -127,7 +127,7 @@ struct HouseholdView: View {
                         }
                         .householdSettingsAutosave(households.settings)
                     } label: {
-                        Label("Planning", systemImage: "calendar")
+                        DSIconRow(systemImage: "calendar") { Text("Planning") }
                             .nextStepDot(.planning)
                     }
                     NavigationLink {
@@ -139,7 +139,7 @@ struct HouseholdView: View {
                             leaveSection
                         }
                     } label: {
-                        Label("Households", systemImage: "house")
+                        DSIconRow(systemImage: "house") { Text("Households") }
                     }
                 }
             }
@@ -151,18 +151,22 @@ struct HouseholdView: View {
                         Section {
                             DeleteAccountButton()
                         } footer: {
-                            Text("Deletes your account and any household where you're the only member.")
+                            Text("Deletes your account and any household where you’re the only member.")
                         }
                     }
                 } label: {
-                    Label("Account", systemImage: "person.crop.circle")
+                    DSIconRow(systemImage: "person.crop.circle") { Text("Account") }
                 }
             }
             if storeRequests != nil || referrals != nil {
                 operatorSection
             }
         }
-        .navigationTitle(String(localized: "Household"))
+        .dsReadableForm()
+        // The shared tab header: a small title in the bar, with the household's name one step
+        // down in the card, so the tab never shows two large titles (build 121).
+        .tabHeader(String(localized: "Household"))
+        .notificationsToolbar()
         .task { await loadAccount() }
         // Each time the tab shows, including coming back from a step just finished.
         .task { await nextSteps?.load() }
@@ -188,6 +192,7 @@ struct HouseholdView: View {
         List {
             content()
         }
+        .dsReadableForm()
         .navigationTitle(title)
         .disabled(isWorking)
         .overlay {
@@ -200,7 +205,7 @@ struct HouseholdView: View {
         .sheet(item: $sheet, content: sheetContent)
         .modifier(confirmations)
         .alert(
-            "Couldn't Complete That",
+            "Couldn’t Complete That",
             isPresented: Binding(presenting: $actionError),
             presenting: actionError
         ) { _ in
@@ -210,25 +215,38 @@ struct HouseholdView: View {
         }
     }
 
-    /// The header card's Plus line, or nil while Plus is off.
+    /// The header card's Plus line, or nil while Plus is off. The tester thank-you only where
+    /// `BuildChannel.showsTesterThanks` allows it, never in an App Store build.
     private var plusLine: String? {
         guard let plus, plus.isEnabled, let status = plus.status else { return nil }
-        return status.active ? PlusText.status(status) : String(localized: "No Plus yet")
+        guard status.active else { return String(localized: "No Plus yet") }
+        let thanks = BuildChannel.showsTesterThanks(BuildChannelStore.shared.channel, comp: status.comp)
+        return PlusText.status(status, testerThanks: thanks)
     }
 
+    /// A standard row like the others: the same icon column, text color and chevron, whether
+    /// it opens Your Plus or the purchase screen.
     @ViewBuilder
     private func plusRow(_ plus: PlusStore) -> some View {
         if plus.status?.active == true {
             NavigationLink {
                 YourPlusView()
             } label: {
-                Label("DinnerOS Plus", systemImage: "checkmark.seal")
+                DSIconRow(systemImage: "checkmark.seal") { Text("DinnerOS Plus") }
             }
         } else {
             Button {
                 plus.showsPurchase = true
             } label: {
-                Label("DinnerOS Plus", systemImage: "sparkles")
+                HStack {
+                    DSIconRow(systemImage: "sparkles") { Text("DinnerOS Plus") }
+                    Image(systemName: "chevron.forward")
+                        .font(DS.Typography.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(Color.primary)
+                .contentShape(.rect)
             }
         }
     }
@@ -246,7 +264,7 @@ struct HouseholdView: View {
                     }
                 })
         ) {
-            Label(kind.toggleTitle, systemImage: kind.systemImage)
+            DSIconRow(systemImage: kind.systemImage) { Text(kind.toggleTitle) }
         }
         .disabled(lock.isTurningOn)
         .accessibilityIdentifier("account.biometricSignIn")
@@ -268,7 +286,7 @@ struct HouseholdView: View {
                 Button("Sign Out", role: .destructive) { Task { await session.signOut() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You'll need to sign in again to see your household.")
+                Text("You’ll need to sign in again to see your household.")
             }
         }
     }
@@ -310,13 +328,13 @@ struct HouseholdView: View {
                             Text(item.household.name)
                                 .foregroundStyle(.primary)
                             Text(item.role.displayName)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(DS.Typography.subheadline)
+                                .foregroundStyle(DS.Colors.secondaryText)
                         }
                         Spacer()
                         if isSelected {
                             Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
+                                .foregroundStyle(DS.Colors.accent)
                                 .accessibilityHidden(true)
                         }
                     }
@@ -340,7 +358,7 @@ struct HouseholdView: View {
                         onRemove: { memberPendingRemoval = member })
                 }
             } else {
-                Text("Your role can't see the member list.")
+                Text("Your role can’t see the member list.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -348,8 +366,10 @@ struct HouseholdView: View {
 
     private func invitationsSection(_ detail: HouseholdDetail) -> some View {
         Section {
-            Button("Add Someone to \(detail.household.name)", systemImage: "person.badge.plus") {
+            Button {
                 sheet = .invite
+            } label: {
+                DSIconRow(systemImage: "person.badge.plus") { Text("Add Someone") }
             }
             ForEach(households.invitations) { invitation in
                 HStack {
@@ -358,8 +378,8 @@ struct HouseholdView: View {
                         Text(
                             "\(invitation.role.displayName) · Expires \(invitation.expiresAt.formatted(date: .abbreviated, time: .omitted))"
                         )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.subheadline)
+                        .foregroundStyle(DS.Colors.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                     Spacer()
@@ -375,7 +395,7 @@ struct HouseholdView: View {
                 }
                 .swipeActions {
                     Button("Revoke") { invitationPendingRevoke = invitation }
-                        .tint(.red)
+                        .tint(DS.Colors.destructive)
                 }
             }
         } header: {
@@ -391,11 +411,15 @@ struct HouseholdView: View {
 
     private var moreHouseholdsSection: some View {
         Section("Other Households") {
-            Button("Create Another Household", systemImage: "house") {
+            Button {
                 sheet = .createHousehold
+            } label: {
+                DSIconRow(systemImage: "house") { Text("Create Another Household") }
             }
-            Button("Join with a Code", systemImage: "envelope.open") {
+            Button {
                 sheet = .joinHousehold
+            } label: {
+                DSIconRow(systemImage: "envelope.open") { Text("Join with a Code") }
             }
         }
     }
@@ -413,11 +437,11 @@ struct HouseholdView: View {
                 Button("Leave Household", role: .destructive) { perform { try await households.leaveHousehold() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("You'll lose access to its plans and lists, and you'll need a new invitation to rejoin.")
+                Text("You’ll lose access to its plans and lists, and you’ll need a new invitation to rejoin.")
             }
         } footer: {
             if households.isOnlyAdmin == true {
-                Text("You're this household's only admin. Make another member an admin before you leave.")
+                Text("You’re this household’s only admin. Make another member an admin before you leave.")
             }
         }
     }
@@ -429,13 +453,17 @@ struct HouseholdView: View {
         case .authorized:
             LabeledContent("Notifications", value: String(localized: "On"))
         case .notDetermined:
-            Button("Turn On Notifications", systemImage: "bell.badge") {
+            Button {
                 Task { await push.requestAuthorizationIfNeeded() }
+            } label: {
+                DSIconRow(systemImage: "bell.badge") { Text("Turn On Notifications") }
             }
             .accessibilityHint("Lets order-day and low-stock reminders reach this phone.")
         case .denied:
-            Button("Turn On Notifications in Settings", systemImage: "bell.slash") {
+            Button {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+            } label: {
+                DSIconRow(systemImage: "bell.slash") { Text("Turn On Notifications in Settings") }
             }
             .accessibilityHint("Notifications are off for DinnerOS on this phone.")
         }
@@ -460,7 +488,7 @@ struct HouseholdView: View {
                 biometricRow(biometricLock, kind: kind)
             }
             if let me, !me.identities.isEmpty {
-                LabeledContent("Signed in with") {
+                LabeledContent("Signed In With") {
                     Text(me.identities.map { Self.providerName($0.provider) }.formatted(.list(type: .and)))
                 }
             }
@@ -468,7 +496,7 @@ struct HouseholdView: View {
                 HStack {
                     ProgressView()
                     Text("Loading account…")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -584,14 +612,15 @@ private struct HouseholdMemberRow: View {
     var body: some View {
         HStack(spacing: DS.Space.m) {
             Image(systemName: member.role == .admin ? "person.crop.circle.badge.checkmark" : "person.crop.circle")
-                .font(.title2)
-                .foregroundStyle(.tint)
+                .font(DS.Typography.title)
+                .foregroundStyle(DS.Colors.accent)
+                .dsIconColumn()
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(isCurrentUser ? "\(member.name) (You)" : member.name)
                 Text(member.role.displayName)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer()
@@ -637,7 +666,7 @@ private struct HouseholdConfirmations: ViewModifier {
                 Button("Remove", role: .destructive) { removeMember(member) }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("They'll lose access to this household's plans and lists.")
+                Text("They’ll lose access to this household’s plans and lists.")
             }
             .confirmationDialog(
                 roleChangeTitle,
@@ -684,27 +713,32 @@ private struct HouseholdConfirmations: ViewModifier {
 }
 
 /// The top of the Household tab: the household's name, its members' initials, and its Plus.
+/// The name is a title one step under a large title, below the tab's small "Household" header,
+/// so the tab doesn't show two large titles (build 121).
 private struct HouseholdHeaderCard: View {
     let detail: HouseholdDetail
     let plusLine: String?
+    @ScaledMetric(relativeTo: .subheadline) private var avatarSize: CGFloat = 36
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             Text(detail.household.name)
-                .font(.title.bold())
+                .font(DS.Typography.title)
+                .accessibilityAddTraits(.isHeader)
             if let members = detail.members, !members.isEmpty {
-                HStack(spacing: -8) {
+                HStack(spacing: -DS.Space.s) {
                     ForEach(members.prefix(6)) { member in
                         Text(Self.initials(member.name))
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(Color.accentColor, in: .circle)
-                            .overlay(Circle().stroke(DS.Colors.groupedBackground, lineWidth: 2))
+                            .font(DS.Typography.subheadline.bold())
+                            // Readable on the accent fill in light and dark mode.
+                            .foregroundStyle(DS.Colors.onAccent)
+                            .frame(width: avatarSize, height: avatarSize)
+                            .background(DS.Colors.accent, in: .circle)
+                            .overlay(Circle().stroke(DS.Colors.groupedBackground, lineWidth: DS.Space.hairline))
                     }
                     if members.count > 6 {
                         Text("+\(members.count - 6)")
-                            .font(.footnote.bold())
+                            .font(DS.Typography.footnote.bold())
                             .padding(.leading, DS.Space.ml)
                     }
                 }
@@ -713,8 +747,8 @@ private struct HouseholdHeaderCard: View {
             }
             if let plusLine {
                 Label(plusLine, systemImage: "sparkles")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

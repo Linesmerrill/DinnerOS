@@ -211,7 +211,7 @@ func TestIntegrationSavedProposalReadsInTodaysWords(t *testing.T) {
 	}
 	want := []Reason{
 		{Code: "familiar", Text: "A household regular (14 times)"},
-		{Code: "learnedTaste", Text: "You've been choosing more pork lately"},
+		{Code: "learnedTaste", Text: "You’ve been choosing more pork lately"},
 	}
 	if !reflect.DeepEqual(got.Slots[0].Reasons, want) {
 		t.Errorf("reasons = %+v, want %+v", got.Slots[0].Reasons, want)

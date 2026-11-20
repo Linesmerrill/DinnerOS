@@ -152,7 +152,7 @@ func (s *snapshot) quickSection() Section {
 
 // newToYou: suggestible main meals never ordered or cooked, by taste fit.
 func (s *snapshot) newToYou() Section {
-	sec := Section{ID: SectionNewToYou, Kind: KindCarousel, Title: "New to You", Subtitle: "Meals you haven't had yet"}
+	sec := Section{ID: SectionNewToYou, Kind: KindCarousel, Title: "New to You", Subtitle: "Meals you haven’t had yet"}
 	if s.in.Profile.Configured() {
 		sec.Subtitle = "Picked for your taste"
 	}
@@ -320,7 +320,7 @@ func (s *snapshot) longCooks() Section {
 // recently ordered.
 func (s *snapshot) sides() Section {
 	sec := Section{
-		ID: SectionSides, Kind: KindCarousel, Title: "Sides & Add-ons", Subtitle: "Your most-ordered extras",
+		ID: SectionSides, Kind: KindCarousel, Title: "Sides & Add-Ons", Subtitle: "Your most-ordered extras",
 		MoreQuery: map[string]string{"addons": "true", "sort": string(SortPopular)},
 	}
 	for _, it := range top(s.items,

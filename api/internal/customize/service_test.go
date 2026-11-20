@@ -669,11 +669,11 @@ func TestAmountTextRendering(t *testing.T) {
 	for _, tc := range []struct {
 		quantity, unit, want string
 	}{
-		{"10", "oz", "10 ounce"},
-		{"20", "oz", "20 ounce"},
-		{"1/2", "lb", "½ pound"},
-		{"3/2", "lb", "1 ½ pound"},
-		{"500", "g", "500 gram"},
+		{"10", "oz", "10 oz"},
+		{"20", "oz", "20 oz"},
+		{"1/2", "lb", "½ lb"},
+		{"3/2", "lb", "1 ½ lb"},
+		{"500", "g", "500 g"},
 		{"2", "count", "2"},
 	} {
 		q, err := ingredients.ParseQuantity(tc.quantity)

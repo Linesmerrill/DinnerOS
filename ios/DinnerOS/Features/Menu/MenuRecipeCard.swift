@@ -101,12 +101,15 @@ struct MenuRecipeCard: View {
     /// The name is all a card says now: what it is and how long it takes, and the rest is on
     /// the recipe screen.
     private var title: some View {
-        CardTitle(name: card.recipe.name)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-                MenuFormat.cardAccessibilityLabel(
-                    name: card.recipe.name, minutes: card.recipe.displayMinutes, isQuick: isQuick,
-                    badge: contextBadge?.text, isAddOn: card.recipe.isAddon, inPlan: card.inPlan))
+        CardTitle(
+            name: card.recipe.name,
+            reservesHeight: MenuCardMetrics.reservesTitleHeight(hasRowBelow: size == .fullWidth && canAdd)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            MenuFormat.cardAccessibilityLabel(
+                name: card.recipe.name, minutes: card.recipe.displayMinutes, isQuick: isQuick,
+                badge: contextBadge?.text, isAddOn: card.recipe.isAddon, inPlan: card.inPlan))
     }
 
     private var contextBadge: MenuBadge? { MenuCardBadge.context(in: card.badges) }
@@ -126,7 +129,6 @@ struct MenuRecipeCard: View {
                 }
             }
             .buttonStyle(.dsSecondary(.small, fullWidth: true))
-            .tint(card.inPlan ? Color.accentColor : Color.accentColor)
             .disabled(isBusy)
             .accessibilityLabel(
                 card.inPlan
@@ -199,7 +201,7 @@ struct MenuRecipeCard: View {
     .preferredColorScheme(.dark)
 }
 
-/// Mixed name lengths, a card with no cook time, and one with no photo — every card in the row
+/// Mixed name lengths, a card with no cook time, and one with no photo: every card in the row
 /// has to be the same height.
 #Preview("Equal heights") {
     NavigationStack {

@@ -55,9 +55,9 @@ func (e *CodeLimitError) Unwrap() error { return ErrCodeLimit }
 const (
 	CodeHelp            = "Use 3 to 20 letters, numbers or hyphens."
 	codeHyphenMessage   = "Start and end with a letter or number."
-	codeNotAllowedText  = "That code isn't allowed."
+	codeNotAllowedText  = "That code isn’t allowed."
 	codeTakenText       = "That code is taken."
-	codeSameText        = "That's already your code."
+	codeSameText        = "That’s already your code."
 	codeAvailableText   = "You can use that code."
 	codeRetiredText     = "That code was replaced. Ask for the new one."
 	codeChangedNowText  = "Your code just changed. Check it and try again."

@@ -67,7 +67,7 @@ struct RecipeEditView: View {
                             Label(problem, systemImage: "exclamationmark.circle")
                                 .foregroundStyle(.secondary)
                         } footer: {
-                            Text("Save turns on once that's fixed.")
+                            Text("Save turns on once that’s fixed.")
                         }
                     }
                     if draft.canChangePhoto {
@@ -135,7 +135,7 @@ struct RecipeEditView: View {
                     }
                 }
             }
-            .alert("Couldn't Save That", isPresented: Binding(presenting: $errorMessage)) {
+            .alert("Couldn’t Save That", isPresented: Binding(presenting: $errorMessage)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "")
@@ -198,7 +198,7 @@ struct RecipeEditView: View {
                 .disabled(draft.lines.isEmpty)
             }
         } footer: {
-            Text("Rename an ingredient to swap it. We'll offer to change the steps too.")
+            Text("Rename an ingredient to swap it. We’ll offer to change the steps too.")
         }
     }
 

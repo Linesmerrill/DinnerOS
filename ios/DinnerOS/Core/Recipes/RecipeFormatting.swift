@@ -149,7 +149,29 @@ nonisolated enum RecipeFormat {
         case "kg": String(localized: "kg")
         case "ml": String(localized: "mL")
         case "l": String(localized: "L")
-        default: sourceUnit
+        default: abbreviatedUnit(sourceUnit)
+        }
+    }
+
+    /// A unit as written by a source, in the app's one short form: "ounce" and "ounces" read
+    /// "oz", "kcal" reads "Cal", "tablespoon" reads "Tbsp". Anything else stays as written.
+    static func abbreviatedUnit(_ unit: String) -> String {
+        let key = unit.trimmingCharacters(in: .whitespaces).lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        switch key {
+        case "ounce", "ounces", "oz": return String(localized: "oz")
+        case "fluid ounce", "fluid ounces", "fl oz", "fl. oz", "floz": return String(localized: "fl oz")
+        case "pound", "pounds", "lb", "lbs": return String(localized: "lb")
+        case "gram", "grams", "g", "gr": return String(localized: "g")
+        case "kilogram", "kilograms", "kg": return String(localized: "kg")
+        case "milligram", "milligrams", "mg": return String(localized: "mg")
+        case "milliliter", "milliliters", "millilitre", "millilitres", "ml": return String(localized: "mL")
+        case "liter", "liters", "litre", "litres", "l": return String(localized: "L")
+        case "tablespoon", "tablespoons", "tbsp", "tbs", "tbl": return String(localized: "Tbsp")
+        case "teaspoon", "teaspoons", "tsp": return String(localized: "tsp")
+        case "kcal", "cal", "cals", "calorie", "calories", "kilocalorie", "kilocalories":
+            return String(localized: "Cal")
+        default: return unit
         }
     }
 

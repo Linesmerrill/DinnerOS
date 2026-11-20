@@ -272,7 +272,7 @@ func TestRefreshCreatesOneReminderPerWeek(t *testing.T) {
 		n.Subject.Kind != notifications.SubjectShoppingWeek || n.Subject.ID != testWeek {
 		t.Errorf("notification = %+v", n)
 	}
-	if n.Title != "Time to order this week's groceries" {
+	if n.Title != "Time to order this week’s groceries" {
 		t.Errorf("title = %q", n.Title)
 	}
 	// Plain and short: one idea per sentence, and "Tap" because tapping

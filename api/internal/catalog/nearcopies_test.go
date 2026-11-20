@@ -137,7 +137,7 @@ func TestRowsPreferRecipesNotShownAbove(t *testing.T) {
 		wantQuick []string
 		wantMore  bool
 	}{
-		// Chef's Picks shows 1 to 12; Quick has 13 to 20 new, enough alone.
+		// Chef’s Picks shows 1 to 12; Quick has 13 to 20 new, enough alone.
 		{20, quickDishes(13, 20), true},
 		// Quick has only 13 and 14 new: they lead, then the repeats.
 		{14, append(quickDishes(13, 14), quickDishes(1, 10)...), true},

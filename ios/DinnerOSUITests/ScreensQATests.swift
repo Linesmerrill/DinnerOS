@@ -36,6 +36,10 @@ final class ScreensQATests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Set Up Your Household"].waitForExistence(timeout: 15))
         shot(app, "First run › Set Up Your Household")
         app.staticTexts["Join with a Code"].tap()
+        // The pushed screen, settled: its code field is on screen and the push has finished.
+        let codeField = app.textFields.firstMatch
+        _ = codeField.waitForExistence(timeout: 5)
+        waitStill(app)
         shot(app, "First run › Join with a Code")
         back(app)
         app.staticTexts["Create a Household"].tap()
@@ -119,11 +123,17 @@ final class ScreensQATests: XCTestCase {
                 field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count))
             }
             field.typeText(recipe)
+            // The results, loaded: no gray loading card in the screenshot.
+            let results = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
+            for _ in 0..<10 where !results.allElementsBoundByIndex.contains(where: { $0.exists && !$0.frame.isEmpty }) {
+                sleep(1)
+            }
             snap(app, "Menu › search typed, \(kind) (\(mode))")
             // Put the keyboard away with Done, then tap the result card that's on screen: the same
             // name can also sit in a carousel further up.
             let done = app.toolbars.buttons["Done"].firstMatch
             if done.waitForExistence(timeout: 2) { done.tap() }
+            _ = waitGone(app.keyboards.firstMatch, timeout: 3)
             snap(app, "Menu › search after Done, \(kind) (\(mode))")
             // The week strip keeps the week you're on (it once ran back to weeks from 2025).
             // Expanded, this week's pill; collapsed, the one-line "This Week · Nov 15–21".
@@ -146,16 +156,33 @@ final class ScreensQATests: XCTestCase {
             card.tap()
             XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn't open")
             shot(app, "Recipe page › \(kind)")
+            // Each tab, scrolled so its content is on screen (on an iPhone the tab picker sits
+            // below the photo).
             for tab in ["Ingredients", "Nutrition"] where app.buttons[tab].firstMatch.exists {
-                app.buttons[tab].firstMatch.tap()
+                let picker = app.buttons[tab].firstMatch
+                reveal(picker, in: app)
+                picker.tap()
+                sleep(1)
+                scrollContent(app)
                 shot(app, "Recipe page › \(kind) › \(tab)")
+                scrollToTop(app)
             }
-            if app.buttons["More"].exists {
-                app.buttons["More"].tap()
+            let more = app.buttons["More"].firstMatch
+            if more.exists {
+                more.tap()
+                // The menu is open: one of its items is on screen.
+                let item = app.buttons.matching(
+                    NSPredicate(format: "label IN %@", ["Delete Recipe", "Edit Recipe", "Share", "Report a Problem"])
+                ).firstMatch
+                if !item.waitForExistence(timeout: 4) {
+                    problems.append("Recipe page › \(kind): the More menu didn't open")
+                }
+                waitStill(app)
                 shot(app, "Recipe page › \(kind) › More menu")
-                app.swipeDown()
+                dismissMenu(app)
             }
-            app.swipeUp()
+            scrollToTop(app)
+            scrollContent(app)
             shot(app, "Recipe page › \(kind) › scrolled")
             // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
             // to the top in case it ever scrolls away again.
@@ -180,7 +207,9 @@ final class ScreensQATests: XCTestCase {
             }
         }
 
-        // Menu: notifications, the ⋯ menu, setup again.
+        // Menu: notifications, the ⋯ menu, setup again. A fresh launch, so no search text is left
+        // over from the recipe search above.
+        app = launchSignedIn()
         app.buttons["Menu"].firstMatch.tap()
         sleep(1)
         let bell = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'notification'")).firstMatch
@@ -191,6 +220,10 @@ final class ScreensQATests: XCTestCase {
             back(app)
         }
         app.buttons["Week Menu"].tap()
+        if !app.buttons["Run Setup Again"].waitForExistence(timeout: 4) {
+            problems.append("Menu: the ⋯ menu didn't open")
+        }
+        waitStill(app)
         shot(app, "Menu › ⋯ menu")
         if app.buttons["Run Setup Again"].exists {
             app.buttons["Run Setup Again"].tap()
@@ -273,6 +306,42 @@ final class ScreensQATests: XCTestCase {
         root.children.flatMap { child in
             (type == .any || child.elementType == type ? [child] : []) + all(in: child, of: type)
         }
+    }
+
+    /// Waits for a push, sheet or menu animation to finish.
+    @MainActor
+    private func waitStill(_ app: XCUIApplication) {
+        sleep(1)
+        settleForScreenshot(app)
+    }
+
+    /// Scrolls the page's content up by about half a screen, in the main scroll view (on an iPad
+    /// a swipe in the middle of the screen can land outside it).
+    @MainActor
+    private func scrollContent(_ app: XCUIApplication) {
+        let scroll = app.scrollViews.allElementsBoundByIndex
+            .filter { $0.exists && !$0.frame.isEmpty }
+            .max { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
+        if let scroll {
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        } else {
+            app.swipeUp(velocity: .slow)
+        }
+        sleep(1)
+    }
+
+    @MainActor
+    private func scrollToTop(_ app: XCUIApplication) {
+        for _ in 0..<3 { scrollBack(app) }
+    }
+
+    /// Closes an open menu by tapping the top corner of the screen, away from its items.
+    @MainActor
+    private func dismissMenu(_ app: XCUIApplication) {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
+        sleep(1)
     }
 
     /// Cancel, Done or Close if the screen has one, else the back button, else swipe the sheet away.

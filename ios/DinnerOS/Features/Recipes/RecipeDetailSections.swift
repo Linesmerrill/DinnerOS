@@ -209,7 +209,7 @@ struct IngredientRow: View {
         } else if canEdit {
             Menu {
                 let isComponent = state?.isComponent == true
-                Section(isComponent ? "Don't Make \(line.name)" : "Skip \(line.name)") {
+                Section(isComponent ? "Don’t Make \(line.name)" : "Skip \(line.name)") {
                     if canSkipOnce {
                         Button("Just This Once", systemImage: "calendar") { leaveOut(.thisOnce) }
                     }
@@ -228,7 +228,7 @@ struct IngredientRow: View {
                     .foregroundStyle(.secondary)
                     .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
             }
-            .accessibilityLabel(state?.isComponent == true ? "Don't Make \(line.name)" : "Skip \(line.name)")
+            .accessibilityLabel(state?.isComponent == true ? "Don’t Make \(line.name)" : "Skip \(line.name)")
         }
     }
 
@@ -299,7 +299,7 @@ struct RecipeNutritionSection: View {
                 } description: {
                     Text(
                         onAdd == nil
-                            ? "This recipe didn't come with nutrition information."
+                            ? "This recipe didn’t come with nutrition information."
                             : "Add calories, protein and more for one serving.")
                 } actions: {
                     if let onAdd {

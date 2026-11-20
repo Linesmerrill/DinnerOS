@@ -130,7 +130,7 @@ struct SpecialtyQuickPicker: View {
                         Text("Suggested Options")
                     } footer: {
                         Text(
-                            "A store alternative lists regular ingredients instead. A house-made batch lists what's needed to make a jar you keep in the pantry."
+                            "A store alternative lists regular ingredients instead. A house-made batch lists what’s needed to make a jar you keep in the pantry."
                         )
                     }
                 }

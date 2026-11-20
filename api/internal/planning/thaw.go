@@ -319,7 +319,7 @@ func thawSummary(item ThawItem) string {
 	label := labelDate(item.FrozenOn)
 	switch {
 	case label != "" && len(item.Recipes) > 0:
-		fmt.Fprintf(&b, "Grab the %s bag dated %s. It's for %s tonight. ",
+		fmt.Fprintf(&b, "Grab the %s bag dated %s. It’s for %s tonight. ",
 			item.Name, label, strings.Join(item.Recipes, " and "))
 	case label != "":
 		fmt.Fprintf(&b, "Grab the %s bag dated %s. ", item.Name, label)

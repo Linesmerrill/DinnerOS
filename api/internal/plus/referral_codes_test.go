@@ -321,9 +321,9 @@ func TestCodeRoutes(t *testing.T) {
 		"ab":        {false, "Use 3 to 20 letters, numbers or hyphens."},
 		"lines fam": {false, "Use 3 to 20 letters, numbers or hyphens."},
 		"-lines":    {false, "Start and end with a letter or number."},
-		"admin":     {false, "That code isn't allowed."},
-		"shit-fam":  {false, "That code isn't allowed."},
-		oldCode:     {false, "That's already your code."},
+		"admin":     {false, "That code isn’t allowed."},
+		"shit-fam":  {false, "That code isn’t allowed."},
+		oldCode:     {false, "That’s already your code."},
 	} {
 		if got := avail("u1", hh, code); got != want {
 			t.Errorf("availability %q = %+v, want %+v", code, got, want)

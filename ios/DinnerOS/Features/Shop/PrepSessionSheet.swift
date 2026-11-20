@@ -154,7 +154,7 @@ struct PrepSessionSheet: View {
             recipeID: suggestion.recipeID, name: suggestion.recipeName, to: shopping.week,
             day: PlanDay(rawValue: suggestion.day), servings: suggestion.servings)
         if entry == nil {
-            errorMessage = planner.errorMessage ?? String(localized: "That meal couldn't be added. Try again.")
+            errorMessage = planner.errorMessage ?? String(localized: "That meal couldn’t be added. Try again.")
         }
     }
 }
@@ -315,7 +315,7 @@ private struct PrepFreezerBags: View {
 
     private var controls: some View {
         HStack(spacing: DS.Space.m) {
-            Label("Freezer bags", systemImage: "snowflake")
+            Label("Freezer Bags", systemImage: "snowflake")
                 .font(.headline)
                 .foregroundStyle(PrepStyle.ice)
             Spacer(minLength: DS.Space.s)
@@ -575,7 +575,7 @@ struct PrepBagLabel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
-            Label("Write on each bag", systemImage: "pencil.and.scribble")
+            Label("Write on Each Bag", systemImage: "pencil.and.scribble")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {

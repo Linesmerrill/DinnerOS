@@ -124,11 +124,11 @@ func (s *Service) Set(ctx context.Context, actor households.Membership, in Input
 // name.
 func (s *Service) recipeName(ctx context.Context, householdID, id string) (string, error) {
 	if s.recipes == nil {
-		return "", invalid("You can't skip an ingredient in just one recipe right now.")
+		return "", invalid("You can’t skip an ingredient in just one recipe right now.")
 	}
 	r, err := s.recipes.Get(ctx, householdID, id)
 	if errors.Is(err, recipes.ErrNotFound) {
-		return "", invalid("That recipe isn't in your household anymore.")
+		return "", invalid("That recipe isn’t in your household anymore.")
 	}
 	if err != nil {
 		return "", fmt.Errorf("skips: load recipe: %w", err)

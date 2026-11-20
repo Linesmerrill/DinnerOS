@@ -448,7 +448,7 @@ func (s *Service) validOptionInput(ctx context.Context, householdID string, sp S
 	}
 	if based := strings.TrimSpace(in.BasedOnOptionID); based != "" {
 		if based == selfID {
-			return Option{}, invalid("basedOnOptionId can't be the option itself")
+			return Option{}, invalid("basedOnOptionId can’t be the option itself")
 		}
 		if _, err := s.findOption(ctx, householdID, sp, based); errors.Is(err, ErrNotFound) {
 			return Option{}, invalid("basedOnOptionId is not an option for %s", sp.Name)

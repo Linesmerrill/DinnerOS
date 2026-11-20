@@ -34,7 +34,7 @@ final class AnyListGuideQATests: XCTestCase {
         app.navigationBars["Grocery List"].buttons["More"].tap()
         app.buttons["Send to AnyList"].firstMatch.tap()
         XCTAssertTrue(
-            app.navigationBars["Add your list to AnyList"].waitForExistence(timeout: 3),
+            app.navigationBars["Add Your List to AnyList"].waitForExistence(timeout: 3),
             "The guide didn't show a second time")
         app.buttons["Done"].firstMatch.tap()
 
@@ -137,10 +137,10 @@ final class AnyListGuideQATests: XCTestCase {
     @MainActor
     private func checkGuide(_ app: XCUIApplication, from place: String) {
         XCTAssertTrue(
-            app.navigationBars["Add your list to AnyList"].waitForExistence(timeout: 5), "\(place): no guide")
+            app.navigationBars["Add Your List to AnyList"].waitForExistence(timeout: 5), "\(place): no guide")
         snap(app, "AnyList guide from \(place) (\(mode))")
         XCTAssertTrue(
-            app.staticTexts["Don't use AnyList Recipe Import from the share sheet. It reads your list as a recipe."]
+            app.staticTexts["Don’t use AnyList Recipe Import from the share sheet. It reads your list as a recipe."]
                 .exists, "\(place): no Recipe Import warning")
         let steps = [
             "Step 1. Open your list in AnyList and tap Add Item.",

@@ -63,7 +63,7 @@ struct ProductDecisionSheet: View {
             } header: {
                 Text("No Longer on Walmart")
             } footer: {
-                Text("These can't go in your cart. Choose a new product or skip them.")
+                Text("These can’t go in your cart. Choose a new product or skip them.")
             }
         }
         let unavailable = review.unavailable
@@ -111,8 +111,9 @@ struct ProductDecisionSheet: View {
             }
         }
         .padding(DS.Space.l)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
+        .dsReadableWidth()
+        .background(DS.Colors.groupedBackground)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func decide(_ decision: ProductCheckDecision, _ line: ProductCheckLine) {

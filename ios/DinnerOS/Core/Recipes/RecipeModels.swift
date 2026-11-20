@@ -209,6 +209,8 @@ nonisolated struct RecipeNutrient: Decodable, Equatable, Sendable {
     let name: String
     let amount: Double
     let unit: String
+    /// The server's own wording, "640 Cal" or "39 g"; `nil` from an older server.
+    var text: String? = nil
 }
 
 nonisolated struct RecipeStep: Decodable, Equatable, Sendable, Identifiable {

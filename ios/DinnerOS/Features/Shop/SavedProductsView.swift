@@ -27,7 +27,7 @@ struct SavedProductsView: View {
                     ChooseInWalmartView(items: choices.items)
                 }
             }
-            .alert("Couldn't Remove the Product", isPresented: Binding(presenting: $actionError)) {
+            .alert("Couldn’t Remove the Product", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(actionError ?? "")
@@ -42,7 +42,7 @@ struct SavedProductsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Saved Products", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Saved Products", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -56,7 +56,7 @@ struct SavedProductsView: View {
                 ContentUnavailableView(
                     "No Saved Products", systemImage: "bookmark",
                     description: Text(
-                        "Choose a product for an ingredient on the Shop tab, and it's saved here for every week.")
+                        "Choose a product for an ingredient on the Shop tab, and it’s saved here for every week.")
                 )
             } else {
                 list
@@ -80,8 +80,8 @@ struct SavedProductsView: View {
                 } footer: {
                     Text(
                         shopping.canEdit
-                            ? "These are no longer on Walmart, so they can't go in your cart. Tap one to choose a new product."
-                            : "These are no longer on Walmart, so they can't go in your cart."
+                            ? "These are no longer on Walmart, so they can’t go in your cart. Tap one to choose a new product."
+                            : "These are no longer on Walmart, so they can’t go in your cart."
                     )
                 }
             }

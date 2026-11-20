@@ -279,7 +279,7 @@ func ReasonText(c PackageCount, size *ingredients.Amount) string {
 		if size != nil {
 			sizeText = AmountText(*size)
 		}
-		return fmt.Sprintf("Check amount: %s doesn't convert to a %s package", amountList(c.Unconverted), sizeText)
+		return fmt.Sprintf("Check amount: %s doesn’t convert to a %s package", amountList(c.Unconverted), sizeText)
 	case ReasonCapped:
 		return fmt.Sprintf("Check amount: capped at %d packages", MaxPackages)
 	}

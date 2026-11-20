@@ -36,7 +36,8 @@ struct InviteMemberSheet: View {
                     form
                 }
             }
-            .navigationTitle(result == nil ? "Add Someone to \(householdName)" : "Join Code")
+            // Short so it never truncates; the footer names the household (build 121).
+            .navigationTitle(result == nil ? "Add Someone" : "Join Code")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if result == nil {
@@ -77,12 +78,14 @@ struct InviteMemberSheet: View {
                     .onSubmit { Task { await send() } }
                     .onAppear { isEmailFocused = true }
             } footer: {
-                Text("They'll get an email with a link and a code. Invitations expire after 7 days.")
+                Text(
+                    "They’ll get an email with a link and a code to join \(householdName). Invitations expire after 7 days."
+                )
             }
             if roles.isEmpty {
                 Section {
-                    Text("Your role can't invite people to this household.")
-                        .foregroundStyle(.secondary)
+                    Text("Your role can’t invite people to this household.")
+                        .foregroundStyle(DS.Colors.secondaryText)
                 }
             } else {
                 Section {
@@ -102,6 +105,7 @@ struct InviteMemberSheet: View {
             }
         }
         .disabled(isSending)
+        .dsReadableForm()
     }
 
     private func send() async {
@@ -132,18 +136,18 @@ struct InviteCreatedView: View {
             Section {
                 VStack(spacing: DS.Space.s) {
                     Image(systemName: result.emailDelivered ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .font(.largeTitle)
-                        .foregroundStyle(result.emailDelivered ? Color.accentColor : Color.orange)
+                        .font(DS.Typography.largeTitle)
+                        .foregroundStyle(result.emailDelivered ? DS.Colors.success : DS.Colors.warning)
                         .accessibilityHidden(true)
                     Text(result.emailDelivered ? "Invitation Sent" : "Email Not Sent")
-                        .font(.title2.bold())
+                        .font(DS.Typography.title)
                     Text(
                         result.emailDelivered
                             ? "We emailed \(result.invitation.email) a link to join."
-                            : "We couldn't email \(result.invitation.email). The invitation still works: share the code below."
+                            : "We couldn’t email \(result.invitation.email). The invitation still works: share the code below."
                     )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -152,7 +156,7 @@ struct InviteCreatedView: View {
             }
             Section {
                 Text(result.code)
-                    .font(.largeTitle.monospaced().weight(.semibold))
+                    .font(DS.Typography.largeTitle.monospaced())
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
@@ -161,10 +165,12 @@ struct InviteCreatedView: View {
                 Button {
                     copyCode()
                 } label: {
-                    Label(didCopy ? "Copied" : "Copy Code", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                    DSIconRow(systemImage: didCopy ? "checkmark" : "doc.on.doc") {
+                        Text(didCopy ? "Copied" : "Copy Code")
+                    }
                 }
                 ShareLink(item: shareMessage) {
-                    Label("Share Join Code", systemImage: "square.and.arrow.up")
+                    DSIconRow(systemImage: "square.and.arrow.up") { Text("Share Join Code") }
                 }
             } header: {
                 Text("Join Code")
@@ -174,6 +180,7 @@ struct InviteCreatedView: View {
                 )
             }
         }
+        .dsReadableForm()
     }
 
     private var shareMessage: String {

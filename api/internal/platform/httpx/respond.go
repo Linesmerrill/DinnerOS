@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/requestid"
 )
 
@@ -33,11 +34,12 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // WriteError writes the JSON error envelope, including the request ID so a
-// client-reported error can be matched to server logs.
+// client-reported error can be matched to server logs. The message reaches
+// people, so its apostrophes are made curly ("isn’t").
 func WriteError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	WriteJSON(w, status, ErrorResponse{Error: ErrorDetail{
 		Code:      code,
-		Message:   message,
+		Message:   copytext.Curly(message),
 		RequestID: requestid.From(r.Context()),
 	}})
 }

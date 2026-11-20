@@ -30,11 +30,11 @@ var (
 func RedeemMessage(err error) string {
 	switch {
 	case errors.Is(err, ErrCodeNotFound):
-		return "We couldn't find that code. Check it and try again."
+		return "We couldn’t find that code. Check it and try again."
 	case errors.Is(err, ErrCodeRetired):
 		return codeRetiredText
 	case errors.Is(err, ErrOwnCode):
-		return "That's your own code. Share it with another household."
+		return "That’s your own code. Share it with another household."
 	case errors.Is(err, ErrAlreadyRedeemed):
 		return "Your household already used a code."
 	case errors.Is(err, ErrNotNewToPlus):

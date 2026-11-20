@@ -10,7 +10,7 @@ import SwiftUI
 /// system look (Liquid Glass on iOS 26 and later) and only their height, type and shape are set
 /// here. The system adds 15 pt above and below a large button's label (10 pt for small); the
 /// styles size the label so the whole button lands on the token height.
-enum DS {
+nonisolated enum DS {
     // MARK: Colors
 
     enum Colors {
@@ -32,6 +32,21 @@ enum DS {
         /// The tint behind a light message, like the sign-in screen's notes.
         static let noticeFill = Color.secondary.opacity(0.12)
         static let errorFill = Color.red.opacity(0.12)
+        /// Text and icons on an accent fill (filled buttons, avatars, selected chips): white in
+        /// light mode, near-black on the light dark-mode green, so both pass 4.5:1 (build 121).
+        static let onAccent = Color("OnAccent")
+        /// Done, included, checked: the accent, never system green.
+        static let success = Color.accentColor
+        /// A small label's tint, like a difficulty badge: the accent, never system blue.
+        static let badge = Color.accentColor
+        /// Disabled button fill and text: one look for every disabled action.
+        static let disabledFill = Color(.tertiarySystemFill)
+        static let disabledText = Color(.tertiaryLabel)
+        /// The background under a pinned footer or bottom bar: the same as the sheet or screen.
+        static let barBackground = Color(.systemBackground)
+        /// The light accent wash behind a tinted control that isn't a system button, like the
+        /// recipe bar's servings stepper, matching `.dsSecondary` (build 121).
+        static let accentFill = Color.accentColor.opacity(0.15)
     }
 
     // MARK: Spacing
@@ -97,6 +112,12 @@ enum DS {
     enum Size {
         /// The smallest comfortable tap target.
         static let tapTarget: CGFloat = 44
+        /// The fixed column a row's leading icon sits in, so every row's text lines up.
+        static let iconColumn: CGFloat = 28
+        /// Forms and single-column content on a wide screen (iPad) stay this wide, centered.
+        static let readableWidth: CGFloat = 640
+        /// A recipe's photo is never taller than this on a wide screen.
+        static let heroMaxHeight: CGFloat = 360
     }
 
     /// Button heights. Each style has one fixed height per size; it scales with Dynamic Type.
@@ -137,6 +158,61 @@ enum DS {
     }
 }
 
+// MARK: Layout helpers
+
+extension View {
+    /// Keeps a form or single column at `DS.Size.readableWidth`, centered, on a wide screen.
+    func dsReadableWidth() -> some View {
+        frame(maxWidth: DS.Size.readableWidth).frame(maxWidth: .infinity)
+    }
+
+    /// A grouped List or Form held to the readable column on a wide screen, with the grouped
+    /// gray continuing out to the screen's edges (build 121).
+    func dsReadableForm() -> some View {
+        dsReadableWidth().background(DS.Colors.groupedBackground)
+    }
+
+    /// A row's leading icon in the shared fixed-width column.
+    func dsIconColumn() -> some View {
+        frame(width: DS.Size.iconColumn, alignment: .center)
+    }
+}
+
+/// A row with its icon in the fixed icon column, so text lines up from row to row.
+struct DSIconRow<Title: View>: View {
+    let systemImage: String
+    var tint: Color = DS.Colors.accent
+    @ViewBuilder let title: () -> Title
+
+    var body: some View {
+        HStack(spacing: DS.Space.m) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .dsIconColumn()
+                .accessibilityHidden(true)
+            title()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// A pinned footer for `.safeAreaInset(edge: .bottom, spacing: 0)`: its content in the readable
+/// column, on `DS.Colors.barBackground` from edge to edge, with a hairline on top (build 121).
+struct DSBottomBar<Content: View>: View {
+    var background: Color = DS.Colors.barBackground
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: DS.Space.sm) {
+            content()
+        }
+        .padding(DS.Space.l)
+        .dsReadableWidth()
+        .background(background)
+        .overlay(alignment: .top) { Divider() }
+    }
+}
+
 // MARK: Button styles
 
 /// The label inside a design-system button: one line at the token height, centered, with an
@@ -170,11 +246,16 @@ struct DSPrimaryButtonStyle: PrimitiveButtonStyle {
     var font: Font?
     @ScaledMetric(relativeTo: .body) private var scale: CGFloat = 1
 
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         Button(role: configuration.role, action: configuration.trigger) {
             DSButtonLabel(
                 label: configuration.label, size: size, fullWidth: fullWidth, font: font,
-                contentHeight: (size.height * scale - size.systemPadding).rounded())
+                contentHeight: (size.height * scale - size.systemPadding).rounded()
+            )
+            // White in light mode, near-black on dark mode's lighter green (4.5:1 or better).
+            .foregroundStyle(isEnabled ? DS.Colors.onAccent : DS.Colors.disabledText)
         }
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.capsule)
@@ -276,6 +357,17 @@ extension ButtonStyle where Self == DSOutlineButtonStyle {
         -> DSOutlineButtonStyle
     {
         DSOutlineButtonStyle(size: size, fullWidth: fullWidth, font: font)
+    }
+}
+
+extension ButtonStyle where Self == DSOutlineButtonStyle {
+    /// The sign-in buttons (Face ID, Apple, Google) share this one drawing, so their height,
+    /// shape and title size can't drift apart (build 121). The Face ID button is filled with the
+    /// accent and its title is `DS.Colors.onAccent`.
+    static var dsSignInPrimary: DSOutlineButtonStyle {
+        DSOutlineButtonStyle(
+            size: .large, fullWidth: true,
+            palette: { _ in .init(fill: DS.Colors.accent, stroke: DS.Colors.accent, text: DS.Colors.onAccent) })
     }
 }
 

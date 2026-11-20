@@ -30,18 +30,18 @@ type InviteNotice struct {
 
 // Invite preview copy.
 const (
-	InviteMessage         = "You both get a free month of Plus once you're set up."
+	InviteMessage         = "You both get a free month of Plus once you’re set up."
 	InviteExistingTitle   = "This code is for new households"
-	InviteExistingMessage = "Your household is already set up, so it can't use an invite code. Share your own code to give someone else a free month."
-	InviteOwnTitle        = "That's your own code"
-	InviteOwnMessage      = "Share it with another household. You both get a free month of Plus once they're set up."
+	InviteExistingMessage = "Your household is already set up, so it can’t use an invite code. Share your own code to give someone else a free month."
+	InviteOwnTitle        = "That’s your own code"
+	InviteOwnMessage      = "Share it with another household. You both get a free month of Plus once they’re set up."
 )
 
 // InviteTitle is "Lines Family invited you to DinnerOS".
 func InviteTitle(householdName string) string {
 	name := strings.TrimSpace(householdName)
 	if name == "" {
-		return "You're invited to DinnerOS"
+		return "You’re invited to DinnerOS"
 	}
 	return name + " invited you to DinnerOS"
 }

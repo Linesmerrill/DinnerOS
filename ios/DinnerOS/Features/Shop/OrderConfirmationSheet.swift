@@ -38,7 +38,7 @@ struct OrderConfirmationSheet: View {
             List {
                 Section {
                     Text(
-                        "\(shopping.providerName) doesn't tell \(configuration.displayName) what you ordered. Uncheck anything you didn't buy, and the rest goes in your pantry. Prices are optional; add them now or later from Shop."
+                        "\(shopping.providerName) doesn’t tell \(configuration.displayName) what you ordered. Uncheck anything you didn’t buy, and the rest goes in your pantry. Prices are optional; add them now or later from Shop."
                     )
                     .foregroundStyle(.secondary)
                     if let errorMessage {
@@ -136,7 +136,7 @@ struct OrderConfirmationSheet: View {
             .accessibilityHint(
                 draft.isAllSelected
                     ? "Adds everything to the pantry."
-                    : "Adds the checked items to the pantry. The rest weren't ordered.")
+                    : "Adds the checked items to the pantry. The rest weren’t ordered.")
 
             Button("Not Yet") {
                 shopping.dismissConfirmation()
@@ -147,7 +147,9 @@ struct OrderConfirmationSheet: View {
         .padding(.horizontal)
         .padding(.top, DS.Space.m)
         .padding(.bottom, DS.Space.xxs)
-        .background(.bar)
+        .dsReadableWidth()
+        .background(DS.Colors.groupedBackground)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func confirm(_ request: ConfirmShoppingOrderRequest) {

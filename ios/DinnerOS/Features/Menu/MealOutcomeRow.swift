@@ -40,13 +40,13 @@ struct MealOutcomeRow: View {
                     DidntMakeItMenu(entry: entry) { reason in
                         answer(.skipped(reason)) { events.recipeSkipped(entry, week: plans.week, reason: reason) }
                     } label: {
-                        Text("Didn't make it?")
+                        Text("Didn’t make it?")
                     }
                 }
             } else {
                 // Holds the row's height, so a card for a night still ahead lines up with its
                 // neighbours in the iPad's grid.
-                Text("Didn't make it?")
+                Text("Didn’t make it?")
                     .hidden()
                     .accessibilityHidden(true)
             }
@@ -125,7 +125,7 @@ struct DidntMakeItMenu<MenuLabel: View>: View {
                     MoveToWeekMenu(entry: entry)
                 }
             }
-            Section("Didn't Make It") {
+            Section("Didn’t Make It") {
                 ForEach(SkipReason.allCases) { reason in
                     Button(reason.title) { didntMakeIt(reason) }
                 }
@@ -134,7 +134,7 @@ struct DidntMakeItMenu<MenuLabel: View>: View {
         } label: {
             label()
         }
-        .accessibilityLabel("Didn't make \(entry.recipe.name)")
+        .accessibilityLabel("Didn’t make \(entry.recipe.name)")
     }
 
     /// The week to make a meal in when it didn't get made: next week for this week's meal, this

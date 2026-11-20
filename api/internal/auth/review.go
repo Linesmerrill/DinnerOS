@@ -38,7 +38,7 @@ const (
 
 // Messages people see. They're plain and never say which half was wrong.
 const (
-	reviewFailedMessage = "That email and password didn't work."
+	reviewFailedMessage = "That email and password didn’t work."
 	reviewLockedMessage = "Too many tries. Wait 15 minutes and try again."
 	reviewMissingFields = "Enter your email and password."
 )

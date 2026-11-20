@@ -153,7 +153,7 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
         field.typeText("admin")
-        XCTAssertTrue(waitForCheck(app, "That code isn't allowed."), "Reserved word wasn't blocked")
+        XCTAssertTrue(waitForCheck(app, "That code isn’t allowed."), "Reserved word wasn't blocked")
         snap(app, "Change Your Code, not allowed (\(mode))")
 
         // A free custom code, after the confirmation.

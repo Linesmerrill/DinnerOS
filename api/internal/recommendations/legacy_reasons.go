@@ -44,9 +44,9 @@ func currentReason(r Reason) (Reason, bool) {
 			label += " food"
 		}
 		if m[1] == "pass on" {
-			r.Text = "You've been skipping " + label + " lately"
+			r.Text = "You’ve been skipping " + label + " lately"
 		} else {
-			r.Text = "You've been choosing more " + label + " lately"
+			r.Text = "You’ve been choosing more " + label + " lately"
 		}
 		return r, true
 	}

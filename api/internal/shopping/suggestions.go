@@ -118,7 +118,7 @@ func (s *Service) MatchSuggestions(ctx context.Context, householdID, provider, f
 		return SuggestionPage{}, invalid("Pick a different store to match from.")
 	}
 	if _, ok := target.(providers.ProductSearcher); !ok {
-		return SuggestionPage{}, invalid("%s can't suggest products. Choose them yourself.", target.Name())
+		return SuggestionPage{}, invalid("%s can’t suggest products. Choose them yourself.", target.Name())
 	}
 	saved, err := s.store.ListPreferences(ctx, householdID, source.Key())
 	if err != nil {

@@ -65,6 +65,10 @@ type NotificationResponse struct {
 	// member reads it.
 	Banner    bool      `json:"banner"`
 	CreatedAt time.Time `json:"createdAt"`
+	// GroupedIDs, when there are two or more, are the notifications this one
+	// stands for: repeats shown as one ("3 invites counted"). Reading or
+	// dismissing this ID covers all of them.
+	GroupedIDs []string `json:"groupedIds,omitempty"`
 }
 
 // SubjectResponse is the record a notification is about.
@@ -97,6 +101,7 @@ func newResponse(n Notification, userID string) NotificationResponse {
 		ID: n.ID, HouseholdID: n.HouseholdID, Type: n.Type, Title: n.Title, Body: n.Body,
 		Subject: SubjectResponse{Kind: n.Subject.Kind, ID: n.Subject.ID},
 		Read:    n.ReadByUser(userID), Banner: n.Banner, CreatedAt: n.CreatedAt.UTC(),
+		GroupedIDs: n.GroupIDs,
 	}
 }
 

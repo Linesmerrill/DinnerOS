@@ -181,7 +181,7 @@ func (in RateInput) validate() (validInput, error) {
 		}
 	}
 	if slices.Contains(tags, TagMakeAgain) && slices.Contains(tags, TagNeverAgain) {
-		return validInput{}, invalid("tags make-again and never-again can't be used together")
+		return validInput{}, invalid("tags make-again and never-again can’t be used together")
 	}
 	slices.SortFunc(tags, func(a, b Tag) int { return slices.Index(allTags, a) - slices.Index(allTags, b) })
 	v := validInput{score: in.Score, comment: comment, tags: tags}

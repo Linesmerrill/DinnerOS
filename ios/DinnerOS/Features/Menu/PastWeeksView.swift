@@ -52,7 +52,7 @@ struct PastWeeksView: View {
                 ContentUnavailableView {
                     Label("No Past Weeks", systemImage: "clock.arrow.circlepath")
                 } description: {
-                    Text("Weeks you've planned or had delivered appear here.")
+                    Text("Weeks you’ve planned or had delivered appear here.")
                 }
             }
         }

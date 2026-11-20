@@ -37,13 +37,43 @@ nonisolated enum WeekStripMetrics {
 
     static func isWide(_ stripWidth: CGFloat) -> Bool { stripWidth >= wideWidth }
 
+    /// The strip's margin at each end, and the gap between pills.
+    static let margin: CGFloat = 16
+    static let spacing: CGFloat = 8
+
     /// Two-fifths of the row per week on a phone: about two and a half weeks in view, and more
-    /// of the row at the larger text sizes so the dates still fit. On a wide screen, a fixed
-    /// width, so the extra room shows more weeks rather than bigger pills.
+    /// of the row at the larger text sizes so the dates still fit.
+    ///
+    /// On a wide screen, about `widePillWidth`, so the extra room shows more weeks rather than
+    /// bigger pills, and sized so a whole number of pills fills the row exactly: lined up at
+    /// the leading edge, no pill is cut off at either end (an iPad showed half a week at the
+    /// left edge).
     static func pillWidth(stripWidth: CGFloat, typeSize: DynamicTypeSize) -> CGFloat {
         let share: CGFloat = typeSize >= .xxxLarge ? 0.62 : 0.4
-        let phone = max(140, ((stripWidth - 32) * share).rounded())
-        return isWide(stripWidth) ? min(widePillWidth + (typeSize >= .xxxLarge ? 80 : 0), phone) : phone
+        let phone = max(140, ((stripWidth - margin * 2) * share).rounded())
+        guard isWide(stripWidth) else { return phone }
+        let target = widePillWidth + (typeSize >= .xxxLarge ? 80 : 0)
+        let row = stripWidth - margin * 2
+        let count = max(1, ((row + spacing) / (target + spacing)).rounded(.down))
+        return ((row - spacing * (count - 1)) / count).rounded(.down)
+    }
+
+    /// The pill's small name line: "This Week", "Next Week", or "Last Week". Other weeks: on a
+    /// phone, the month and year over the dates; on a wide screen, where the name sits beside
+    /// the dates, nothing (or the year, for another year), so a pill never reads "Nov 2026"
+    /// where its dates should be.
+    static func pillName(week: ISOWeek, current: ISOWeek, isWide: Bool) -> String? {
+        if let relative = MenuFormat.relativeWeekName(week, current: current) { return relative }
+        guard isWide else { return week.monthAndYear() }
+        return week.year == current.year ? nil : String(week.year)
+    }
+
+    /// The week the strip lines up to show `selected`. A phone centers the selected week; a wide
+    /// screen lines the week before it up with the leading edge, so the selected week is second,
+    /// whole, with last week beside it.
+    static func scrollTarget(selected: ISOWeek, isWide: Bool, available: [ISOWeek]) -> ISOWeek {
+        guard isWide, available.contains(selected.previous) else { return selected }
+        return selected.previous
     }
 
     /// The height to reserve for the pills at `size`: what the three lines actually measure at
@@ -175,7 +205,7 @@ struct WeekStrip: View {
                 collapsedBar
             }
         }
-        .padding(.vertical, isWide ? 6 : 8)
+        .padding(.vertical, isWide ? DS.Space.xs : DS.Space.s)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         .onChange(of: plans.week, initial: true) { _, week in
@@ -249,11 +279,11 @@ struct WeekStrip: View {
                 // are, and on iOS 27 (Xcode 27, build 118) that guess left the week you're on off
                 // to the side, or the strip back at its first pills after a search, while it
                 // reported the week as on screen. A strip is a few dozen small pills.
-                HStack(spacing: DS.Space.s) {
+                HStack(spacing: WeekStripMetrics.spacing) {
                     pastButton
                     if menu.canLoadEarlierWeeks {
                         ProgressView()
-                            .frame(width: 44)
+                            .frame(width: DS.Size.tapTarget)
                             // Every pill is laid out now, so "on screen" is what asks for more,
                             // the way appearing in the lazy row did.
                             .onScrollVisibilityChange(threshold: 0.1) { isEarlierVisible = $0 }
@@ -285,14 +315,17 @@ struct WeekStrip: View {
                 }
                 .scrollTargetLayout()
             }
-            .contentMargins(.horizontal, 16, for: .scrollContent)
+            .contentMargins(.horizontal, WeekStripMetrics.margin, for: .scrollContent)
             .onGeometryChange(for: CGFloat.self) {
                 $0.size.width
             } action: {
                 stripWidth = $0
             }
             .scrollIndicators(.hidden)
-            .scrollPosition(id: $scrolledWeek, anchor: .center)
+            .carouselInSafeArea()
+            .scrollPosition(id: $scrolledWeek, anchor: isWide ? .leading : .center)
+            // A wide strip comes to rest on a pill's edge, so a drag never leaves half a week.
+            .scrollTargetBehavior(WeekStripScrollBehavior(isWide: isWide))
             .onScrollPhaseChange { _, phase in
                 if phase == .interacting { hasDragged = true }
             }
@@ -307,17 +340,25 @@ struct WeekStrip: View {
                 hasDragged = false
                 // Pills that went away with the old strip never said they left the screen.
                 isSelectedVisible = false
-                scrolledWeek = plans.week.description
+                scrolledWeek = scrollTarget(for: plans.week).description
                 settleTask?.cancel()
                 settleTask = Task { @MainActor in
                     // A lazy row guesses where pills it hasn't laid out are, so a long jump can
                     // land weeks off (it opened on October after a search). Each try lays out
                     // more of the row, so try again until the selected pill is on screen.
                     let finished = await WeekStripSettle.run(isDone: { hasDragged || isSelectedVisible }) {
-                        proxy.scrollTo(plans.week.description, anchor: .center)
+                        proxy.scrollTo(scrollTarget(for: plans.week).description, anchor: isWide ? .leading : .center)
                     }
                     if finished { canLoadEarlier = true }
                 }
+            }
+            // The pills' width comes from the strip's, which is only measured after the first
+            // scroll: the strip lined up for phone-sized pills, then the pills widened and an iPad
+            // opened on weeks from a month before. Line up again whenever the width changes.
+            .onChange(of: pillWidth) { _, _ in
+                let target = scrollTarget(for: plans.week)
+                scrolledWeek = target.description
+                proxy.scrollTo(target.description, anchor: isWide ? .leading : .center)
             }
             // Scrolling a strip that has gone (collapsed, or the menu changed view) crashed in
             // SwiftUI's scrollTo: stop trying once it leaves the screen.
@@ -349,7 +390,7 @@ struct WeekStrip: View {
         NavigationLink(value: PastWeeksRoute()) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.body.weight(.semibold))
-                .frame(width: 44)
+                .frame(width: DS.Size.tapTarget)
                 .frame(maxHeight: .infinity)
                 .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
                 .contentShape(.rect)
@@ -372,9 +413,9 @@ struct WeekStrip: View {
                 if !isThisWeekBehind { Image(systemName: "chevron.forward") }
             }
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(Color.onAccent)
+            .foregroundStyle(DS.Colors.onAccent)
             .padding(.horizontal, DS.Space.ml)
-            .frame(minHeight: 44)
+            .frame(minHeight: DS.Size.tapTarget)
             .background(.tint, in: .capsule)
             .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
             .contentShape(.capsule)
@@ -385,6 +426,7 @@ struct WeekStrip: View {
 
     /// Whether the strip is scrolled past this week, so the way back points left.
     private var isThisWeekBehind: Bool {
+        // A wide strip's position names its leading pill; a phone's names the middle one.
         menu.currentWeek < (scrolledWeek.flatMap(ISOWeek.init) ?? menu.currentWeek)
     }
 
@@ -397,13 +439,19 @@ struct WeekStrip: View {
         Task { await plans.show(week: week) }
     }
 
+    /// The pill the strip lines up on to show `week` (`WeekStripMetrics.scrollTarget`).
+    private func scrollTarget(for week: ISOWeek) -> ISOWeek {
+        WeekStripMetrics.scrollTarget(selected: week, isWide: isWide, available: menu.stripItems.map(\.week))
+    }
+
     private func scrollTo(_ week: ISOWeek) {
-        guard scrolledWeek != week.description else { return }
+        let target = scrollTarget(for: week).description
+        guard scrolledWeek != target else { return }
         if reduceMotion {
-            scrolledWeek = week.description
+            scrolledWeek = target
         } else {
             withAnimation(.easeInOut(duration: 0.25)) {
-                scrolledWeek = week.description
+                scrolledWeek = target
             }
         }
     }
@@ -451,8 +499,15 @@ struct WeekPill: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
+    @ViewBuilder
     private var name: some View {
-        Text(relativeName ?? item.week.monthAndYear())
+        if let text = WeekStripMetrics.pillName(week: item.week, current: currentWeek, isWide: isWide) {
+            nameText(text)
+        }
+    }
+
+    private func nameText(_ text: String) -> some View {
+        Text(text)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(
                 isSelected ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
@@ -519,6 +574,16 @@ struct WeekNightsMeter: View {
         if night < (isPast ? min(cooked, 7) : filled) { return base }
         if night < filled { return base.opacity(isSelected ? 0.6 : 0.45) }
         return (isSelected ? Color.onAccent : Color.secondary).opacity(0.25)
+    }
+}
+
+/// Lines a wide strip up on pill edges when a drag ends; a phone's strip scrolls freely.
+struct WeekStripScrollBehavior: ScrollTargetBehavior {
+    let isWide: Bool
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        guard isWide else { return }
+        ViewAlignedScrollTargetBehavior().updateTarget(&target, context: context)
     }
 }
 

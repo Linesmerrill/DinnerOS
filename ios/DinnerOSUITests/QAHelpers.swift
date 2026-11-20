@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Shared steps for the QA runs: sign in on the development server, wait for things, and keep a
@@ -45,13 +46,78 @@ extension XCTestCase {
         return app.navigationBars.buttons.firstMatch
     }
 
-    /// Keeps a screenshot in the test results, named for the checklist.
+    /// Keeps a screenshot in the test results, named for the checklist. First the screen
+    /// settles (no spinner, no keyboard tip, no system banner or toast); then it's kept as an
+    /// upright PNG: an iPad in landscape once came out as a portrait image tagged with an EXIF
+    /// rotation and cut off (build 120), so the pixels are redrawn the right way up.
     @MainActor
-    func snap(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+    func snap(_ app: XCUIApplication, _ name: String, settle: Bool = true) {
+        if settle { settleForScreenshot(app) }
+        let attachment = XCTAttachment(
+            data: Self.uprightPNG(XCUIScreen.main.screenshot().image), uniformTypeIdentifier: "public.png")
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    /// The screenshot as PNG data with its rotation applied to the pixels and no EXIF tag.
+    static func uprightPNG(_ image: UIImage) -> Data {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = true
+        var size = image.size
+        // The device is on its side but the image isn't: draw it in the orientation of the device.
+        let orientation = XCUIDevice.shared.orientation
+        let landscape = orientation == .landscapeLeft || orientation == .landscapeRight
+        let needsTurn = landscape && size.height > size.width && image.imageOrientation == .up
+        if needsTurn { size = CGSize(width: size.height, height: size.width) }
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.pngData { context in
+            if needsTurn, let cg = image.cgImage {
+                // Turn a portrait framebuffer a quarter turn to match landscapeLeft (home button
+                // on the right): counterclockwise for landscapeLeft, clockwise for landscapeRight.
+                let turned = UIImage(
+                    cgImage: cg, scale: image.scale, orientation: orientation == .landscapeLeft ? .left : .right)
+                turned.draw(in: CGRect(origin: .zero, size: size))
+            } else {
+                image.draw(in: CGRect(origin: .zero, size: size))
+            }
+            _ = context
+        }
+    }
+
+    /// Waits for the screen to be still before a screenshot: no activity indicator, no system
+    /// alert or banner left over (a keyboard tip, "Ready for Apple Intelligence"), and no toast.
+    @MainActor
+    func settleForScreenshot(_ app: XCUIApplication, timeout: TimeInterval = 6) {
+        let deadline = Date().addingTimeInterval(timeout)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        repeat {
+            var busy = false
+            // The keyboard's "Slide to type" tip has a Continue button.
+            let tip = app.buttons["Continue"].firstMatch
+            if app.keyboards.firstMatch.exists, tip.exists, tip.isHittable {
+                tip.tap()
+                busy = true
+            }
+            // System banners ("Ready for Apple Intelligence") sit in SpringBoard: swipe them up.
+            let banner = springboard.otherElements["NotificationShortLookView"].firstMatch
+            if banner.exists {
+                banner.swipeUp()
+                busy = true
+            }
+            // Toasts are QA-identifiable and go away by themselves.
+            if app.otherElements["toast"].firstMatch.exists || app.staticTexts["toast"].firstMatch.exists {
+                busy = true
+            }
+            if app.activityIndicators.firstMatch.exists, app.activityIndicators.firstMatch.isHittable {
+                busy = true
+            }
+            if !busy { break }
+            usleep(400_000)
+        } while Date() < deadline
+        // Transitions and image fades finish.
+        usleep(600_000)
     }
 
     @MainActor

@@ -27,7 +27,7 @@ struct AutopilotContextExplainerView: View {
                         systemImage: "calendar", title: String(localized: "Your calendar"),
                         detail: String(
                             localized:
-                                "Your iPhone works out how free each evening is between 4 and 8 pm. We only get “free”, “some”, or “busy” and the free minutes. Never event names, times, or who's invited."
+                                "Your iPhone works out how free each evening is between 4 and 8 pm. We only get “free”, “some”, or “busy” and the free minutes. Never event names, times, or who’s invited."
                         ))
                     point(
                         systemImage: "cloud.sun", title: String(localized: "The forecast"),
@@ -44,8 +44,8 @@ struct AutopilotContextExplainerView: View {
                 }
                 .padding(DS.Space.l)
             }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: DS.Space.s) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                DSBottomBar {
                     Button(action: onContinue) {
                         Text("Continue")
                     }
@@ -53,8 +53,6 @@ struct AutopilotContextExplainerView: View {
                     Button("Not Now", action: onNotNow)
                         .buttonStyle(.dsTextLink)
                 }
-                .padding(DS.Space.l)
-                .background(.bar)
             }
         }
         .interactiveDismissDisabled()
@@ -107,7 +105,7 @@ struct AutopilotDeviceContextSection: View {
             Text("Calendar & Weather")
         } footer: {
             Text(
-                "Worked out on this iPhone. We only get how busy each evening is and whether it's cold, mild, or hot, with rain or snow. Never your events or location."
+                "Worked out on this iPhone. We only get how busy each evening is and whether it’s cold, mild, or hot, with rain or snow. Never your events or location."
             )
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
@@ -170,7 +168,7 @@ struct WeatherAttributionView: View {
                         .font(.caption)
                 }
                 if let legal = attribution.legalPageURL {
-                    Link("Data sources", destination: legal)
+                    Link("Data Sources", destination: legal)
                         .font(.caption)
                 }
             }

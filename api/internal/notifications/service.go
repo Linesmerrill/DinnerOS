@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 )
 
 // Refresher brings a household's notifications up to date before they are
@@ -87,7 +88,7 @@ func (s *Service) Create(ctx context.Context, in New) (n Notification, created b
 		return Notification{}, false, fmt.Errorf("notifications: dedupe key must be 1-%d bytes", maxDedupeKey)
 	}
 	saved, err := s.store.Insert(ctx, Notification{
-		HouseholdID: in.HouseholdID, Type: in.Type, Title: in.Title, Body: in.Body, Subject: in.Subject,
+		HouseholdID: in.HouseholdID, Type: in.Type, Title: copytext.Curly(in.Title), Body: copytext.Curly(in.Body), Subject: in.Subject,
 		DedupeKey: in.DedupeKey, Banner: in.Banner, Push: Push{Status: PushPending},
 		CreatedAt: s.now().UTC().Truncate(time.Millisecond),
 	})
@@ -164,6 +165,7 @@ func (s *Service) List(ctx context.Context, actor households.Membership, q ListQ
 		page.Items = items[:limit]
 		page.NextCursor = items[limit-1].ID
 	}
+	page.Items = collapse(page.Items, actor.UserID)
 	return page, nil
 }
 
@@ -174,13 +176,15 @@ func (s *Service) Banners(ctx context.Context, actor households.Membership) ([]N
 	if err := authorizeView(actor); err != nil {
 		return nil, err
 	}
+	// Read past MaxBanners so a group of repeats still leaves room for others.
 	items, err := s.store.List(ctx, actor.HouseholdID, ListFilter{
-		UnreadBy: actor.UserID, Viewer: actor.UserID, BannerOnly: true, Limit: MaxBanners,
+		UnreadBy: actor.UserID, Viewer: actor.UserID, BannerOnly: true, Limit: MaxListLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list banners: %w", err)
 	}
-	return items, nil
+	items = collapse(items, actor.UserID)
+	return items[:min(len(items), MaxBanners)], nil
 }
 
 // UnreadCount counts the notifications the actor hasn't read.
@@ -189,7 +193,7 @@ func (s *Service) UnreadCount(ctx context.Context, actor households.Membership) 
 		return 0, err
 	}
 	s.refresh(ctx, actor.HouseholdID)
-	n, err := s.store.CountUnread(ctx, actor.HouseholdID, actor.UserID)
+	n, err := s.unreadCount(ctx, actor.HouseholdID, actor.UserID)
 	if err != nil {
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}
@@ -218,12 +222,15 @@ func (s *Service) MarkRead(ctx context.Context, actor households.Membership, ids
 	}
 	var scope []string
 	if !all {
-		scope = ids
+		var err error
+		if scope, err = s.expandGroups(ctx, actor.HouseholdID, actor.UserID, ids); err != nil {
+			return 0, fmt.Errorf("mark notifications read: %w", err)
+		}
 	}
 	if err := s.store.MarkRead(ctx, actor.HouseholdID, actor.UserID, scope); err != nil {
 		return 0, fmt.Errorf("mark notifications read: %w", err)
 	}
-	n, err := s.store.CountUnread(ctx, actor.HouseholdID, actor.UserID)
+	n, err := s.unreadCount(ctx, actor.HouseholdID, actor.UserID)
 	if err != nil {
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}
@@ -247,10 +254,14 @@ func (s *Service) Dismiss(ctx context.Context, actor households.Membership, ids 
 			return 0, invalid("ids[%d] is empty", i)
 		}
 	}
+	ids, err := s.expandGroups(ctx, actor.HouseholdID, actor.UserID, ids)
+	if err != nil {
+		return 0, fmt.Errorf("dismiss notifications: %w", err)
+	}
 	if err := s.store.Dismiss(ctx, actor.HouseholdID, actor.UserID, ids); err != nil {
 		return 0, fmt.Errorf("dismiss notifications: %w", err)
 	}
-	n, err := s.store.CountUnread(ctx, actor.HouseholdID, actor.UserID)
+	n, err := s.unreadCount(ctx, actor.HouseholdID, actor.UserID)
 	if err != nil {
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}

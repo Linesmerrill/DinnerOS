@@ -149,7 +149,7 @@ func TestHomeBuildsRowsAndLeavesEmptyOnesOut(t *testing.T) {
 	if seasonal.Subtitle != "Just right for spring" {
 		t.Errorf("seasonal subtitle = %q", seasonal.Subtitle)
 	}
-	if picks := section(t, home, "chefs-picks"); len(picks.Items) != 3 || picks.Title != "Chef's Picks This Week" {
+	if picks := section(t, home, "chefs-picks"); len(picks.Items) != 3 || picks.Title != "Chef’s Picks This Week" {
 		t.Errorf("chef's picks = %q %v", picks.Title, itemNames(picks.Items))
 	}
 }
@@ -438,7 +438,7 @@ func TestStoredCollectionsOverrideAndAdd(t *testing.T) {
 
 	// Editorial picks in order; an unknown ID is skipped.
 	if _, err := h.service.PutCollection(t.Context(), Collection{
-		ID: "chefs-picks", Title: "Chef's Picks This Week", Type: TypeEditorial, Position: 10,
+		ID: "chefs-picks", Title: "Chef’s Picks This Week", Type: TypeEditorial, Position: 10,
 		RecipeIDs: []string{chili, "66e5a1f2c3b4a5d6e7f8dead", quick},
 	}); err != nil {
 		t.Fatal(err)
@@ -503,7 +503,7 @@ func TestCollectionValidate(t *testing.T) {
 		{"computed without rule", Collection{ID: "a", Title: "A", Type: TypeAlgorithmic}, "needs a rule"},
 		{"editorial with nothing", Collection{ID: "a", Title: "A", Type: TypeEditorial}, "Pick some recipes"},
 		{"bad recipe id", Collection{ID: "a", Title: "A", Type: TypeEditorial, RecipeIDs: []string{"x"}}, "recipe IDs"},
-		{"sponsored without sponsor", Collection{ID: "a", Title: "A", Type: TypeSponsored, Rule: RuleBest}, "sponsor's name"},
+		{"sponsored without sponsor", Collection{ID: "a", Title: "A", Type: TypeSponsored, Rule: RuleBest}, "sponsor’s name"},
 		{"sponsored http link", Collection{ID: "a", Title: "A", Type: TypeSponsored, Rule: RuleBest, Sponsor: &Sponsor{Name: "X", URL: "http://x"}}, "https"},
 		{"ends before it starts", Collection{ID: "a", Title: "A", Type: TypeEditorial, Rule: RuleBest, StartsAt: testNow, EndsAt: testNow}, "end date"},
 	} {

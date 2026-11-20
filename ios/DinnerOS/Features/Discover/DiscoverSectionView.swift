@@ -50,7 +50,7 @@ struct DiscoverSectionView: View {
                         .padding(.top, DS.Space.huge)
                 }
             }
-            .padding(.horizontal, sizeClass == .regular ? 28 : 16)
+            .padding(.horizontal, DiscoverLayout.margin(isWide: sizeClass == .regular))
             .padding(.vertical, DS.Space.l)
         }
         .navigationTitle(section?.title ?? route.title)

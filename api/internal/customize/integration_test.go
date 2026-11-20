@@ -116,11 +116,11 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 		t.Fatalf("options = %+v", options)
 	}
 	group := options.Groups[0]
-	if group.IngredientName != "Ground Pork" || group.AmountText != "10 ounce" || group.SelectedChoiceID == nil || *group.SelectedChoiceID != ChoiceOriginal {
+	if group.IngredientName != "Ground Pork" || group.AmountText != "10 oz" || group.SelectedChoiceID == nil || *group.SelectedChoiceID != ChoiceOriginal {
 		t.Fatalf("group = %+v", group)
 	}
 	i := slices.IndexFunc(group.Choices, func(c ChoiceResponse) bool { return c.ID == "swap:ground-beef" })
-	if i < 0 || group.Choices[i].AmountText != "10 ounce" || group.Choices[i].IngredientName != "Ground Beef" {
+	if i < 0 || group.Choices[i].AmountText != "10 oz" || group.Choices[i].IngredientName != "Ground Beef" {
 		t.Fatalf("choices = %+v", group.Choices)
 	}
 

@@ -43,16 +43,19 @@ struct RecipeRatingSection: View {
 
     private var commentField: some View {
         VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            // The same filled, rounded field as the cooking screen's notes.
             TextField("Add a comment (optional)", text: $draft.comment, axis: .vertical)
                 .lineLimit(2...6)
-                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, DS.Space.m)
+                .padding(.vertical, DS.Space.sm)
+                .background(DS.Colors.subtleFill, in: .rect(cornerRadius: DS.Radius.medium))
                 .keyboardDoneButton()
             let length = draft.commentLength
             if length > RatingLimits.maxCommentLength - 100 {
                 Text("\(length) of \(RatingLimits.maxCommentLength) characters")
                     .font(.caption)
                     .monospacedDigit()
-                    .foregroundStyle(draft.isCommentTooLong ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(draft.isCommentTooLong ? DS.Colors.destructive : DS.Colors.secondaryText)
             }
         }
     }
@@ -111,7 +114,7 @@ struct RecipeRatingSection: View {
     }
 }
 
-/// "4.5 ★ from 2" with a link to every member's rating, or "No ratings yet".
+/// "4.5 ★ from 2" with a link to every member's rating, or "No Ratings Yet".
 struct HouseholdRatingSummary: View {
     let recipe: Recipe
 
@@ -122,7 +125,7 @@ struct HouseholdRatingSummary: View {
                 HStack(spacing: DS.Space.xs) {
                     Text(summary)
                         .foregroundStyle(.primary)
-                    Text("See household ratings")
+                    Text("See Household Ratings")
                         .foregroundStyle(.tint)
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
@@ -132,11 +135,11 @@ struct HouseholdRatingSummary: View {
                 .font(.subheadline)
             }
             .accessibilityLabel(RatingFormat.accessibilitySummary(rating))
-            .accessibilityHint("Shows every member's rating")
+            .accessibilityHint("Shows every member’s rating")
         } else {
-            Text("No ratings yet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Text("No Ratings Yet")
+                .font(DS.Typography.subheadline)
+                .foregroundStyle(DS.Colors.secondaryText)
         }
     }
 }

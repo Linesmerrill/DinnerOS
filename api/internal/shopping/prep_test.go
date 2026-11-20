@@ -183,7 +183,7 @@ func TestPrepSessionStates(t *testing.T) {
 	}
 	done := PrepSession{Cards: []PrepCard{{Status: PrepSkipped}, {Status: PrepDone}}}
 	done.count()
-	if done.State != PrepFinished || done.Skipped != 1 || done.Headline != "Everything's put away." {
+	if done.State != PrepFinished || done.Skipped != 1 || done.Headline != "Everything’s put away." {
 		t.Errorf("finished session = %s %q", done.State, done.Headline)
 	}
 }

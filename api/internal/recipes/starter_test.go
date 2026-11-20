@@ -3,6 +3,7 @@ package recipes
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -42,7 +43,7 @@ func TestCopyStarterRecipes(t *testing.T) {
 	total := StarterBatchSize + 5
 
 	dry, err := svc.CopyStarterRecipes(ctx, starterSource, starterTarget, false)
-	if err != nil || dry != (StarterResult{Source: total, Copied: total - 1, Existing: 1}) {
+	if err != nil || !reflect.DeepEqual(dry, StarterResult{Source: total, Copied: total - 1, Existing: 1}) {
 		t.Fatalf("dry run = %+v, %v", dry, err)
 	}
 	if got, _ := store.ListRecipesAfter(ctx, starterTarget, "", 1000); len(got) != 2 {
@@ -50,7 +51,7 @@ func TestCopyStarterRecipes(t *testing.T) {
 	}
 
 	res, err := svc.CopyStarterRecipes(ctx, starterSource, starterTarget, true)
-	if err != nil || res != dry {
+	if err != nil || !reflect.DeepEqual(res, dry) {
 		t.Fatalf("apply = %+v, %v", res, err)
 	}
 	copied, _ := store.ListRecipesAfter(ctx, starterTarget, "", 1000)
@@ -68,7 +69,7 @@ func TestCopyStarterRecipes(t *testing.T) {
 	}
 
 	again, err := svc.CopyStarterRecipes(ctx, starterSource, starterTarget, true)
-	if err != nil || again != (StarterResult{Source: total, Existing: total}) {
+	if err != nil || !reflect.DeepEqual(again, StarterResult{Source: total, Existing: total}) {
 		t.Errorf("re-run = %+v, %v", again, err)
 	}
 	if _, err := svc.CopyStarterRecipes(ctx, starterSource, starterSource, true); err == nil {
@@ -147,5 +148,25 @@ func TestStarterSkipsHouseholdsItIsToldTo(t *testing.T) {
 	}
 	if got, _ := store.ListRecipesAfter(context.Background(), copied, "", 10); len(got) != 1 {
 		t.Errorf("other household got %d starter recipes, want 1", len(got))
+	}
+}
+
+// A starter renamed without its photo is still copied, and named in the
+// result so a person can fix the starter library.
+func TestCopyStarterRecipesNamesAMismatchedStarter(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryStore()
+	svc := NewService(store)
+	if err := store.SaveRecipes(ctx, starterSource, []Recipe{
+		{Source: SourceImport, SourceRecipeID: "n-1", Name: "Lemon Herb Salmon",
+			SourceURL: "https://www.hellofresh.com/recipes/one-pan-chicken-enchiladas-verdes-6616f05917c952d87280a8df"},
+		{Source: SourceImport, SourceRecipeID: "n-2", Name: "One-Pan Chicken Enchiladas Verdes",
+			SourceURL: "https://www.hellofresh.com/recipes/one-pan-chicken-enchiladas-verdes-6616f05917c952d87280a8df"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.CopyStarterRecipes(ctx, starterSource, starterTarget, false)
+	if err != nil || res.Copied != 2 || !reflect.DeepEqual(res.Mismatched, []string{"Lemon Herb Salmon (one-pan-chicken-enchiladas-verdes)"}) {
+		t.Errorf("result = %+v, %v", res, err)
 	}
 }

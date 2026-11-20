@@ -38,9 +38,9 @@ struct AddRecipesSheet: View {
                     content(picker)
                 } else if couldNotStart {
                     ContentUnavailableView {
-                        Label("Couldn't Load Recipes", systemImage: "exclamationmark.triangle")
+                        Label("Couldn’t Load Recipes", systemImage: "exclamationmark.triangle")
                     } description: {
-                        Text("Couldn't load your household. Try again in a moment.")
+                        Text("Couldn’t load your household. Try again in a moment.")
                     } actions: {
                         Button("Try Again") {
                             Task { await start() }
@@ -84,7 +84,7 @@ struct AddRecipesSheet: View {
                     addedCounts[summary.id, default: 0] += 1
                 }
             }
-            .alert("Couldn't Add Recipe", isPresented: Binding(presenting: $addError)) {
+            .alert("Couldn’t Add Recipe", isPresented: Binding(presenting: $addError)) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(addError ?? "")
@@ -114,7 +114,7 @@ struct AddRecipesSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Load Recipes", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Load Recipes", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {
@@ -208,7 +208,7 @@ struct AddRecipesSheet: View {
                 let recipe = try await library.recipe(id: summary.id)
                 let householdDefault = households.current?.household.defaultServings
                 guard let servings = recipe.preferredServings(householdDefault: householdDefault) else {
-                    addError = String(localized: "\(summary.name) has no serving sizes, so it can't be planned.")
+                    addError = String(localized: "\(summary.name) has no serving sizes, so it can’t be planned.")
                     return
                 }
                 try await plans.addEntry(

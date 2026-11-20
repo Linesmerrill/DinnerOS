@@ -469,7 +469,7 @@ func newGroceryListResponse(g GroceryList) GroceryListResponse {
 
 // UnsureText is the note on an item the pantry has but can't measure: it's
 // bought rather than assumed to be enough (decision 629).
-const UnsureText = "In your pantry, but we couldn't tell how much is left."
+const UnsureText = "In your pantry, but we couldn’t tell how much is left."
 
 // newGroceryItemResponse renders one aggregated item. Skipped items go through
 // it too, so the review screen sees the same amounts, recipes, and provenance

@@ -113,7 +113,7 @@ func TestReferralQualifiesOnceForARealHousehold(t *testing.T) {
 		t.Errorf("stock = %+v, want 2 given of 40", st)
 	}
 	if got := h.notes.to(hhNew)[0]; got.Title != FreeMonthReadyTitle ||
-		got.Body != "Thanks for joining from Lines's invite. Redeem it in DinnerOS to start Plus with the first month free." {
+		got.Body != "Thanks for joining from Lines’s invite. Redeem it in DinnerOS to start Plus with the first month free." {
 		t.Errorf("referred = %q %q", got.Title, got.Body)
 	}
 	if got := h.notes.to(hh)[0]; got.Body != "Garcias joined from your invite. Your free month is ready." {
@@ -331,7 +331,7 @@ func TestReferralFourthIn30DaysWaitsForTheWindow(t *testing.T) {
 }
 
 // A sharer that has earned every month: the new household still gets its
-// month, the sharer gets the "most free months" words.
+// month, the sharer hears it reached the free-month limit.
 func TestReferralAtTheCapStillPaysTheNewHousehold(t *testing.T) {
 	s, _, _, refs := referralService(t, qualifyNow)
 	h := harnessOf(s)
@@ -352,7 +352,7 @@ func TestReferralAtTheCapStillPaysTheNewHousehold(t *testing.T) {
 	h.oneReadyMonth(hhNew)
 	h.noMonths(hh)
 	got := h.notes.to(hh)
-	if len(got) != 1 || got[0].Body != "Garcias joined from your invite. You've already earned the most free months." {
+	if len(got) != 1 || got[0].Body != "Garcias joined from your invite. You’ve reached the free-month limit." {
 		t.Errorf("sharer notified %+v", got)
 	}
 	info, _ := h.s.Referral(t.Context(), hh)
@@ -458,7 +458,7 @@ func TestReferralHowItWorksFollowsTheRules(t *testing.T) {
 		"Share your code with friends, family, even that one aunt.",
 		"They download DinnerOS, start a new household, and enter your code.",
 		"Once they plan a dinner and add a recipe, the invite counts.",
-		"Within 24 hours you both get a free month of Plus. We'll send you a notification when it's ready.",
+		"Within 24 hours you both get a free month of Plus. We’ll send you a notification when it’s ready.",
 		// The month is a subscription offer, and it says so up front (decision 755).
 		"Redeem it through Apple: Plus starts with the first month free, then renews at the normal price unless you cancel.",
 	}

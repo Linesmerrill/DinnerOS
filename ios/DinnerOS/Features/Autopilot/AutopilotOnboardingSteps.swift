@@ -94,12 +94,16 @@ private struct CuisineTileView: View {
                     .clipShape(.rect(cornerRadius: Self.cornerRadius))
                 }
         } else {
+            // No photo: a plate glyph on the card color, like an imageless recipe card, so the
+            // tile never reads as an empty box (build 121).
             RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .fill(.tint.opacity(0.18))
+                .fill(DS.Colors.surface)
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
-                    RoundedRectangle(cornerRadius: Self.cornerRadius)
-                        .strokeBorder(.tint.opacity(0.35))
+                    Image(systemName: "fork.knife")
+                        .font(DS.Typography.largeTitle)
+                        .foregroundStyle(DS.Colors.secondaryText)
+                        .accessibilityHidden(true)
                 }
         }
     }
@@ -120,8 +124,8 @@ private struct CuisineTileView: View {
         if preference != .neutral {
             Image(systemName: preference == .liked ? "checkmark" : "hand.thumbsdown.fill")
                 .font(.footnote.weight(.bold))
-                .foregroundStyle(Color.onAccent)
-                .frame(width: 28, height: 28)
+                .foregroundStyle(DS.Colors.onAccent)
+                .frame(width: DS.Size.iconColumn, height: DS.Size.iconColumn)
                 .background {
                     Circle().fill(preference == .liked ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                 }

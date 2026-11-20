@@ -270,8 +270,8 @@ struct TimeBandBadge: View {
 
     private var color: Color {
         switch band {
-        case .quick: .green
-        case .medium: .blue
+        case .quick: DS.Colors.success
+        case .medium: DS.Colors.badge
         case .long: .orange
         default: .gray
         }

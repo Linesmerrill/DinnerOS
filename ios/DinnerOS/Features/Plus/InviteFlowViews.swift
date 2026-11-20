@@ -74,7 +74,7 @@ struct InviteCodeScreen: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case (.failed(let message), _):
                     notice(
-                        title: String(localized: "That Invite Didn't Work"), message: message,
+                        title: String(localized: "That Invite Didn’t Work"), message: message,
                         systemImage: "exclamationmark.circle", seeYourCode: false)
                 case (.preview(let preview), .existingHousehold):
                     let shown = isOwnCode ? preview.forOwn : preview.forExisting
@@ -114,11 +114,10 @@ struct InviteCodeScreen: View {
                 steps(preview.steps)
             }
             .padding(DS.Space.xxl)
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
+            .dsReadableWidth()
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: DS.Space.xxs) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DSBottomBar {
                 Button {
                     plus.acceptInvite(code: invite.code, title: preview.title)
                     dismiss()
@@ -132,11 +131,6 @@ struct InviteCodeScreen: View {
                 }
                 .buttonStyle(.dsTextLink)
             }
-            .padding(.horizontal, DS.Space.xxl)
-            .padding(.top, DS.Space.s)
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
-            .background(.bar)
         }
     }
 
@@ -158,15 +152,15 @@ struct InviteCodeScreen: View {
 
     private func steps(_ steps: [String]) -> some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            Text("Then do these to get your free month")
+            Text("Then Do These to Get Your Free Month")
                 .font(.subheadline.weight(.semibold))
             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
                 HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     Text("\(index + 1)")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(Color("OnAccent"))
-                        .frame(minWidth: 24, minHeight: 24)
-                        .background(Circle().fill(.tint))
+                        .foregroundStyle(DS.Colors.onAccent)
+                        .frame(minWidth: DS.Space.xxl, minHeight: DS.Space.xxl)
+                        .background(Circle().fill(DS.Colors.accent))
                         .accessibilityHidden(true)
                     Text(step)
                         .fixedSize(horizontal: false, vertical: true)
@@ -210,8 +204,7 @@ struct InviteCodeScreen: View {
             Spacer(minLength: 0)
         }
         .padding(DS.Space.xxl)
-        .frame(maxWidth: 560)
-        .frame(maxWidth: .infinity)
+        .dsReadableWidth()
     }
 
     private func load() async {
@@ -256,16 +249,16 @@ struct InviteCodeSetupSection: View {
                 Label {
                     VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(saved.title ?? String(localized: "Your invite code is saved"))
-                            .font(.headline)
+                            .font(DS.Typography.headline)
                         Text(
                             "Create your household next. Then add a recipe and plan a dinner, and you both get a free month of Plus to redeem through Apple."
                         )
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.subheadline)
+                        .foregroundStyle(DS.Colors.secondaryText)
                     }
                 } icon: {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.tint)
+                        .foregroundStyle(DS.Colors.success)
                 }
                 .accessibilityIdentifier("InviteCodeSaved")
                 Button("Use a Different Code") {
@@ -286,17 +279,19 @@ struct InviteCodeSetupSection: View {
                         Text("Use This Code")
                     }
                 }
+                // The shared button look, gray while there's no code yet (build 121).
+                .buttonStyle(.dsPrimary(.small))
                 .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || isChecking)
                 if let error {
                     FormErrorLabel(message: error)
                 }
             }
         } header: {
-            Text("Got an Invite Code?")
+            Text("Code from a Friend")
         } footer: {
             // Once a code is saved, the row above already says this.
             if plus.savedInvite?.accepted != true {
-                Text("From a friend's DinnerOS link. You both get a free month of Plus to redeem through Apple.")
+                Text("Optional. If a friend sent you a DinnerOS link, you both get a free month of Plus.")
             }
         }
         .onAppear {
@@ -603,7 +598,7 @@ struct ReferralMenuCard: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Shows what's left for your free month")
+            .accessibilityHint("Shows what’s left for your free month")
             .accessibilityIdentifier("ReferralMenuCard")
             Button("Hide") { plus.hideReferralCard() }
                 .font(.subheadline)

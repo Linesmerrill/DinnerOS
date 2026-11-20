@@ -204,7 +204,7 @@ func TestFetchSaysWhyAPageCouldNotBeRead(t *testing.T) {
 		"http://localhost:8080/nope":       msgNotPublic,
 		"https://intranet/":                msgNotAddress,
 		"ftp://example.com/":               "Only links that start with http or https can be read.",
-		"https://user:secret@example.com/": "Links with a username or password in them can't be read.",
+		"https://user:secret@example.com/": "Links with a username or password in them can’t be read.",
 	} {
 		_, err := (&WebFetcher{}).Fetch(t.Context(), raw)
 		if fe := fetchErrorOf(t, err); fe.Message != want {
@@ -262,7 +262,7 @@ func TestParseEndpointReadsAKrogerFamilyPage(t *testing.T) {
 	// The page as it's sent, before its scripts run: no recipe in it.
 	rec = s.do(t, http.MethodPost, path, mustJSON(t, ParseRecipeRequest{URL: frysRecipeURL, HTML: readPageFixture(t, "kroger-shell.html")}), userAda)
 	wantError(t, rec, http.StatusUnprocessableEntity, CodeFetchFailed)
-	if !strings.Contains(rec.Body.String(), "We couldn't find a recipe on that page.") {
+	if !strings.Contains(rec.Body.String(), "We couldn’t find a recipe on that page.") {
 		t.Errorf("body = %s; want the plain message", rec.Body.String())
 	}
 

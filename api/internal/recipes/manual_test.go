@@ -79,6 +79,25 @@ func TestParseTextReadsGroupsRangesAndCanSizes(t *testing.T) {
 	}
 }
 
+// The QA starter recipes paste "Serves 2" and "30 minutes" under the title:
+// those fill servings and time, not the description, and a step's "cook 1
+// minute more" is never the recipe's time.
+func TestParseTextKeepsServingsAndTimeOutOfTheDescription(t *testing.T) {
+	d := ParseText("Lemon Garlic Chicken\nServes 2\n30 minutes\nIngredients\n2 chicken breasts\n1 lemon\n" +
+		"Steps\nSear in the oil for 6 minutes a side.\nAdd the lemon juice and cook 1 minute more.")
+	if d.Description != "" || d.Servings != 2 || d.TotalMinutes != 30 {
+		t.Errorf("draft = description %q, servings %d, total %d", d.Description, d.Servings, d.TotalMinutes)
+	}
+	d = ParseText("Soup\nA bright, quick soup.\nPrep time: 10 min\nTotal time: 40 minutes\nIngredients\n1 onion\nSteps\nCook 5 minutes.")
+	if d.Description != "A bright, quick soup." || d.PrepMinutes != 10 || d.TotalMinutes != 40 {
+		t.Errorf("draft = description %q, prep %d, total %d", d.Description, d.PrepMinutes, d.TotalMinutes)
+	}
+	d = ParseText("Stew\nIngredients\n1 onion\nSteps\nCook 1 minute more.")
+	if d.TotalMinutes != 0 {
+		t.Errorf("total = %d from a step; want none", d.TotalMinutes)
+	}
+}
+
 func TestParseTextWarnsWhenItCannotSplitTheText(t *testing.T) {
 	d := ParseText("Some notes I wrote about dinner\nand a second line")
 	if len(d.Warnings) == 0 {

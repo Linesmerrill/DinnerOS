@@ -36,7 +36,7 @@ struct MealSwapSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             ContentUnavailableView {
-                Label("Couldn't Find Anything Else", systemImage: "exclamationmark.triangle")
+                Label("Couldn’t Find Anything Else", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message)
             } actions: {

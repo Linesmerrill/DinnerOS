@@ -42,7 +42,7 @@ final class DiscoverQATests: XCTestCase {
         let picks = app.descendants(matching: .any)["DiscoverSection-chefs-picks"].firstMatch
         XCTAssertTrue(picks.waitForExistence(timeout: 15), "No Chef's Picks row")
         XCTAssertTrue(picks.buttons["DiscoverCard"].firstMatch.waitForExistence(timeout: 5), "The row has no cards")
-        XCTAssertTrue(app.staticTexts["Chef's Picks This Week"].exists)
+        XCTAssertTrue(app.staticTexts["Chef’s Picks This Week"].exists)
         snap(app, "Discover 01 rows")
         assertNoAddOn(app, addonName, "the rows")
 
@@ -52,7 +52,8 @@ final class DiscoverQATests: XCTestCase {
         let savedName = save.label.replacingOccurrences(of: "Add ", with: "")
             .replacingOccurrences(of: " to your library", with: "")
         save.tap()
-        XCTAssertTrue(picks.descendants(matching: .any)["DiscoverCardSaved"].firstMatch.waitForExistence(timeout: 10),
+        XCTAssertTrue(
+            picks.descendants(matching: .any)["DiscoverCardSaved"].firstMatch.waitForExistence(timeout: 10),
             "Saving from the row didn't mark the card")
         snap(app, "Discover 02 saved from a row")
         let saved = try await api.recipes(householdID: householdID).first { $0.name == savedName }
@@ -68,7 +69,8 @@ final class DiscoverQATests: XCTestCase {
         timeChip.tap()
         app.buttons["30 min or less"].firstMatch.tap()
         let chosen = expectation(
-            for: NSPredicate(format: "label CONTAINS '30 min or less'"), evaluatedWith: app.buttons["DiscoverFilter-time"].firstMatch)
+            for: NSPredicate(format: "label CONTAINS '30 min or less'"),
+            evaluatedWith: app.buttons["DiscoverFilter-time"].firstMatch)
         await fulfillment(of: [chosen], timeout: 5)
         sleep(2)
         let cardsAfter = browseCards(app)
@@ -106,7 +108,8 @@ final class DiscoverQATests: XCTestCase {
         for _ in 0..<4 where !seeAll.exists { scrollBack(app) }
         reveal(seeAll, in: app, maxSwipes: 12)
         seeAll.tap()
-        XCTAssertTrue(app.navigationBars["Chef's Picks This Week"].waitForExistence(timeout: 10), "See All went elsewhere")
+        XCTAssertTrue(
+            app.navigationBars["Chef’s Picks This Week"].waitForExistence(timeout: 10), "See All went elsewhere")
         XCTAssertTrue(app.buttons["DiscoverCard"].firstMatch.waitForExistence(timeout: 10))
         assertNoAddOn(app, addonName, "See All")
         snap(app, "Discover 07 see all")
@@ -186,22 +189,26 @@ struct QAAPI {
         struct Result: Decodable { let created: Int }
         let file: [String: Any] = [
             "version": 1, "source": "hellofresh", "generatedAt": "2026-11-16T00:00:00Z", "review": [],
-            "recipes": [[
-                "source": "hellofresh", "sourceRecipeId": sourceID, "sourceUrl": "", "name": name, "isAddon": true,
-                "servings": [2], "totalMinutes": 10, "cuisines": ["Italian"], "orderWeeks": [],
-                "ingredients": [["name": "bread", "amounts": [["servings": 2, "quantity": 1, "unit": "cup"]]]],
-                "steps": [["index": 1, "text": "Toast it."]],
-            ]],
+            "recipes": [
+                [
+                    "source": "hellofresh", "sourceRecipeId": sourceID, "sourceUrl": "", "name": name, "isAddon": true,
+                    "servings": [2], "totalMinutes": 10, "cuisines": ["Italian"], "orderWeeks": [],
+                    "ingredients": [["name": "bread", "amounts": [["servings": 2, "quantity": 1, "unit": "cup"]]]],
+                    "steps": [["index": 1, "text": "Toast it."]],
+                ]
+            ],
         ]
         let result: Result = try await Self.send(
-            base: base, token: token, method: "POST", path: "/api/v1/households/\(householdID)/recipes/import", body: file)
+            base: base, token: token, method: "POST", path: "/api/v1/households/\(householdID)/recipes/import",
+            body: file)
         XCTAssertEqual(result.created, 1, "The add-on wasn't imported")
     }
 
     func recipes(householdID: String) async throws -> [Recipe] {
         struct List: Decodable { let items: [Recipe] }
         let list: List = try await Self.send(
-            base: base, token: token, method: "GET", path: "/api/v1/households/\(householdID)/recipes?limit=100", body: nil)
+            base: base, token: token, method: "GET", path: "/api/v1/households/\(householdID)/recipes?limit=100",
+            body: nil)
         return list.items
     }
 
@@ -221,13 +228,15 @@ struct QAAPI {
                 "steps": ["Cook the rice.", "Stir in the peas."],
             ] as [String: Any])
         let shared: Sharing = try await Self.send(
-            base: base, token: token, method: "PUT", path: "/api/v1/households/\(householdID)/recipes/\(created.id)/sharing",
+            base: base, token: token, method: "PUT",
+            path: "/api/v1/households/\(householdID)/recipes/\(created.id)/sharing",
             body: ["sharedToCatalog": true])
         XCTAssertTrue(shared.inCatalog, "\(name) didn't reach Shared Recipes")
     }
 
     func deleteRecipe(householdID: String, id: String) async throws {
-        var request = URLRequest(url: URL(string: base.absoluteString + "/api/v1/households/\(householdID)/recipes/\(id)")!)
+        var request = URLRequest(
+            url: URL(string: base.absoluteString + "/api/v1/households/\(householdID)/recipes/\(id)")!)
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (_, response) = try await URLSession.shared.data(for: request)
@@ -248,7 +257,10 @@ struct QAAPI {
         guard (200..<300).contains(status) else {
             throw NSError(
                 domain: "QAAPI", code: status,
-                userInfo: [NSLocalizedDescriptionKey: "\(method) \(path) answered \(status): \(String(decoding: data, as: UTF8.self))"])
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "\(method) \(path) answered \(status): \(String(decoding: data, as: UTF8.self))"
+                ])
         }
         return try JSONDecoder().decode(T.self, from: data)
     }

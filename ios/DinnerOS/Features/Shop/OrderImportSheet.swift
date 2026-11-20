@@ -165,7 +165,7 @@ private struct OrderImportReview: View {
             if let total = draft.detectedTotalCents, canSaveTotal {
                 Section {
                     Toggle(isOn: $draft.savesTotal) {
-                        LabeledContent("Order total", value: MoneyText.format(total))
+                        LabeledContent("Order Total", value: MoneyText.format(total))
                     }
                 } footer: {
                     Text("Order total (with fees, tax, and tip), saved for the week.")
@@ -192,7 +192,7 @@ private struct OrderImportReview: View {
                 } header: {
                     Text("Not Matched")
                 } footer: {
-                    Text("Pick the item each one is for, or leave it as Don't Use.")
+                    Text("Pick the item each one is for, or leave it as Don’t Use.")
                 }
             }
             let unpriced = draft.linesWithoutPrice
@@ -266,7 +266,7 @@ private struct OrderItemSourceView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 120)
                     } else {
-                        Text("This part of the screenshot couldn't be shown.")
+                        Text("This part of the screenshot couldn’t be shown.")
                             .foregroundStyle(.secondary)
                     }
                     VStack(alignment: .leading, spacing: DS.Space.xxs) {
@@ -281,7 +281,7 @@ private struct OrderItemSourceView: View {
                             .monospacedDigit()
                     }
                     .accessibilityElement(children: .combine)
-                    Text("Shown only while you review. It isn't saved or uploaded.")
+                    Text("Shown only while you review. It isn’t saved or uploaded.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -378,7 +378,7 @@ private struct ImportRow: View {
                 .frame(maxWidth: 110)
             }
             Picker("For", selection: lineBinding) {
-                Text("Don't Use").tag(PriceableLine.ID?.none)
+                Text("Don’t Use").tag(PriceableLine.ID?.none)
                 ForEach(lines) { priced in
                     Text(priced.line.name).tag(PriceableLine.ID?.some(priced.id))
                 }

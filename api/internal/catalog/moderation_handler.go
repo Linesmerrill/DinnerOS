@@ -22,8 +22,8 @@ type HideCookResponse struct {
 
 // What the app shows after hiding a cook, or a recipe with no cook.
 const (
-	HideCookThanks   = "You won't see recipes from this cook again."
-	HideRecipeThanks = "You won't see this recipe again."
+	HideCookThanks   = "You won’t see recipes from this cook again."
+	HideRecipeThanks = "You won’t see this recipe again."
 )
 
 func (h *Handler) hideCook(w http.ResponseWriter, r *http.Request) {

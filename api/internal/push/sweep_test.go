@@ -69,7 +69,7 @@ func lowStock(id, householdID string, createdAt time.Time) notifications.Notific
 func orderDue(id, householdID string, createdAt time.Time, readBy ...string) notifications.Notification {
 	return notifications.Notification{
 		ID: id, HouseholdID: householdID, Type: notifications.TypeShoppingOrderDue,
-		Title: "Time to order this week's groceries", Body: "Thursday is your order day.",
+		Title: "Time to order this week’s groceries", Body: "Thursday is your order day.",
 		Subject:   notifications.Subject{Kind: notifications.SubjectShoppingWeek, ID: "2026-W38"},
 		DedupeKey: "shopping.order_due:2026-W38", ReadBy: readBy, CreatedAt: createdAt,
 	}
@@ -98,7 +98,7 @@ func TestSweepPushesNewReminderOnceToEveryUnreadMembersDevices(t *testing.T) {
 	m := f.sender.sent[1]
 	if m.Environment != EnvironmentSandbox || m.CollapseID != "n1" || m.ThreadID != "shopping.order_due" ||
 		m.Data["type"] != "shopping.order_due" || m.Data["householdId"] != hhA ||
-		m.Data["subject"].(map[string]string)["id"] != "2026-W38" || m.Title != "Time to order this week's groceries" {
+		m.Data["subject"].(map[string]string)["id"] != "2026-W38" || m.Title != "Time to order this week’s groceries" {
 		t.Errorf("message = %+v", m)
 	}
 

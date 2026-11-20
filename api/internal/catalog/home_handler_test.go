@@ -142,3 +142,10 @@ func TestCollectionAdminRoutesAreForOperators(t *testing.T) {
 		t.Errorf("second delete = %d", rec.Code)
 	}
 }
+
+func TestSectionTitlesShowCurlyApostrophes(t *testing.T) {
+	got := sectionResponse(Collection{ID: "x", Title: "Chef's Picks", Subtitle: "Cook's choice"}, nil, false)
+	if got.Title != "Chef’s Picks" || got.Subtitle != "Cook’s choice" {
+		t.Errorf("section = %q / %q", got.Title, got.Subtitle)
+	}
+}

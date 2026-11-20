@@ -119,6 +119,9 @@ final class PlusStore {
     @ObservationIgnored var confirmDelay: Duration = .seconds(2)
     /// How long the thank-you waits after Plus loads.
     @ObservationIgnored var compThanksDelay: Duration = .seconds(1)
+    /// Where this copy of the app came from. The beta thank-you is tester copy, so it shows only
+    /// where `BuildChannel.showsTesterThanks` allows: never in an App Store build (build 121).
+    @ObservationIgnored var buildChannel: () -> BuildChannel? = { BuildChannelStore.shared.channel }
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "plus")
 
@@ -137,6 +140,7 @@ final class PlusStore {
     /// behind the welcome sheet after sign-in, comes back on the next check.
     private func offerCompThanks(_ comp: PlusComp?, householdID: String) async {
         guard let comp, compThanks == nil, !defaults.bool(forKey: Self.compThanksKey(householdID)) else { return }
+        guard BuildChannel.showsTesterThanks(buildChannel(), comp: comp) else { return }
         // Let sign-in's own screens settle first.
         try? await Task.sleep(for: compThanksDelay)
         guard householdID == self.householdID, compThanks == nil else { return }

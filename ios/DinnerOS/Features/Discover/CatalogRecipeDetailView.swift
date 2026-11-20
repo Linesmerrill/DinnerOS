@@ -99,12 +99,19 @@ struct CatalogRecipeDetailView: View {
     private func header(_ recipe: CatalogRecipe) -> some View {
         RecipeImage(url: recipe.imageURL, title: recipe.name)
             .clipShape(.rect(cornerRadius: DS.Radius.medium))
+            .frame(maxHeight: DS.Size.heroMaxHeight)
+            .frame(maxWidth: .infinity)
         if recipe.imageURL != nil, let credit = recipe.imageCredit {
             PhotoCreditLine(credit: credit)
         }
+        // The name is the heading; the headline ("with Lime Crema") sits under it.
+        Text(recipe.name)
+            .font(DS.Typography.title)
+            .accessibilityAddTraits(.isHeader)
         if let headline = recipe.headline, !headline.isEmpty {
             Text(headline)
-                .font(.headline)
+                .font(DS.Typography.subtitle)
+                .foregroundStyle(DS.Colors.secondaryText)
         }
         Text(Self.details(for: recipe))
             .font(.footnote)
