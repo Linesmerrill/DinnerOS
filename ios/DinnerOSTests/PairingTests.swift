@@ -198,7 +198,7 @@ struct PairingTests {
         #expect(result.pairingsSkipped.map(\.reason) == ["alreadyPlanned"])
         let summary = try #require(PairingFormat.acceptSummary(result))
         #expect(summary.contains("Sample Garlic Bread"))
-        #expect(summary.contains("1 add-on wasn't added."))
+        #expect(summary.contains("1 add-on wasn’t added."))
     }
 
     @Test func anAcceptResultWithoutPairingFieldsStillDecodes() throws {

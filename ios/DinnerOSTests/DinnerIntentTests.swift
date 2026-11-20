@@ -251,17 +251,17 @@ struct DinnerIntentTests {
         let outcome = await actions.tonight()
 
         #expect(outcome == .planned(mains: ["Chicken Tacos"], addOns: []))
-        #expect(DinnerIntentText.tonight(outcome, locale: en) == "Tonight's dinner is Chicken Tacos.")
+        #expect(DinnerIntentText.tonight(outcome, locale: en) == "Tonight’s dinner is Chicken Tacos.")
         #expect(
             DinnerIntentText.tonight(.planned(mains: ["Pasta", "Salad"], addOns: ["Garlic Bread"]), locale: en)
-                == "Tonight's dinner is Pasta and Salad, with Garlic Bread.")
+                == "Tonight’s dinner is Pasta and Salad, with Garlic Bread.")
     }
 
     @Test func tonightHandlesNothingPlannedAndSignedOut() async {
         let services = FakeDinnerIntentServices()
         let actions = DinnerIntentActions(services: services, now: { wednesday })
         #expect(await actions.tonight() == .nothingPlanned)
-        #expect(DinnerIntentText.tonight(.nothingPlanned) == "Nothing's planned for dinner tonight.")
+        #expect(DinnerIntentText.tonight(.nothingPlanned) == "Nothing’s planned for dinner tonight.")
 
         services.accountState = .signedOut
         #expect(await actions.tonight() == .signedOut)

@@ -38,7 +38,7 @@ struct SpecialtyStrategyTests {
         #expect(settings.currentOption?.label == "As close as possible")
         #expect(
             settings.currentOption?.description
-                == "Make a jar you reuse across several meals — more work, closest to the original")
+                == "Make a jar you reuse across several meals. More work, closest to the original.")
     }
 
     /// A household that never set one is on the API's default, and nothing may be attributed.
@@ -77,7 +77,7 @@ struct SpecialtyStrategyTests {
         #expect(SpecialtyFormat.strategySummaryDetail(nil) == "Loading…")
         #expect(
             SpecialtyFormat.strategySummaryDetail(nil, error: "Something went wrong.")
-                == "Couldn't load — tap to try again")
+                == "Couldn’t load. Tap to try again.")
         // A strategy in hand wins: a stale error mustn't hide what the household is on.
         #expect(SpecialtyFormat.strategySummaryDetail(settings, error: "Something went wrong.") == "Something similar")
     }

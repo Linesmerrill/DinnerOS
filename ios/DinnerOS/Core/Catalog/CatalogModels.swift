@@ -375,10 +375,10 @@ nonisolated enum CatalogReportReason: String, CaseIterable, Identifiable, Sendab
 
     var title: String {
         switch self {
-        case .inappropriate: String(localized: "It's offensive or inappropriate")
-        case .copyright: String(localized: "It's copied from somewhere else")
-        case .spam: String(localized: "It's spam or an ad")
-        case .wrong: String(localized: "It's not a real recipe")
+        case .inappropriate: String(localized: "It’s offensive or inappropriate")
+        case .copyright: String(localized: "It’s copied from somewhere else")
+        case .spam: String(localized: "It’s spam or an ad")
+        case .wrong: String(localized: "It’s not a real recipe")
         case .other: String(localized: "Something else")
         }
     }

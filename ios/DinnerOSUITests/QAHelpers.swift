@@ -22,7 +22,7 @@ extension XCTestCase {
         }
         // Shown once after a fresh install to a household with Plus on the house.
         if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn't open after sign-in")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn’t open after sign-in")
         return app
     }
 
@@ -86,10 +86,11 @@ extension XCTestCase {
         }
     }
 
-    /// Waits for the screen to be still before a screenshot: no activity indicator, no system
-    /// alert or banner left over (a keyboard tip, "Ready for Apple Intelligence"), and no toast.
+    /// Waits for the screen to be still before a screenshot: no system banner or keyboard tip left
+    /// over (a keyboard tip, "Ready for Apple Intelligence"). Spinners aren't waited on here: the
+    /// week strip keeps one ("Loading earlier weeks") off screen; tests wait for their content.
     @MainActor
-    func settleForScreenshot(_ app: XCUIApplication, timeout: TimeInterval = 6) {
+    func settleForScreenshot(_ app: XCUIApplication, timeout: TimeInterval = 3) {
         let deadline = Date().addingTimeInterval(timeout)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         repeat {
@@ -104,13 +105,6 @@ extension XCTestCase {
             let banner = springboard.otherElements["NotificationShortLookView"].firstMatch
             if banner.exists {
                 banner.swipeUp()
-                busy = true
-            }
-            // Toasts are QA-identifiable and go away by themselves.
-            if app.otherElements["toast"].firstMatch.exists || app.staticTexts["toast"].firstMatch.exists {
-                busy = true
-            }
-            if app.activityIndicators.firstMatch.exists, app.activityIndicators.firstMatch.isHittable {
                 busy = true
             }
             if !busy { break }

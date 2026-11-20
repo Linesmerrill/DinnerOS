@@ -56,7 +56,7 @@ final class SignInModel {
         switch result {
         case .failure(let error):
             if !AppleSignIn.isCancellation(error) {
-                errorMessage = String(localized: "Sign in with Apple didn't finish. Try again.")
+                errorMessage = String(localized: "Sign in with Apple didn’t finish. Try again.")
             }
         case .success(let authorization):
             do {
@@ -65,7 +65,7 @@ final class SignInModel {
                 pendingApple = (credential, rawNonce)
                 Task { await submitApple() }
             } catch {
-                errorMessage = String(localized: "Sign in with Apple didn't return a usable credential. Try again.")
+                errorMessage = String(localized: "Sign in with Apple didn’t return a usable credential. Try again.")
             }
         }
     }

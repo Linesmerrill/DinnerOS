@@ -16,7 +16,7 @@ nonisolated enum PairingInput {
             return String(localized: "Choose at least one thing this rule matches.")
         }
         guard rule.add.isValid else {
-            return String(localized: "Choose an add-on recipe, or type a grocery item — not both.")
+            return String(localized: "Choose an add-on recipe or type a grocery item, not both.")
         }
         if let item = rule.add.groceryItem {
             let name = normalizedName(item.name)
@@ -53,7 +53,7 @@ nonisolated enum PairingInput {
         }
         var seen = Set<String>()
         for rule in rules where !seen.insert(duplicateKey(rule)).inserted {
-            return String(localized: "Two rules can't add the same thing to the same meals.")
+            return String(localized: "Two rules can’t add the same thing to the same meals.")
         }
         return nil
     }

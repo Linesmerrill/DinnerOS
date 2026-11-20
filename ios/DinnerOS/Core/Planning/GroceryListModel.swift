@@ -121,8 +121,8 @@ final class GroceryListModel {
 
         var title: String {
             switch action {
-            case .choose(_, _, let name): String(localized: "Couldn't Choose an Option for \(name)")
-            case .recordBatch(let batch, _): String(localized: "Couldn't Record \(batch.specialtyName)")
+            case .choose(_, _, let name): String(localized: "Couldn’t Choose an Option for \(name)")
+            case .recordBatch(let batch, _): String(localized: "Couldn’t Record \(batch.specialtyName)")
             }
         }
     }
@@ -135,7 +135,7 @@ final class GroceryListModel {
         /// The member's role doesn't allow plan changes, so trying again won't help.
         let isForbidden: Bool
 
-        var title: String { String(localized: "Couldn't Skip \(name)") }
+        var title: String { String(localized: "Couldn’t Skip \(name)") }
     }
 
     let householdID: String

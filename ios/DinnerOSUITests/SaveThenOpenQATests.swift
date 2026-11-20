@@ -24,23 +24,25 @@ final class SaveThenOpenQATests: XCTestCase {
 
         // Step 1 starts below the fold, where the form hasn't built it yet, so look for either
         // kind of field before scrolling to it.
-        let step = app.descendants(matching: .any).matching(NSPredicate(
-            format: "(identifier == 'Step 1' OR label == 'Step 1') AND (elementType == %d OR elementType == %d)",
-            XCUIElement.ElementType.textView.rawValue, XCUIElement.ElementType.textField.rawValue)).firstMatch
+        let step = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "(identifier == 'Step 1' OR label == 'Step 1') AND (elementType == %d OR elementType == %d)",
+                XCUIElement.ElementType.textView.rawValue, XCUIElement.ElementType.textField.rawValue)
+        ).firstMatch
         reveal(step, in: app)
         step.tap()
         step.typeText("Boil the sugar and butter for one minute.")
         app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn't put the keyboard away")
+        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn’t put the keyboard away")
 
         app.buttons["Save"].tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Write Your Own"], timeout: 15), "Save didn't close the form")
+        XCTAssertTrue(waitGone(app.navigationBars["Write Your Own"], timeout: 15), "Save didn’t close the form")
 
         // Save opens the new recipe. It must settle: every query below waits for the app to idle.
-        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "The saved recipe didn't open")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "The saved recipe didn’t open")
         snap(app, "Saved recipe opened after Save")
         app.navigationBars.buttons.firstMatch.tap()
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 10), "The recipe page didn't go back")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 10), "The recipe page didn’t go back")
 
         // Open it again from All Meals, the way a person would.
         let search = app.buttons["Search meals"].firstMatch
@@ -51,14 +53,14 @@ final class SaveThenOpenQATests: XCTestCase {
         field.tap()
         field.typeText(name)
         let card = app.staticTexts[name].firstMatch
-        XCTAssertTrue(card.waitForExistence(timeout: 10), "The new recipe isn't in All Meals")
+        XCTAssertTrue(card.waitForExistence(timeout: 10), "The new recipe isn’t in All Meals")
         card.tap()
 
-        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "The recipe page didn't open")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "The recipe page didn’t open")
         XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.exists, "No Start Cooking on the recipe page")
         snap(app, "Saved recipe opened in the same session")
         // Still responsive: the back button works.
         app.navigationBars.buttons.firstMatch.tap()
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 10), "The recipe page didn't go back")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 10), "The recipe page didn’t go back")
     }
 }

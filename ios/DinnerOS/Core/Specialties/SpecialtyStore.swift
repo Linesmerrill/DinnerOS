@@ -407,7 +407,7 @@ nonisolated struct SpecialtyOptionNotChosenError: Error, Equatable, LocalizedErr
     let isForbidden: Bool
 
     var errorDescription: String? {
-        String(localized: "The option was saved, but it couldn't be chosen. \(message)")
+        String(localized: "The option was saved, but it couldn’t be chosen. \(message)")
     }
 }
 

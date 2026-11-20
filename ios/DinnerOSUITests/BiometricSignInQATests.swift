@@ -31,7 +31,7 @@ final class BiometricSignInQATests: XCTestCase {
 
         // Launch: the lock asks and a match opens the app.
         app = relaunch(app, fake: "match")
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn't open the app")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn’t open the app")
         XCTAssertFalse(app.buttons["lock.anotherWay"].exists)
 
         // Interrupted: the lock screen stays, and Sign in another way goes to the sign-in screen,
@@ -42,7 +42,7 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(app.buttons["lock.unlock"].exists)
         snap(app, "Face ID › Lock screen")
         another.tap()
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 15), "Sign in another way didn't go to sign-in")
+        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 15), "Sign in another way didn’t go to sign-in")
         XCTAssertTrue(faceIDButton(app).waitForExistence(timeout: 5), "Sign in another way lost Face ID sign-in")
 
         // Signing in another way keeps it on: no offer.
@@ -54,15 +54,15 @@ final class BiometricSignInQATests: XCTestCase {
 
         // Cancel at launch: the sign-in screen with every way to sign in, and no second ask.
         app = relaunch(app, fake: "cancel,match")
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "A cancel didn't go to sign-in")
+        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "A cancel didn’t go to sign-in")
         XCTAssertTrue(faceIDButton(app).exists, "A cancel lost Face ID sign-in")
         snap(app, "Face ID › Cancel goes to sign-in")
         faceIDButton(app).tap()
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign In with Face ID didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign In with Face ID didn’t sign in")
 
         // Faces changed since it was turned on: it's removed, with a message, then offered again.
         app = relaunch(app, fake: "changed")
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "Changed faces didn't go to sign-in")
+        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "Changed faces didn’t go to sign-in")
         XCTAssertTrue(
             app.descendants(matching: .any)["signIn.biometricNotice"].waitForExistence(timeout: 5),
             "No message after faces changed")
@@ -71,7 +71,7 @@ final class BiometricSignInQATests: XCTestCase {
         devSignIn(app).tap()
         XCTAssertTrue(app.alerts["Use Face ID to sign in next time?"].waitForExistence(timeout: 15), "No offer")
         answerOffer(app, use: true)
-        XCTAssertTrue(waitForToggle(app, true, opening: true), "Use Face ID in the offer didn't turn it on")
+        XCTAssertTrue(waitForToggle(app, true, opening: true), "Use Face ID in the offer didn’t turn it on")
         // Turned on while this launch's fake faces were "changed": off again, so the next
         // launch's faces count as the enrolled ones.
         setToggle(app, on: false)
@@ -79,22 +79,22 @@ final class BiometricSignInQATests: XCTestCase {
         // Away longer than the relock time (2 seconds here, 15 minutes for real): locked over
         // the app, then a match opens it where it was.
         app = relaunch(app, fake: "match", relockSeconds: 2)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The app didn't open")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The app didn’t open")
         setToggle(app, on: true)
         away(app)
         XCTAssertTrue(waitGone(app.buttons["lock.anotherWay"], timeout: 10), "The lock stayed after a match")
         XCTAssertTrue(
             app.switches["account.biometricSignIn"].firstMatch.waitForExistence(timeout: 10),
-            "The app didn't open where it was")
+            "The app didn’t open where it was")
 
         // Interrupted on the way back: the lock covers the app; Sign in another way signs out.
         app = relaunch(app, fake: "match,interrupt", relockSeconds: 2)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn't open the app")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn’t open the app")
         away(app)
         XCTAssertTrue(app.buttons["lock.anotherWay"].waitForExistence(timeout: 15), "No lock after time away")
         snap(app, "Face ID › Locked after time away")
         app.buttons["lock.anotherWay"].tap()
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 15), "Sign in another way didn't sign out")
+        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 15), "Sign in another way didn’t sign out")
         devSignIn(app).tap()
         setToggle(app, on: false)
         app.terminate()
@@ -118,7 +118,7 @@ final class BiometricSignInQATests: XCTestCase {
             app.buttons.matching(NSPredicate(format: "label CONTAINS 'Apple'")).firstMatch.exists,
             "No Apple sign-in beside Face ID")
         XCTAssertLessThan(
-            faceIDButton(app).frame.minY, devSignIn(app).frame.minY, "Face ID isn't the first way to sign in")
+            faceIDButton(app).frame.minY, devSignIn(app).frame.minY, "Face ID isn’t the first way to sign in")
         XCTAssertFalse(householdTab(app).exists, "Signed in by itself after signing out")
         snap(app, "Sign-in › Face ID (\(mode))")
 
@@ -132,12 +132,12 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(faceIDButton(app).isEnabled)
         snap(app, "Sign-in › Face ID no match")
         faceIDButton(app).tap()
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn’t sign in")
 
         // Signed out on a past launch, a new launch asks by itself and a match signs in.
         signOut(app)
         app = relaunch(app, fake: "match")
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The ask at launch didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The ask at launch didn’t sign in")
 
         // A cancel: the button and the other ways stay.
         signOut(app)
@@ -146,7 +146,7 @@ final class BiometricSignInQATests: XCTestCase {
         sleep(2)
         XCTAssertTrue(devSignIn(app).isHittable, "A cancel left no other way to sign in")
         devSignIn(app).tap()
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Signing in another way didn't work")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Signing in another way didn’t work")
 
         // Turned off in Account: signing out shows no Face ID button.
         setToggle(app, on: false)
@@ -190,7 +190,7 @@ final class BiometricSignInQATests: XCTestCase {
         snap(app, "Sign-in › Face ID (\(mode))")
         assertSignInButtonsMatch(app, faceID: true)
         faceIDButton(app).tap()
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign in with Face ID didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign in with Face ID didn’t sign in")
         setToggle(app, on: false)
         app.terminate()
     }
@@ -202,7 +202,7 @@ final class BiometricSignInQATests: XCTestCase {
         guard privacy.waitForExistence(timeout: 3) else { return }
         XCTAssertLessThanOrEqual(privacy.frame.maxY, app.frame.maxY, "The Privacy Policy link is below the screen")
         let line = app.staticTexts["Only the people you invite can see your household\u{2019}s plans."].firstMatch
-        let plain = app.staticTexts["Only the people you invite can see your household's plans."].firstMatch
+        let plain = app.staticTexts["Only the people you invite can see your household’s plans."].firstMatch
         let shown = line.exists ? line : plain
         if shown.exists {
             XCTAssertLessThanOrEqual(shown.frame.maxY, app.frame.maxY, "The privacy line is below the screen")
@@ -231,14 +231,14 @@ final class BiometricSignInQATests: XCTestCase {
         allowFaceIDIfAsked()
         sleep(2)
         faceMatches(true)
-        XCTAssertTrue(waitForToggle(app, true), "A matched face didn't turn it on")
+        XCTAssertTrue(waitForToggle(app, true), "A matched face didn’t turn it on")
         snap(app, "Simulator Face ID › On")
 
         // Launch: the system check, then a match opens the app.
         app = relaunch(app, fake: nil, expectLock: true)
         sleep(2)
         faceMatches(true)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn't open the app")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn’t open the app")
 
         // No match, then Cancel: normal sign-in.
         app = relaunch(app, fake: nil, expectLock: true)
@@ -252,7 +252,7 @@ final class BiometricSignInQATests: XCTestCase {
         } else {
             faceMatches(false)
         }
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "No match didn't go to sign-in")
+        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "No match didn’t go to sign-in")
         XCTAssertTrue(faceIDButton(app).exists, "No match lost Face ID sign-in")
 
         // The sign-in screen's button (build 119): no match keeps the screen, a match signs in.
@@ -266,7 +266,7 @@ final class BiometricSignInQATests: XCTestCase {
         faceIDButton(app).tap()
         sleep(2)
         faceMatches(true)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn’t sign in")
 
         // Signed out, the button signs in again; turned off, it's gone.
         signOut(app)
@@ -275,7 +275,7 @@ final class BiometricSignInQATests: XCTestCase {
         faceIDButton(app).tap()
         sleep(2)
         faceMatches(true)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn't sign in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn’t sign in")
         setToggle(app, on: false)
         signOut(app)
         XCTAssertFalse(faceIDButton(app).waitForExistence(timeout: 3), "Face ID sign-in stayed after turning it off")
@@ -341,7 +341,7 @@ final class BiometricSignInQATests: XCTestCase {
             XCTAssertEqual(
                 frame.width, reference.width, accuracy: 1,
                 "\(name) is \(frame.width) pt wide, \(buttons[0].0) \(reference.width)")
-            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1, "\(name) doesn't line up with \(buttons[0].0)")
+            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1, "\(name) doesn’t line up with \(buttons[0].0)")
         }
         // The same upright image the screenshots keep (an iPad on its side included).
         guard let shot = UIImage(data: Self.uprightPNG(XCUIScreen.main.screenshot().image)) else {
@@ -352,7 +352,7 @@ final class BiometricSignInQATests: XCTestCase {
         for (name, button) in buttons {
             guard let height = SignInTitleMeasure.firstLetterHeight(of: button.frame, in: shot, screen: app.frame)
             else {
-                XCTFail("Couldn't measure the \(name) title")
+                XCTFail("Couldn’t measure the \(name) title")
                 continue
             }
             heights.append((name, height))
@@ -364,7 +364,7 @@ final class BiometricSignInQATests: XCTestCase {
         add(attachment)
         if let first = heights.first {
             for (name, height) in heights.dropFirst() {
-                XCTAssertEqual(height, first.1, accuracy: 0.7, "\(name)'s title isn't the same size: \(summary)")
+                XCTAssertEqual(height, first.1, accuracy: 0.7, "\(name)'s title isn’t the same size: \(summary)")
             }
         }
     }
@@ -385,7 +385,7 @@ final class BiometricSignInQATests: XCTestCase {
     private func signInIfNeeded(_ app: XCUIApplication) {
         if devSignIn(app).waitForExistence(timeout: 8) { devSignIn(app).tap() }
         if app.buttons["Thanks"].waitForExistence(timeout: 3) { app.buttons["Thanks"].tap() }
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 30), "The app didn't open after sign-in")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 30), "The app didn’t open after sign-in")
     }
 
     @MainActor
@@ -441,7 +441,7 @@ final class BiometricSignInQATests: XCTestCase {
         if value != on {
             app.switches["account.biometricSignIn"].firstMatch.switches.firstMatch.tap()
         }
-        XCTAssertTrue(waitForToggle(app, on), "The Face ID toggle didn't turn \(on ? "on" : "off")")
+        XCTAssertTrue(waitForToggle(app, on), "The Face ID toggle didn’t turn \(on ? "on" : "off")")
     }
 
     @MainActor

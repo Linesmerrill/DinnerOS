@@ -83,7 +83,7 @@ final class MealPlanner {
                     let preferred = recipe.preferredServings(
                         householdDefault: households.current?.household.defaultServings)
                 else {
-                    errorMessage = String(localized: "\(name) has no serving sizes, so it can't be planned.")
+                    errorMessage = String(localized: "\(name) has no serving sizes, so it can’t be planned.")
                     return nil
                 }
                 size = preferred
@@ -96,7 +96,7 @@ final class MealPlanner {
                 } catch {
                     errorMessage = String(
                         localized:
-                            "\(name) was added, but its changes weren't saved. \(HouseholdStore.message(for: error))")
+                            "\(name) was added, but its changes weren’t saved. \(HouseholdStore.message(for: error))")
                 }
             }
             if showsToast {

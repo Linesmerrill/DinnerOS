@@ -104,7 +104,7 @@ nonisolated enum AutopilotSection: String, CaseIterable, Codable, Hashable, Send
     /// One line under the preference row saying what the section decides.
     var detail: String {
         switch self {
-        case .taste: String(localized: "Cuisines, food types, and proteins you like or don't.")
+        case .taste: String(localized: "Cuisines, food types, and proteins you like or don’t.")
         case .restrictions: String(localized: "Allergens, diets, and ingredients to never suggest.")
         case .schedule: String(localized: "How many dinners, which nights, and servings.")
         case .cookTime: String(localized: "What counts as quick, and how many long cooks a week.")
@@ -965,8 +965,8 @@ nonisolated struct AutopilotSkippedSlot: Decodable, Hashable, Sendable, Identifi
     var explanation: String {
         switch reason {
         case "dayTaken": String(localized: "\(day.name()) already has a meal.")
-        case "alreadyPlanned": String(localized: "\(day.name())'s recipe is already planned this week.")
-        default: String(localized: "\(day.name())'s meal couldn't be added.")
+        case "alreadyPlanned": String(localized: "\(day.name())’s recipe is already planned this week.")
+        default: String(localized: "\(day.name())’s meal couldn’t be added.")
         }
     }
 

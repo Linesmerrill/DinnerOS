@@ -23,7 +23,7 @@ final class ReferralQATests: XCTestCase {
         var app = launchSignedIn()
         signOut(app)
         signIn(app, subject: "dev-simulator")
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn't get to the Menu")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn’t get to the Menu")
         openGiveAFreeMonth(app)
         XCTAssertTrue(app.staticTexts["How it works"].waitForExistence(timeout: 10), "No How it works")
         XCTAssertTrue(
@@ -32,7 +32,7 @@ final class ReferralQATests: XCTestCase {
         let codeText = app.staticTexts["Your code"]
         XCTAssertTrue(codeText.waitForExistence(timeout: 10))
         let code = ((codeText.value as? String) ?? "").replacingOccurrences(of: " ", with: "")
-        XCTAssertEqual(code.count, 8, "Couldn't read the code: \(code)")
+        XCTAssertEqual(code.count, 8, "Couldn’t read the code: \(code)")
         snap(app, "Give a Free Month, How it works (\(mode))")
         reveal(app.staticTexts["Your Invites"], in: app)
         snap(app, "Give a Free Month, Your Invites (\(mode))")
@@ -57,7 +57,7 @@ final class ReferralQATests: XCTestCase {
             "The progress message is missing")
         XCTAssertTrue(
             app.descendants(matching: .any)["PlusExplainer"].firstMatch.exists,
-            "Give a Free Month doesn't say what Plus is")
+            "Give a Free Month doesn’t say what Plus is")
         reveal(progress, in: app)
         snap(app, "Your free month, nothing done yet (\(mode))")
 
@@ -77,17 +77,17 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your free month is ready"].exists, "The free month card says something else")
         XCTAssertTrue(
             app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Redeeming starts DinnerOS Plus'"))
-                .firstMatch.exists, "The card doesn't say what redeeming starts")
+                .firstMatch.exists, "The card doesn’t say what redeeming starts")
         let redeem = freeMonth.buttons["RedeemFreeMonth"]
         XCTAssertTrue(redeem.exists, "No Redeem on the free month card")
         snap(app, "Your free month is ready (\(mode))")
         // Redeem copies the code and says so, then Apple's redeem sheet opens.
         redeem.tap()
         XCTAssertTrue(
-            app.staticTexts["Your code is copied. Paste it in Apple's screen."].waitForExistence(timeout: 10),
-            "Redeem didn't say the code is copied")
+            app.staticTexts["Your code is copied. Paste it in Apple’s screen."].waitForExistence(timeout: 10),
+            "Redeem didn’t say the code is copied")
         snap(app, "Free month code copied (\(mode))")
-        XCTAssertTrue(waitGone(freeMonth, timeout: 10), "The free month card didn't make way for Apple's screen")
+        XCTAssertTrue(waitGone(freeMonth, timeout: 10), "The free month card didn’t make way for Apple’s screen")
         expectAppleRedeemSheet(app)
         // The news banner shows on the next sign-in.
         signOut(app)
@@ -99,15 +99,15 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(banner.waitForExistence(timeout: 20), "No banner for the new household")
         XCTAssertTrue(
             app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Thanks for joining from'"))
-                .firstMatch.exists, "The new household's banner says something else")
+                .firstMatch.exists, "The new household’s banner says something else")
         snap(app, "Banner, free month ready (\(mode))")
         banner.buttons["Close"].firstMatch.tap()
-        XCTAssertTrue(waitGone(banner, timeout: 5), "The banner didn't close")
+        XCTAssertTrue(waitGone(banner, timeout: 5), "The banner didn’t close")
         signOut(app)
 
         // 5. The sharer: their banner, and the invite marked as earned.
         signIn(app, subject: "dev-simulator")
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn't get to the Menu")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn’t get to the Menu")
         // The banner names the newest invite that counted and shows once. In a parallel run
         // another simulator signed in as the same sharer can see it first, so without it, go to
         // Give a Free Month directly: the earned invite is what matters.
@@ -115,7 +115,7 @@ final class ReferralQATests: XCTestCase {
         if sharerBanner.waitForExistence(timeout: 20) {
             XCTAssertTrue(
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", " joined from your invite."))
-                    .firstMatch.exists, "The sharer's banner doesn't name a new household")
+                    .firstMatch.exists, "The sharer’s banner doesn’t name a new household")
             snap(app, "Banner, invite counted (\(mode))")
             sharerBanner.buttons.matching(NSPredicate(format: "label != 'Close'")).firstMatch.tap()
             // Tapping it opens Give a Free Month.
@@ -132,7 +132,7 @@ final class ReferralQATests: XCTestCase {
         for _ in 0..<10 where !(row.exists && screen.intersects(row.frame) && row.frame.minY > screen.minY + 60) {
             app.swipeUp(velocity: .slow)
         }
-        XCTAssertTrue(row.exists, "The invite isn't in Your Invites")
+        XCTAssertTrue(row.exists, "The invite isn’t in Your Invites")
         snap(app, "Your Invites, free month earned (\(mode))")
     }
 
@@ -145,7 +145,7 @@ final class ReferralQATests: XCTestCase {
         app = signInAsNewPerson(app, householdName: "QA Code Kitchen \(Int.random(in: 100...999))")
         openGiveAFreeMonth(app)
         let oldCode = readCode(app)
-        XCTAssertEqual(oldCode.count, 8, "Couldn't read the code: \(oldCode)")
+        XCTAssertEqual(oldCode.count, 8, "Couldn’t read the code: \(oldCode)")
 
         // A reserved word isn't allowed.
         openChangeCode(app)
@@ -153,21 +153,21 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
         field.typeText("admin")
-        XCTAssertTrue(waitForCheck(app, "That code isn’t allowed."), "Reserved word wasn't blocked")
+        XCTAssertTrue(waitForCheck(app, "That code isn’t allowed."), "Reserved word wasn’t blocked")
         snap(app, "Change Your Code, not allowed (\(mode))")
 
         // A free custom code, after the confirmation.
         let custom = "qa-fam-\(Int.random(in: 10000...99999))"
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + custom)
-        XCTAssertTrue(waitForCheck(app, "You can use that code."), "\(custom) wasn't available")
+        XCTAssertTrue(waitForCheck(app, "You can use that code."), "\(custom) wasn’t available")
         snap(app, "Change Your Code, available (\(mode))")
         app.buttons["Use This Code"].tap()
         XCTAssertTrue(app.alerts["Replace your code?"].waitForExistence(timeout: 5), "No confirmation")
         XCTAssertTrue(app.alerts.staticTexts["Your old code and link will stop working."].exists)
         snap(app, "Replace your code (\(mode))")
         app.alerts.buttons["Replace Code"].tap()
-        XCTAssertTrue(waitGone(field, timeout: 10), "The sheet didn't close")
-        XCTAssertEqual(readCode(app), custom, "The custom code isn't showing")
+        XCTAssertTrue(waitGone(field, timeout: 10), "The sheet didn’t close")
+        XCTAssertEqual(readCode(app), custom, "The custom code isn’t showing")
         snap(app, "Give a Free Month, custom code (\(mode))")
 
         // A new random code; the custom one is now retired for good.
@@ -175,11 +175,11 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
         field.typeText(custom)
-        XCTAssertTrue(waitForCheck(app, "That's already your code."), "The current code wasn't recognized")
+        XCTAssertTrue(waitForCheck(app, "That’s already your code."), "The current code wasn’t recognized")
         app.buttons["Get a New Random Code"].tap()
         XCTAssertTrue(app.alerts["Replace your code?"].waitForExistence(timeout: 5), "No confirmation")
         app.alerts.buttons["Replace Code"].tap()
-        XCTAssertTrue(waitGone(field, timeout: 10), "The sheet didn't close")
+        XCTAssertTrue(waitGone(field, timeout: 10), "The sheet didn’t close")
         let random = readCode(app)
         XCTAssertEqual(random.count, 8, "Not a random code: \(random)")
         XCTAssertNotEqual(random, oldCode)
@@ -212,11 +212,11 @@ final class ReferralQATests: XCTestCase {
                 app.alerts.firstMatch,
             ]
             // The card's own "Your code is copied" line doesn't count: it's gone by now.
-            found = candidates.contains { $0.exists && $0.label != "Your code is copied. Paste it in Apple's screen." }
+            found = candidates.contains { $0.exists && $0.label != "Your code is copied. Paste it in Apple’s screen." }
             if !found { sleep(1) }
         }
-        snap(app, "Apple's redeem screen (\(mode))")
-        XCTAssertTrue(found, "Apple's redeem screen didn't open")
+        snap(app, "Apple’s redeem screen (\(mode))")
+        XCTAssertTrue(found, "Apple’s redeem screen didn’t open")
         // Cancel, Close or OK: whichever Apple's screen has.
         for label in ["Cancel", "Close", "OK", "Not Now"] {
             for root in [app, springboard] where root.buttons[label].firstMatch.exists {
@@ -247,8 +247,8 @@ final class ReferralQATests: XCTestCase {
                 sleep(2)
             }
         }
-        XCTAssertTrue(closed, "Apple's redeem screen didn't close")
-        snap(app, "Apple's redeem screen closed (\(mode))")
+        XCTAssertTrue(closed, "Apple’s redeem screen didn’t close")
+        snap(app, "Apple’s redeem screen closed (\(mode))")
     }
 
     @MainActor

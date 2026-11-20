@@ -11,7 +11,7 @@ extension AuthSessionError: LocalizedError {
     nonisolated var errorDescription: String? {
         switch self {
         case .notConfigured: String(localized: "This build has no API server configured.")
-        case .signedOut: String(localized: "You're signed out. Sign in to continue.")
+        case .signedOut: String(localized: "You’re signed out. Sign in to continue.")
         }
     }
 }

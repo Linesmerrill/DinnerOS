@@ -21,7 +21,7 @@ final class CuisineQATests: XCTestCase {
         let typeIt = app.buttons["Type It Myself"]
         if typeIt.waitForExistence(timeout: 3) { typeIt.tap() }
         let nameField = app.textFields["Recipe name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "The typed recipe form didn't open")
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5), "The typed recipe form didn’t open")
         nameField.tap()
         nameField.typeText(name)
         // Put the keyboard away: on a small phone it covers the details below the name.
@@ -49,12 +49,12 @@ final class CuisineQATests: XCTestCase {
         app.searchFields.firstMatch.tap()
         app.searchFields.firstMatch.typeText("Mexi")
         let found = app.buttons["CuisineOption-mexican"]
-        XCTAssertTrue(found.waitForExistence(timeout: 3), "Search didn't find Mexican")
-        XCTAssertFalse(app.buttons["CuisineOption-italian"].exists, "Search didn't narrow the list")
+        XCTAssertTrue(found.waitForExistence(timeout: 3), "Search didn’t find Mexican")
+        XCTAssertFalse(app.buttons["CuisineOption-italian"].exists, "Search didn’t narrow the list")
         snap(app, "02 Cuisine search")
         // Picking one closes the list.
         found.tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Picking from search didn't close the list")
+        XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Picking from search didn’t close the list")
         XCTAssertEqual(cuisine.value as? String, "Mexican")
 
         // Cancel leaves it as it was.
@@ -62,7 +62,7 @@ final class CuisineQATests: XCTestCase {
         let close = app.buttons["CuisineCancel"]
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Cancel didn't close the list")
+        XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Cancel didn’t close the list")
         XCTAssertEqual(cuisine.value as? String, "Mexican", "Cancel changed the cuisine")
 
         // An ingredient and a step, so it can be saved.
@@ -78,11 +78,13 @@ final class CuisineQATests: XCTestCase {
         let sheetDone = app.navigationBars["New Ingredient"].buttons["Done"]
         (sheetDone.exists ? sheetDone : app.buttons["Done"].firstMatch).tap()
         if !waitGone(app.navigationBars["New Ingredient"], timeout: 3), sheetDone.exists { sheetDone.tap() }
-        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"], timeout: 5), "New Ingredient didn't close")
+        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"], timeout: 5), "New Ingredient didn’t close")
         // Step 1 can start below the fold, before the form has built it.
-        let step = app.descendants(matching: .any).matching(NSPredicate(
-            format: "(identifier == 'Step 1' OR label == 'Step 1') AND (elementType == %d OR elementType == %d)",
-            XCUIElement.ElementType.textView.rawValue, XCUIElement.ElementType.textField.rawValue)).firstMatch
+        let step = app.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "(identifier == 'Step 1' OR label == 'Step 1') AND (elementType == %d OR elementType == %d)",
+                XCUIElement.ElementType.textView.rawValue, XCUIElement.ElementType.textField.rawValue)
+        ).firstMatch
         reveal(step, in: app)
         step.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         step.typeText("Braise the pork until tender.")
@@ -90,9 +92,9 @@ final class CuisineQATests: XCTestCase {
 
         // Save: the page says Mexican.
         app.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 15), "The saved recipe didn't open")
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 15), "The saved recipe didn’t open")
         let shown = app.descendants(matching: .any)["RecipeCuisineShown"]
-        XCTAssertTrue(shown.waitForExistence(timeout: 5), "The recipe page doesn't show its cuisine")
+        XCTAssertTrue(shown.waitForExistence(timeout: 5), "The recipe page doesn’t show its cuisine")
         XCTAssertTrue(shown.label.contains("Mexican"), "The page says \(shown.label)")
         snap(app, "03 Recipe page, Mexican")
 
@@ -112,11 +114,11 @@ final class CuisineQATests: XCTestCase {
         let italian = app.buttons["CuisineOption-italian"]
         XCTAssertTrue(italian.waitForExistence(timeout: 5), "No Italian in the cuisine list")
         italian.tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Picking one didn't close the list")
+        XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Picking one didn’t close the list")
         XCTAssertEqual(editCuisine.value as? String, "Italian")
         snap(app, "04 Edit Recipe, Italian")
         app.buttons["Save"].firstMatch.tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Edit Recipe"], timeout: 15), "Edit Recipe didn't save")
+        XCTAssertTrue(waitGone(app.navigationBars["Edit Recipe"], timeout: 15), "Edit Recipe didn’t save")
 
         // The page says Italian now.
         let italianShown = NSPredicate(format: "label CONTAINS 'Italian'")
@@ -130,6 +132,6 @@ final class CuisineQATests: XCTestCase {
         let confirm = app.buttons["Delete Recipe"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 3))
         confirm.tap()
-        XCTAssertTrue(app.staticTexts["\(name) deleted."].waitForExistence(timeout: 10), "It wasn't deleted")
+        XCTAssertTrue(app.staticTexts["\(name) deleted."].waitForExistence(timeout: 10), "It wasn’t deleted")
     }
 }

@@ -23,9 +23,9 @@ nonisolated struct SpecialtyDefaultsOutcome: Equatable, Sendable {
         case 0:
             return chosen
         case 1:
-            return chosen + " " + String(localized: "1 already had a choice and wasn't changed.")
+            return chosen + " " + String(localized: "1 already had a choice and wasn’t changed.")
         default:
-            return chosen + " " + String(localized: "\(skipped) already had a choice and weren't changed.")
+            return chosen + " " + String(localized: "\(skipped) already had a choice and weren’t changed.")
         }
     }
 }
@@ -34,7 +34,7 @@ nonisolated struct SpecialtyDefaultsOutcome: Equatable, Sendable {
 nonisolated enum SpecialtyFormat {
     static func recipeCount(_ count: Int) -> String {
         switch count {
-        case 0: String(localized: "Not in this household's recipes")
+        case 0: String(localized: "Not in this household’s recipes")
         case 1: String(localized: "Used in 1 recipe")
         default: String(localized: "Used in \(count) recipes")
         }
@@ -47,7 +47,7 @@ nonisolated enum SpecialtyFormat {
             return settings.currentOption?.label ?? settings.strategy.rawValue
         }
         if error != nil {
-            return String(localized: "Couldn't load — tap to try again")
+            return String(localized: "Couldn’t load. Tap to try again.")
         }
         return String(localized: "Loading…")
     }
@@ -96,7 +96,7 @@ nonisolated enum SpecialtyFormat {
     /// Why an ingredient nobody chose for still has a plan; `nil` when a member chose it.
     static func strategyNote(_ ingredient: SpecialtyIngredient) -> String? {
         guard ingredient.isResolvedByStrategy else { return nil }
-        return String(localized: "Nobody picked this. It's your household's default.")
+        return String(localized: "Nobody picked this. It’s your household’s default.")
     }
 
     /// "Changed by Ada Lovelace · Sep 15, 2026"; `nil` when nobody has ever set the strategy.

@@ -41,19 +41,19 @@ nonisolated struct GroceryListApp: Identifiable, Equatable, Sendable {
         guide: [
             GroceryListAppGuideStep(
                 imageName: "AnyListGuideStep1", text: "Open your list in AnyList and tap Add Item.",
-                imageDescription: "AnyList's list screen with Add Item highlighted."),
+                imageDescription: "AnyList’s list screen with Add Item highlighted."),
             GroceryListAppGuideStep(
                 imageName: "AnyListGuideStep2", text: "Tap the paste list icon at the top right, next to the book.",
-                imageDescription: "AnyList's Add Item bar with the paste list icon highlighted, next to the book."),
+                imageDescription: "AnyList’s Add Item bar with the paste list icon highlighted, next to the book."),
             GroceryListAppGuideStep(
                 imageName: "AnyListGuideStep3", text: "Tap the empty area, then tap Paste.",
-                imageDescription: "AnyList's Paste Items screen with the empty text area highlighted."),
+                imageDescription: "AnyList’s Paste Items screen with the empty text area highlighted."),
             GroceryListAppGuideStep(
                 imageName: "AnyListGuideStep4", text: "Each line becomes its own item. Tap the check mark.",
                 imageDescription: "The pasted list, one item per line, with the check mark highlighted."),
             GroceryListAppGuideStep(
                 imageName: "AnyListGuideStep5", text: "Your items are added and sorted into aisles.",
-                imageDescription: "AnyList's list with the items sorted under Bakery and Produce."),
+                imageDescription: "AnyList’s list with the items sorted under Bakery and Produce."),
         ],
         // Not documented by AnyList, but it opens the app. If it ever stops, the App Store page
         // still shows Open for someone who has AnyList.

@@ -101,7 +101,7 @@ final class ImportReviewStore {
             phase = .loaded
         } catch let error as APIError where error.status == 404 {
             guard started == scope else { return }
-            Self.logger.info("Import reviews aren't available on this API yet")
+            Self.logger.info("Import reviews aren’t available on this API yet")
             items = []
             isAvailable = false
             refreshError = nil

@@ -28,8 +28,8 @@ struct PlanDinnersIntent: AppIntent {
 
 /// "What's for dinner tonight in DinnerOS": reads today's plan entries.
 struct TonightDinnerIntent: AppIntent {
-    static let title: LocalizedStringResource = "What's for Dinner Tonight"
-    static let description = IntentDescription("Tells you what's planned for dinner today.")
+    static let title: LocalizedStringResource = "What’s for Dinner Tonight"
+    static let description = IntentDescription("Tells you what’s planned for dinner today.")
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {

@@ -54,7 +54,7 @@ struct SpecialtyStoreTests {
         #expect(outcome.skipped == 1)
         #expect(
             outcome.summary
-                == "Chose the suggested option for 2 specialty ingredients. 1 already had a choice and wasn't changed.")
+                == "Chose the suggested option for 2 specialty ingredients. 1 already had a choice and wasn’t changed.")
         #expect(store.needsChoiceCount == 0)
         #expect(store.ingredient(withID: "southwest-spice-blend")?.hasBatchChoice == true)
         #expect(store.ingredient(withID: "sweet-soy-glaze")?.choice?.type == .storeAlternative)

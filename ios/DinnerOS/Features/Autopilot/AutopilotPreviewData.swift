@@ -52,7 +52,7 @@ enum AutopilotPreviewData {
                       {"value":"grill","label":"Grill"},{"value":"air-fryer","label":"Air fryer"}],
          "novelty":[{"value":"favorites","label":"Mostly favorites","description":"Stick to meals we know we like"},
                     {"value":"balanced","label":"A mix","description":"Favorites with something new now and then"},
-                    {"value":"adventurous","label":"Try new things","description":"Lean toward meals we haven't had"}],
+                    {"value":"adventurous","label":"Try new things","description":"Lean toward meals we haven’t had"}],
          "timeBands":[{"value":"quick","label":"Quick"},{"value":"medium","label":"Medium"},
                       {"value":"long","label":"Long cook OK","description":"Longer than the medium limit"}],
          "frequencies":[{"value":"every_week","label":"Every week"},{"value":"at_most_once","label":"At most once a week"}],

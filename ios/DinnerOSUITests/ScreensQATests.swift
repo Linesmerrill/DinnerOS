@@ -124,10 +124,8 @@ final class ScreensQATests: XCTestCase {
             }
             field.typeText(recipe)
             // The results, loaded: no gray loading card in the screenshot.
-            let results = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
-            for _ in 0..<10 where !results.allElementsBoundByIndex.contains(where: { $0.exists && !$0.frame.isEmpty }) {
-                sleep(1)
-            }
+            _ = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe)).firstMatch
+                .waitForExistence(timeout: 10)
             snap(app, "Menu › search typed, \(kind) (\(mode))")
             // Put the keyboard away with Done, then tap the result card that's on screen: the same
             // name can also sit in a carousel further up.
@@ -150,11 +148,11 @@ final class ScreensQATests: XCTestCase {
             }
             guard let card else {
                 snap(app, "Recipe page › \(kind): search result missing (\(mode))")
-                problems.append("Recipe page › \(kind): \(recipe) isn't in All Meals")
+                problems.append("Recipe page › \(kind): \(recipe) isn’t in All Meals")
                 continue
             }
             card.tap()
-            XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn't open")
+            XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn’t open")
             shot(app, "Recipe page › \(kind)")
             // Each tab, scrolled so its content is on screen (on an iPhone the tab picker sits
             // below the photo).
@@ -175,7 +173,7 @@ final class ScreensQATests: XCTestCase {
                     NSPredicate(format: "label IN %@", ["Delete Recipe", "Edit Recipe", "Share", "Report a Problem"])
                 ).firstMatch
                 if !item.waitForExistence(timeout: 4) {
-                    problems.append("Recipe page › \(kind): the More menu didn't open")
+                    problems.append("Recipe page › \(kind): the More menu didn’t open")
                 }
                 waitStill(app)
                 shot(app, "Recipe page › \(kind) › More menu")
@@ -221,7 +219,7 @@ final class ScreensQATests: XCTestCase {
         }
         app.buttons["Week Menu"].tap()
         if !app.buttons["Run Setup Again"].waitForExistence(timeout: 4) {
-            problems.append("Menu: the ⋯ menu didn't open")
+            problems.append("Menu: the ⋯ menu didn’t open")
         }
         waitStill(app)
         shot(app, "Menu › ⋯ menu")

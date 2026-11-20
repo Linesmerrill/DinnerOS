@@ -622,7 +622,7 @@ nonisolated struct GrocerySkipReason: RawRepresentable, Codable, Hashable, Senda
         switch self {
         case .recipeUnavailable: String(localized: "The recipe is no longer in this household.")
         case .servingsUnavailable: String(localized: "The recipe no longer offers that serving size.")
-        default: String(localized: "It couldn't be included.")
+        default: String(localized: "It couldn’t be included.")
         }
     }
 }

@@ -44,11 +44,11 @@ extension GoogleSignInError: LocalizedError {
         case .cancelled:
             String(localized: "Google sign-in was cancelled.")
         case .invalidConfiguration:
-            String(localized: "Google sign-in isn't configured for this build.")
+            String(localized: "Google sign-in isn’t configured for this build.")
         case .tokenExchangeFailed, .missingIDToken:
-            String(localized: "Google didn't complete the sign-in. Try again.")
+            String(localized: "Google didn’t complete the sign-in. Try again.")
         case .unexpectedCallback, .stateMismatch, .missingAuthorizationCode, .authorizationFailed:
-            String(localized: "Google sign-in couldn't be verified. Try again.")
+            String(localized: "Google sign-in couldn’t be verified. Try again.")
         }
     }
 }

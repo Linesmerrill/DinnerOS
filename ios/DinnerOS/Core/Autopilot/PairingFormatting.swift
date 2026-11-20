@@ -128,8 +128,8 @@ nonisolated enum PairingFormat {
             let count = result.pairingsSkipped.count
             parts.append(
                 count == 1
-                    ? String(localized: "1 add-on wasn't added.")
-                    : String(localized: "\(count) add-ons weren't added."))
+                    ? String(localized: "1 add-on wasn’t added.")
+                    : String(localized: "\(count) add-ons weren’t added."))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }

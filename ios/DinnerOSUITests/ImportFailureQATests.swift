@@ -34,7 +34,7 @@ final class ImportFailureQATests: XCTestCase {
 
         // What failed, in plain words from the server.
         let message = app.staticTexts.matching(
-            NSPredicate(format: "label == %@", "That page didn't load. Check the link and try again.")
+            NSPredicate(format: "label == %@", "That page didn’t load. Check the link and try again.")
         ).firstMatch
         XCTAssertTrue(message.waitForExistence(timeout: 45), "No plain message after the link failed")
         XCTAssertTrue(waitGone(app.keyboards.firstMatch), "The keyboard covers what to do next")
@@ -50,7 +50,7 @@ final class ImportFailureQATests: XCTestCase {
         writeOwn.tap()
         XCTAssertTrue(app.textFields["Recipe name"].waitForExistence(timeout: 5), "Write Your Own has no form")
         let source = app.descendants(matching: .any)["DraftSourceLink"].firstMatch
-        XCTAssertTrue(source.waitForExistence(timeout: 5), "The form doesn't keep the link")
+        XCTAssertTrue(source.waitForExistence(timeout: 5), "The form doesn’t keep the link")
         XCTAssertEqual(source.value as? String, link)
         snap(app, "Import failed, Write Your Own with the link (\(mode))")
     }

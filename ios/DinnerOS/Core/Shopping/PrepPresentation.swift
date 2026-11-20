@@ -176,7 +176,7 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
         let meals = upcoming.isEmpty ? card.meals : upcoming
         guard !meals.isEmpty else { return String(localized: "this week") }
         let names = meals.map { meal in
-            meal.planDay.map { String(localized: "\($0.name(locale: locale))'s \(meal.recipeName)") }
+            meal.planDay.map { String(localized: "\($0.name(locale: locale))’s \(meal.recipeName)") }
                 ?? meal.recipeName
         }
         return names.formatted(.list(type: .and).locale(locale))

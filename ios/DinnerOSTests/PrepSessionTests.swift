@@ -132,7 +132,7 @@ struct PrepSessionTests {
             "unit":"oz","bought":"64","boughtValue":64,"needed":"10","neededValue":10,
             "surplus":"54","surplusValue":54,"surplusPercent":84,
             "surplusText":"This week uses 10 oz of 64 oz","freezable":true,"frozen":false,
-            "instruction":"Keep 10 oz out for Thursday's Tuscan Pork, then cut the rest into 5 portions of about 10.8 oz and freeze them.",
+            "instruction":"Keep 10 oz out for Thursday’s Tuscan Pork, then cut the rest into 5 portions of about 10.8 oz and freeze them.",
             "reminder":"thaw",
             "reminderText":"We'll remind you the morning of any day a planned meal needs it. Thursday is the next one.",
             "meals":[{"recipeId":"66e5a1f2c3b4a5d6e7f81001","recipeName":"Tuscan Pork","day":"thu",
@@ -171,7 +171,7 @@ struct PrepSessionTests {
 
     private static let emptySessionJSON = #"""
         {"week":"2026-W38","state":"nothing_to_prep",
-         "headline":"Nothing to prep this week — every pack was about the size the week needs.",
+         "headline":"Nothing to prep this week. Every pack was about the size the week needs.",
          "pending":0,"done":0,"skipped":0,"updatedAt":null,"cards":[]}
         """#
 }

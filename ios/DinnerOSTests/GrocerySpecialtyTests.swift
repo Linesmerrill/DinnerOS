@@ -280,7 +280,7 @@ struct GroceryListSpecialtyActionTests {
 
         let failure = try #require(model.specialtyFailure)
         #expect(!failure.isForbidden)
-        #expect(failure.title == "Couldn't Record Southwest Spice Blend")
+        #expect(failure.title == "Couldn’t Record Southwest Spice Blend")
         #expect(model.lastRecordedBatch == nil)
 
         // An alert clears the failure before its Try Again button runs.
@@ -324,7 +324,7 @@ struct GroceryListSpecialtyActionTests {
 
         let failure = try #require(model.specialtyFailure)
         #expect(failure.isForbidden)
-        #expect(failure.title == "Couldn't Choose an Option for Sweet Soy Glaze")
+        #expect(failure.title == "Couldn’t Choose an Option for Sweet Soy Glaze")
         #expect(!model.canChangeSpecialties)
         #expect(!model.canAddToPantry)
         let requests = harness.specialtyServer.log.count

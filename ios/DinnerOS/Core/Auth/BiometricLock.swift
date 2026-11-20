@@ -100,7 +100,7 @@ final class BiometricLock {
                 ))
         } else if outcome == .unavailable {
             session.forgetBiometricSignIn(
-                notice: String(localized: "\((kind ?? .faceID).name) isn't set up on this device. Sign in another way.")
+                notice: String(localized: "\((kind ?? .faceID).name) isn’t set up on this device. Sign in another way.")
             )
         }
         // Whatever happens next, the sign-in screen doesn't ask again by itself.
@@ -151,7 +151,7 @@ final class BiometricLock {
             _ = await session.signInWithBiometrics(proof: proof ?? BiometricProof(context: nil))
         case .unavailable:
             session.forgetBiometricSignIn(
-                notice: String(localized: "\((kind ?? .faceID).name) isn't set up on this device. Sign in another way.")
+                notice: String(localized: "\((kind ?? .faceID).name) isn’t set up on this device. Sign in another way.")
             )
         case .canceled, .interrupted, .failed, .changed, .missing:
             break
@@ -207,14 +207,14 @@ final class BiometricLock {
                 try session.turnOnBiometricSignIn(enrollmentState: authenticator.enrollmentState())
                 return true
             } catch {
-                Self.logger.error("Face ID sign-in couldn't turn on: \(String(describing: error), privacy: .public)")
-                turnOnError = String(localized: "\(kind.name) couldn't be turned on. Try again.")
+                Self.logger.error("Face ID sign-in couldn’t turn on: \(String(describing: error), privacy: .public)")
+                turnOnError = String(localized: "\(kind.name) couldn’t be turned on. Try again.")
                 return false
             }
         case .canceled, .interrupted:
             return false
         case .failed, .unavailable, .changed, .missing:
-            turnOnError = String(localized: "\(kind.name) didn't work. Try again.")
+            turnOnError = String(localized: "\(kind.name) didn’t work. Try again.")
             return false
         }
     }

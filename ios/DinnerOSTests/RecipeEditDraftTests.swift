@@ -78,7 +78,7 @@ struct RecipeEditDraftTests {
         var draft = RecipeEditDraft(recipe: try recipe())
         #expect(draft.problem == nil)
         draft.setQuantity("a lot", for: draft.lines[0].id)
-        #expect(draft.problem == "The amount for Ramen Noodles isn't a number.")
+        #expect(draft.problem == "The amount for Ramen Noodles isn’t a number.")
         draft.setQuantity("6", for: draft.lines[0].id)
         draft.lines[1].name = " "
         #expect(draft.problem == "Every ingredient needs a name.")

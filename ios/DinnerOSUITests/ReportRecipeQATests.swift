@@ -45,15 +45,15 @@ final class ReportRecipeQATests: XCTestCase {
         let links = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Shared Recipes'"))
         let link = links.allElementsBoundByIndex.first { $0.frame.minY > stripBottom && $0.isHittable } ?? entry
         link.tap()
-        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn't open")
+        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn’t open")
 
         // 1. Report one recipe: it says thanks, and the recipe is gone from search.
         open(reported, in: app)
         app.buttons["catalogRecipe.more"].firstMatch.tap()
         app.buttons["Report Recipe"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["It's spam or an ad"].firstMatch.waitForExistence(timeout: 5), "No report reasons")
+        XCTAssertTrue(app.buttons["It’s spam or an ad"].firstMatch.waitForExistence(timeout: 5), "No report reasons")
         snap(app, "Report 01 reasons")
-        app.buttons["It's spam or an ad"].firstMatch.tap()
+        app.buttons["It’s spam or an ad"].firstMatch.tap()
         XCTAssertTrue(app.alerts["Reported"].waitForExistence(timeout: 10), "No thank-you after reporting")
         snap(app, "Report 02 thanks")
         app.alerts["Reported"].buttons["OK"].tap()
@@ -77,9 +77,9 @@ final class ReportRecipeQATests: XCTestCase {
     @MainActor
     private func open(_ name: String, in app: XCUIApplication) {
         let hit = search(name, in: app)
-        XCTAssertTrue(hit.waitForExistence(timeout: 10), "Search didn't find \(name)")
+        XCTAssertTrue(hit.waitForExistence(timeout: 10), "Search didn’t find \(name)")
         hit.tap()
-        XCTAssertTrue(app.buttons["catalogRecipe.more"].firstMatch.waitForExistence(timeout: 10), "\(name) didn't open")
+        XCTAssertTrue(app.buttons["catalogRecipe.more"].firstMatch.waitForExistence(timeout: 10), "\(name) didn’t open")
     }
 
     @MainActor

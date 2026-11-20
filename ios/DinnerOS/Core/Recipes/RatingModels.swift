@@ -107,7 +107,7 @@ nonisolated struct RatingMiss: Codable, Hashable, Sendable {
     /// A reason as it reads after an ingredient's name: "not enough".
     static func reasonText(_ reason: String) -> String {
         switch reason {
-        case didntLike: String(localized: "didn't like it")
+        case didntLike: String(localized: "didn’t like it")
         case "too-much": String(localized: "too much")
         case "too-little": String(localized: "not enough")
         case product: String(localized: "the product I bought")

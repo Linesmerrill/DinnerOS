@@ -332,10 +332,10 @@ enum SpecialtyPreviewData {
     static let strategyOptions = [
         SpecialtyStrategyOption(
             value: .similar, label: "Something similar",
-            description: "Buy something close from the store — quicker, tastes a little different"),
+            description: "Buy something close from the store. Quicker, tastes a little different."),
         SpecialtyStrategyOption(
             value: .closest, label: "As close as possible",
-            description: "Make a jar you reuse across several meals — more work, closest to the original"),
+            description: "Make a jar you reuse across several meals. More work, closest to the original."),
         SpecialtyStrategyOption(
             value: .ask, label: "Ask me each time",
             description: "Leave each specialty ingredient on the list until someone picks an option"),

@@ -33,13 +33,13 @@ final class CompanionQATests: XCTestCase {
         let companionsItem = app.buttons["Companions"].firstMatch
         XCTAssertTrue(companionsItem.waitForExistence(timeout: 5), "No Companions in the Week Menu")
         companionsItem.tap()
-        XCTAssertTrue(app.navigationBars["Companions"].waitForExistence(timeout: 10), "Companions didn't open")
+        XCTAssertTrue(app.navigationBars["Companions"].waitForExistence(timeout: 10), "Companions didn’t open")
         snap(app, "Companions › List (\(mode))")
 
         // 2. A new companion: a name, the dinner's cuisine, Just Suggest It.
         app.buttons["Add a Companion"].firstMatch.tap()
         let name = app.textFields["CompanionName"]
-        XCTAssertTrue(name.waitForExistence(timeout: 10), "The companion editor didn't open")
+        XCTAssertTrue(name.waitForExistence(timeout: 10), "The companion editor didn’t open")
         name.tap()
         name.typeText(companion)
         let cuisine = app.buttons[seed.cuisine].firstMatch
@@ -51,11 +51,11 @@ final class CompanionQATests: XCTestCase {
         if suggest.exists { suggest.tap() }
         snap(app, "Companions › New (\(mode))")
         app.buttons["CompanionSave"].tap()
-        XCTAssertTrue(waitGone(app.buttons["CompanionSave"], timeout: 10), "The companion didn't save")
+        XCTAssertTrue(waitGone(app.buttons["CompanionSave"], timeout: 10), "The companion didn’t save")
         let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", companion)).firstMatch
         _ = row.waitForExistence(timeout: 10)
         reveal(row, in: app)
-        XCTAssertTrue(row.exists, "\(companion) isn't in the list")
+        XCTAssertTrue(row.exists, "\(companion) isn’t in the list")
 
         // 3. Back on the Menu, the Mexican dinner offers it.
         app.navigationBars.buttons.firstMatch.tap()
@@ -76,7 +76,7 @@ final class CompanionQATests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Grocery List"].waitForExistence(timeout: 10))
         let item = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", companion)).firstMatch
         reveal(item, in: app, maxSwipes: 12)
-        XCTAssertTrue(item.waitForExistence(timeout: 10), "\(companion) isn't on the grocery list")
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "\(companion) isn’t on the grocery list")
         snap(app, "Companions › On the grocery list (\(mode))")
         app.navigationBars.buttons.firstMatch.tap()
 
@@ -85,7 +85,7 @@ final class CompanionQATests: XCTestCase {
         app.buttons["Companions"].firstMatch.tap()
         _ = row.waitForExistence(timeout: 10)
         reveal(row, in: app)
-        XCTAssertTrue(row.exists, "\(companion) isn't in the list to delete")
+        XCTAssertTrue(row.exists, "\(companion) isn’t in the list to delete")
         row.tap()
         let delete = app.buttons["CompanionDelete"]
         reveal(delete, in: app)
@@ -171,7 +171,8 @@ private struct CompanionSeed {
                 let oldest = entries.sorted { ($0["addedAt"] as? String ?? "") < ($1["addedAt"] as? String ?? "") }
                 for entry in oldest.prefix(entries.count - 40) {
                     guard let id = entry["id"] as? String else { continue }
-                    _ = try? await call(api, "DELETE", "households/\(householdID)/plans/\(week)/entries/\(id)", token: token)
+                    _ = try? await call(
+                        api, "DELETE", "households/\(householdID)/plans/\(week)/entries/\(id)", token: token)
                 }
             }
         }
@@ -229,7 +230,9 @@ private struct CompanionSeed {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            throw NSError(domain: "CompanionSeed", code: status, userInfo: [NSLocalizedDescriptionKey: "\(method) \(path) = \(status)"])
+            throw NSError(
+                domain: "CompanionSeed", code: status,
+                userInfo: [NSLocalizedDescriptionKey: "\(method) \(path) = \(status)"])
         }
         guard !data.isEmpty else { return [:] }
         return (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]

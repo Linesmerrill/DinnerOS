@@ -82,7 +82,7 @@ enum PrepPreviewData {
              "needed":"\(needed.0)","neededValue":\(needed.0),"neededText":"\(needed.1)",
              "surplus":"0","surplusValue":0,"surplusPercent":50,"surplusText":"",
              "freezable":true,"frozen":false,"instruction":"","reminder":"thaw",
-             "reminderText":"We'll remind you Tuesday morning to move a bag to the fridge. It takes about 3 hours to thaw.",
+             "reminderText":"We’ll remind you Tuesday morning to move a bag to the fridge. It takes about 3 hours to thaw.",
              "bagLabel":\(label),
              "meals":[\(mealsJSON.joined(separator: ","))],
              "portions":{"unit":"oz","reserved":"\(needed.0)","reservedValue":\(needed.0),

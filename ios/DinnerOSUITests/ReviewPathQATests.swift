@@ -107,8 +107,8 @@ final class ReviewPathQATests: XCTestCase {
                 close(app)
                 close(app)
             } else {
-                snap(app, "08 Recipe didn't open")
-                problems.append("Recipe didn't open")
+                snap(app, "08 Recipe didn’t open")
+                problems.append("Recipe didn’t open")
                 close(app)
             }
         }

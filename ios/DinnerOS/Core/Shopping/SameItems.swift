@@ -60,7 +60,7 @@ nonisolated struct SameItemChoice: Hashable, Sendable, Identifiable {
                 out.append(SameItemChoice(key: item.key, name: item.name, detail: detail))
             }
         }
-        add(listItems, detail: String(localized: "On this week's list"))
+        add(listItems, detail: String(localized: "On this week’s list"))
         add(pantryItems, detail: String(localized: "In your pantry"))
         return out
     }

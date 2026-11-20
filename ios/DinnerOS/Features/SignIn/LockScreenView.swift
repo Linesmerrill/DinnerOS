@@ -92,7 +92,7 @@ private struct BiometricSignInModifier: ViewModifier {
                     Button("Not Now", role: .cancel) {}
                 }
                 .alert(
-                    "Couldn't Turn It On",
+                    "Couldn’t Turn It On",
                     isPresented: Binding(presenting: $lock.turnOnError),
                     presenting: lock.turnOnError
                 ) { _ in

@@ -122,7 +122,7 @@ final class UsualsStore {
             return
         } catch {
             // Usuals are a convenience: without them the list works as before.
-            Self.logger.notice("Usuals didn't load: \(String(describing: type(of: error)), privacy: .public)")
+            Self.logger.notice("Usuals didn’t load: \(String(describing: type(of: error)), privacy: .public)")
         }
     }
 
@@ -224,7 +224,7 @@ final class UsualsStore {
             }
         } catch {
             // This device won't ask again this session either way.
-            Self.logger.notice("Not Now didn't reach the API")
+            Self.logger.notice("Not Now didn’t reach the API")
         }
     }
 

@@ -39,7 +39,7 @@ nonisolated enum AutopilotOnboardingStep: String, CaseIterable, Hashable, Sendab
         case .taste:
             String(
                 localized:
-                    "Autopilot leans toward what you like and away from what you don't. You can change any of this later in Autopilot Preferences."
+                    "Autopilot leans toward what you like and away from what you don’t. You can change any of this later in Autopilot Preferences."
             )
         case .avoid:
             String(
@@ -49,7 +49,7 @@ nonisolated enum AutopilotOnboardingStep: String, CaseIterable, Hashable, Sendab
         case .week:
             String(
                 localized:
-                    "Autopilot plans a dinner for each night you pick. Nights you've already planned count toward the total, and Autopilot Preferences can plan fewer dinners than nights, set servings, and cap weeknight cooking."
+                    "Autopilot plans a dinner for each night you pick. Nights you’ve already planned count toward the total, and Autopilot Preferences can plan fewer dinners than nights, set servings, and cap weeknight cooking."
             )
         }
     }

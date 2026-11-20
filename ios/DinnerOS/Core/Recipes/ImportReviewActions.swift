@@ -59,7 +59,7 @@ nonisolated enum ImportReviewCopy {
         if group.isSpellingOnly {
             return [
                 String(localized: "The box spelled this recipe a little differently."),
-                String(localized: "It's almost certainly the same recipe."),
+                String(localized: "It’s almost certainly the same recipe."),
             ]
         }
         var lines = [
@@ -69,11 +69,11 @@ nonisolated enum ImportReviewCopy {
             group.deliveredNames.count == 1
                 ? String(localized: "At least one box said \(group.deliveredNames[0]).")
                 : String(localized: "Some boxes said something else, listed below."),
-            String(localized: "That's often a different protein."),
+            String(localized: "That’s often a different protein."),
             String(localized: "Groceries and allergens come from the recipe in your library."),
         ]
         if group.recipeID == nil {
-            lines.append(String(localized: "That recipe isn't in your library any more."))
+            lines.append(String(localized: "That recipe isn’t in your library any more."))
         }
         return lines
     }
@@ -86,25 +86,25 @@ nonisolated enum ImportReviewCopy {
         case .steps:
             lines = [
                 String(localized: "\(source) had no instructions for this recipe."),
-                String(localized: "We didn't make any up."),
+                String(localized: "We didn’t make any up."),
             ]
         case .cookTime:
             lines = [
-                String(localized: "\(source) didn't say how long this recipe takes."),
+                String(localized: "\(source) didn’t say how long this recipe takes."),
                 String(localized: "It has no cook time in your library."),
             ]
         case .ingredientUnit(let ingredient):
             let unit = item.value.isEmpty ? String(localized: "a unit") : "\u{201C}\(item.value)\u{201D}"
             lines = [
                 String(localized: "\(ingredient) was measured in \(unit)."),
-                String(localized: "That isn't a unit we know, so it has no unit here."),
+                String(localized: "That isn’t a unit we know, so it has no unit here."),
                 String(localized: "The line still reads as \(source) wrote it."),
             ]
         case .variant, .other:
             lines = [item.reason]
         }
         if item.recipeID == nil {
-            lines.append(String(localized: "That recipe isn't in your library any more."))
+            lines.append(String(localized: "That recipe isn’t in your library any more."))
         }
         return lines
     }

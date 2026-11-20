@@ -404,7 +404,7 @@ nonisolated struct InvitationPreview: Decodable, Equatable, Sendable {
         let role = roleWithArticle
         let invited =
             inviter.isEmpty
-            ? String(localized: "You're invited to join as \(role).")
+            ? String(localized: "You’re invited to join as \(role).")
             : String(localized: "\(inviter) invited you to join as \(role).")
         return invited + " " + String(localized: "Joining shares your name with its members.")
     }

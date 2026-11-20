@@ -83,7 +83,7 @@ struct DinnerWeekWidget: Widget {
             DinnerWeekView(entry: entry)
         }
         .configurationDisplayName("Dinner")
-        .description("Tonight's dinner and the rest of your week.")
+        .description("Tonight’s dinner and the rest of your week.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryInline])
         .contentMarginsDisabled()
     }
@@ -321,7 +321,7 @@ private struct MediumDinnerView: View {
                         let rows = Array(entry.upcoming.prefix(3))
                         if rows.isEmpty {
                             Spacer(minLength: 0)
-                            Text(snapshot.hasWeek ? "That's the week." : "Nothing planned yet.")
+                            Text(snapshot.hasWeek ? "That’s the week." : "Nothing planned yet.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                             Spacer(minLength: 0)

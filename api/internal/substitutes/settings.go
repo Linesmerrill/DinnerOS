@@ -71,9 +71,9 @@ type StrategyOption struct {
 func StrategyOptions() []StrategyOption {
 	return []StrategyOption{
 		{Value: StrategySimilar, Label: "Something similar",
-			Description: "Buy something close from the store — quicker, tastes a little different"},
+			Description: "Buy something close from the store. Quicker, tastes a little different."},
 		{Value: StrategyClosest, Label: "As close as possible",
-			Description: "Make a jar you reuse across several meals — more work, closest to the original"},
+			Description: "Make a jar you reuse across several meals. More work, closest to the original."},
 		{Value: StrategyAsk, Label: "Ask me each time",
 			Description: "Leave each specialty ingredient on the list until someone picks an option"},
 	}

@@ -88,9 +88,9 @@ nonisolated enum SpecialtyFixtures {
     /// The server writes every label and description, so the app renders them as sent.
     static let strategyOptionsJSON = #"""
         [{"value":"similar","label":"Something similar",
-          "description":"Buy something close from the store — quicker, tastes a little different"},
+          "description":"Buy something close from the store. Quicker, tastes a little different."},
          {"value":"closest","label":"As close as possible",
-          "description":"Make a jar you reuse across several meals — more work, closest to the original"},
+          "description":"Make a jar you reuse across several meals. More work, closest to the original."},
          {"value":"ask","label":"Ask me each time",
           "description":"Leave each specialty ingredient on the list until someone picks an option"}]
         """#

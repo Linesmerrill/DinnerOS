@@ -19,13 +19,13 @@ final class StartCookingQATests: XCTestCase {
         let app = launchSignedIn()
         open(recipe, in: app)
         let start = app.buttons["Start Cooking"].firstMatch
-        XCTAssertTrue(start.waitForExistence(timeout: 15), "\(recipe) didn't open")
+        XCTAssertTrue(start.waitForExistence(timeout: 15), "\(recipe) didn’t open")
         snap(app, "Start Cooking › top of the page")
 
         for swipe in 1...6 {
             app.swipeUp()
             XCTAssertTrue(start.waitForExistence(timeout: 3), "Start Cooking left the screen after \(swipe) swipes")
-            XCTAssertTrue(start.isHittable, "Start Cooking can't be tapped after \(swipe) swipes")
+            XCTAssertTrue(start.isHittable, "Start Cooking can’t be tapped after \(swipe) swipes")
             XCTAssertTrue(app.frame.contains(start.frame), "Start Cooking is off the screen after \(swipe) swipes")
         }
         snap(app, "Start Cooking › scrolled")
@@ -44,10 +44,10 @@ final class StartCookingQATests: XCTestCase {
 
         start.tap()
         if app.buttons["Skip"].firstMatch.waitForExistence(timeout: 4) { app.buttons["Skip"].firstMatch.tap() }
-        XCTAssertTrue(app.buttons["Done"].firstMatch.waitForExistence(timeout: 10), "Start Cooking didn't open cooking")
+        XCTAssertTrue(app.buttons["Done"].firstMatch.waitForExistence(timeout: 10), "Start Cooking didn’t open cooking")
         snap(app, "Start Cooking › cooking")
         app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(start.waitForExistence(timeout: 10), "Done didn't go back to the recipe")
+        XCTAssertTrue(start.waitForExistence(timeout: 10), "Done didn’t go back to the recipe")
     }
 
     /// Searches All Meals on the Menu and opens the recipe, as a person would.
@@ -71,7 +71,7 @@ final class StartCookingQATests: XCTestCase {
             if card == nil { sleep(1) }
         }
         guard let card else {
-            XCTFail("\(recipe) isn't in All Meals")
+            XCTFail("\(recipe) isn’t in All Meals")
             return
         }
         card.tap()

@@ -77,12 +77,12 @@ struct PrepPresentationTests {
         let one = try presentation(PrepPreviewData.oneBag)
         #expect(one.packText == "24 oz pack")
         #expect(one.keepText == "10 oz")
-        #expect(one.keepCaption == "for Tuesday's Citrus Turkey Tacos")
+        #expect(one.keepCaption == "for Tuesday’s Citrus Turkey Tacos")
         #expect(one.bagText == "10 oz")
         #expect(one.thawText == "about 3 hr to thaw")
         let several = try presentation(PrepPreviewData.severalBags)
         #expect(several.keepText == "20 oz")
-        #expect(several.keepCaption == "for Tuesday's Citrus Pork Tacos and Thursday's Pork Fried Rice")
+        #expect(several.keepCaption == "for Tuesday’s Citrus Pork Tacos and Thursday’s Pork Fried Rice")
     }
 
     @Test func aCardWithoutAPhotoHasNoURL() throws {
@@ -96,7 +96,7 @@ struct PrepPresentationTests {
 
     @Test func eachCardReadsAsOneSentence() throws {
         let one = try presentation(PrepPreviewData.oneBag)
-        #expect(one.keepAccessibilityLabel == "Keep 10 ounces of ground turkey out for Tuesday's Citrus Turkey Tacos")
+        #expect(one.keepAccessibilityLabel == "Keep 10 ounces of ground turkey out for Tuesday’s Citrus Turkey Tacos")
         #expect(one.bagAccessibilityLabel(1) == "Freezer bag 1 of 1, 10 ounces, about 3 hours to thaw")
         #expect(
             one.leftoverAccessibilityLabel == "4 ounces left over. Throw it in for a little more protein, or toss it.")

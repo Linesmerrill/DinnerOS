@@ -11377,7 +11377,7 @@ components:
                 example: Something similar
               description:
                 type: string
-                example: Buy something close from the store — quicker, tastes a little different
+                example: Buy something close from the store. Quicker, tastes a little different.
     SpecialtyOptionRequest:
       type: object
       required: [type, name, ingredients]

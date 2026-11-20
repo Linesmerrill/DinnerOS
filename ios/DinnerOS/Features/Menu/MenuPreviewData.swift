@@ -29,7 +29,7 @@ enum MenuPreviewData {
             recipe: summary(
                 id: "recipe-3", name: "Placeholder Pasta Bake", headline: "with Roasted Peppers", minutes: 45,
                 calories: 820, protein: 28),
-            badges: [MenuBadge(code: MenuBadgeCode(rawValue: "chef_special"), text: "Chef's Pick")]),
+            badges: [MenuBadge(code: MenuBadgeCode(rawValue: "chef_special"), text: "Chef’s Pick")]),
         MenuCard(
             recipe: summary(
                 id: "recipe-2", name: "Sample Garden Salad", headline: nil, minutes: 15, calories: 320, protein: 12),

@@ -798,9 +798,9 @@ nonisolated struct SkippedPairing: Decodable, Hashable, Sendable, Identifiable {
     /// What the pairing was, from its key, when nothing else names it.
     var explanation: String {
         switch reason {
-        case "alreadyPlanned": String(localized: "It's already planned that day.")
+        case "alreadyPlanned": String(localized: "It’s already planned that day.")
         case "unavailable": String(localized: "It can no longer be planned.")
-        default: String(localized: "It couldn't be added.")
+        default: String(localized: "It couldn’t be added.")
         }
     }
 

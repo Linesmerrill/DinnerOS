@@ -36,11 +36,11 @@ final class DiscoverQATests: XCTestCase {
         let entry = app.staticTexts["Shared Recipes"].firstMatch
         reveal(entry, in: app, maxSwipes: 10)
         entry.tap()
-        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn't open")
+        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn’t open")
 
         // 1. Rows show, with cards.
         let picks = app.descendants(matching: .any)["DiscoverSection-chefs-picks"].firstMatch
-        XCTAssertTrue(picks.waitForExistence(timeout: 15), "No Chef's Picks row")
+        XCTAssertTrue(picks.waitForExistence(timeout: 15), "No Chef’s Picks row")
         XCTAssertTrue(picks.buttons["DiscoverCard"].firstMatch.waitForExistence(timeout: 5), "The row has no cards")
         XCTAssertTrue(app.staticTexts["Chef’s Picks This Week"].exists)
         snap(app, "Discover 01 rows")
@@ -54,10 +54,10 @@ final class DiscoverQATests: XCTestCase {
         save.tap()
         XCTAssertTrue(
             picks.descendants(matching: .any)["DiscoverCardSaved"].firstMatch.waitForExistence(timeout: 10),
-            "Saving from the row didn't mark the card")
+            "Saving from the row didn’t mark the card")
         snap(app, "Discover 02 saved from a row")
         let saved = try await api.recipes(householdID: householdID).first { $0.name == savedName }
-        XCTAssertNotNil(saved, "\(savedName) isn't in the household's recipes after saving")
+        XCTAssertNotNil(saved, "\(savedName) isn’t in the household’s recipes after saving")
 
         // 3. Browse All and its chips.
         let browse = app.descendants(matching: .any)["DiscoverBrowseAll"].firstMatch
@@ -82,7 +82,7 @@ final class DiscoverQATests: XCTestCase {
             }
         }
         if cardsBefore.contains(where: { label in label.contains(" hr") || (Self.minutes(in: label) ?? 0) > 30 }) {
-            XCTAssertLessThan(cardsAfter.count, cardsBefore.count, "The time chip didn't narrow Browse All")
+            XCTAssertLessThan(cardsAfter.count, cardsBefore.count, "The time chip didn’t narrow Browse All")
         }
         app.buttons["DiscoverFilterClear"].firstMatch.tap()
 
@@ -92,7 +92,7 @@ final class DiscoverQATests: XCTestCase {
         search.tap()
         search.typeText(savedName)
         let hit = browse.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", savedName)).firstMatch
-        XCTAssertTrue(hit.waitForExistence(timeout: 10), "Search didn't find \(savedName)")
+        XCTAssertTrue(hit.waitForExistence(timeout: 10), "Search didn’t find \(savedName)")
         snap(app, "Discover 05 search")
         clearSearch(app, search)
         // Search matches any of the words, so other breads may show; the add-on never does.
@@ -118,8 +118,8 @@ final class DiscoverQATests: XCTestCase {
         // The recipe saved here goes away again; the add-on stays exactly as it was.
         if let saved { try await api.deleteRecipe(householdID: householdID, id: saved.id) }
         let left = try await api.recipes(householdID: householdID)
-        XCTAssertFalse(left.contains { $0.name == savedName }, "The saved recipe wasn't deleted")
-        XCTAssertTrue(left.contains { $0.name == addonName }, "The household's add-on changed")
+        XCTAssertFalse(left.contains { $0.name == savedName }, "The saved recipe wasn’t deleted")
+        XCTAssertTrue(left.contains { $0.name == addonName }, "The household’s add-on changed")
     }
 
     @MainActor
@@ -201,7 +201,7 @@ struct QAAPI {
         let result: Result = try await Self.send(
             base: base, token: token, method: "POST", path: "/api/v1/households/\(householdID)/recipes/import",
             body: file)
-        XCTAssertEqual(result.created, 1, "The add-on wasn't imported")
+        XCTAssertEqual(result.created, 1, "The add-on wasn’t imported")
     }
 
     func recipes(householdID: String) async throws -> [Recipe] {
@@ -231,7 +231,7 @@ struct QAAPI {
             base: base, token: token, method: "PUT",
             path: "/api/v1/households/\(householdID)/recipes/\(created.id)/sharing",
             body: ["sharedToCatalog": true])
-        XCTAssertTrue(shared.inCatalog, "\(name) didn't reach Shared Recipes")
+        XCTAssertTrue(shared.inCatalog, "\(name) didn’t reach Shared Recipes")
     }
 
     func deleteRecipe(householdID: String, id: String) async throws {

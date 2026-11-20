@@ -20,7 +20,7 @@ final class AddRecipeChooserQATests: XCTestCase {
     @MainActor
     private func back(_ app: XCUIApplication, from title: String) {
         app.navigationBars[title].buttons.firstMatch.tap()
-        XCTAssertTrue(app.buttons["AddChoice-write"].waitForExistence(timeout: 5), "Back didn't return to the choices")
+        XCTAssertTrue(app.buttons["AddChoice-write"].waitForExistence(timeout: 5), "Back didn’t return to the choices")
     }
 
     @MainActor
@@ -69,12 +69,13 @@ final class AddRecipeChooserQATests: XCTestCase {
         XCTAssertTrue(companion.waitForExistence(timeout: 5), "Add a Companion opened something else")
         snap(app, "Add a Recipe, Add a Companion (\(mode))")
         app.navigationBars["New Companion"].buttons["Cancel"].tap()
-        XCTAssertTrue(app.buttons["AddChoice-shared"].waitForExistence(timeout: 5), "Cancel didn't return to the choices")
+        XCTAssertTrue(
+            app.buttons["AddChoice-shared"].waitForExistence(timeout: 5), "Cancel didn’t return to the choices")
 
         // Browse Shared Recipes closes the choices and opens Shared Recipes.
         app.buttons["AddChoice-shared"].tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Add a Recipe"], timeout: 5), "The choices didn't close")
-        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn't open")
+        XCTAssertTrue(waitGone(app.navigationBars["Add a Recipe"], timeout: 5), "The choices didn’t close")
+        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn’t open")
         snap(app, "Add a Recipe, Browse Shared Recipes (\(mode))")
         app.navigationBars.buttons.firstMatch.tap()
 
@@ -82,7 +83,7 @@ final class AddRecipeChooserQATests: XCTestCase {
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 10))
         openChooser(app)
         app.navigationBars["Add a Recipe"].buttons["Cancel"].tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Add a Recipe"], timeout: 5), "Cancel didn't close the choices")
+        XCTAssertTrue(waitGone(app.navigationBars["Add a Recipe"], timeout: 5), "Cancel didn’t close the choices")
         XCTAssertTrue(app.buttons["Week Menu"].exists)
     }
 }

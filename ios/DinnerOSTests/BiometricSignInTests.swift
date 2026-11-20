@@ -657,7 +657,7 @@ struct BiometricLockTests {
     @Test func turnOnFailureSaysSo() async throws {
         let (lock, session, _, _) = try await setup([.failed], locked: false)
         #expect(!(await lock.turnOn()))
-        #expect(lock.turnOnError == "Face ID didn't work. Try again.")
+        #expect(lock.turnOnError == "Face ID didn’t work. Try again.")
         #expect(!session.isBiometricSignInOn)
     }
 

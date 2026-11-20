@@ -277,6 +277,6 @@ enum RecipeImportError: LocalizedError {
     case pageDidNotLoad
 
     var errorDescription: String? {
-        String(localized: "That page didn't load. Check the link and try again.")
+        String(localized: "That page didn’t load. Check the link and try again.")
     }
 }

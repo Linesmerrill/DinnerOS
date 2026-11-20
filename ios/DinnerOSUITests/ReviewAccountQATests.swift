@@ -50,8 +50,8 @@ final class ReviewAccountQATests: XCTestCase {
         secure.typeText("not-the-password")
         app.buttons["signIn.email.submit"].tap()
         XCTAssertTrue(
-            app.staticTexts["That email and password didn't work."].waitForExistence(timeout: 10),
-            "A wrong password didn't say so plainly")
+            app.staticTexts["That email and password didn’t work."].waitForExistence(timeout: 10),
+            "A wrong password didn’t say so plainly")
         snap(app, "Review account › wrong password")
 
         secure.tap()
@@ -67,7 +67,7 @@ final class ReviewAccountQATests: XCTestCase {
             start.tap()
         }
         XCTAssertFalse(app.staticTexts["Create a Household"].exists, "The review account has no household")
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 20), "The Menu didn't open")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 20), "The Menu didn’t open")
         for title in ["Thanks", "Skip"] where app.buttons[title].firstMatch.exists {
             app.buttons[title].firstMatch.tap()
         }
@@ -75,12 +75,12 @@ final class ReviewAccountQATests: XCTestCase {
         snap(app, "Review account › Menu")
         let first = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", seeded[0])).firstMatch
         reveal(first, in: app, maxSwipes: 8)
-        XCTAssertTrue(first.exists, "\(seeded[0]) isn't on the Menu")
+        XCTAssertTrue(first.exists, "\(seeded[0]) isn’t on the Menu")
         scrollBack(app)
 
         // The library holds exactly our five: nothing from the starter library.
         let names = try await libraryNames(email: email, password: password)
-        XCTAssertEqual(Set(names), Set(seeded), "The review household's recipes")
+        XCTAssertEqual(Set(names), Set(seeded), "The review household’s recipes")
 
         // No Plus on the house: Autopilot leads to the purchase screen.
         let autopilot = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Plan with Autopilot'")).firstMatch
@@ -97,7 +97,7 @@ final class ReviewAccountQATests: XCTestCase {
         }
 
         deleteAccount(app)
-        XCTAssertTrue(app.buttons["signIn.email.open"].waitForExistence(timeout: 20), "Didn't return to sign-in")
+        XCTAssertTrue(app.buttons["signIn.email.open"].waitForExistence(timeout: 20), "Didn’t return to sign-in")
         snap(app, "Review account › deleted, back at sign-in")
     }
 

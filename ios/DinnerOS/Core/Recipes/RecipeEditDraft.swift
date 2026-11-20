@@ -129,7 +129,7 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
         }
         for line in lines {
             for text in line.quantities.values where !text.isEmpty && Self.number(text) == nil {
-                return String(localized: "The amount for \(line.name) isn't a number.")
+                return String(localized: "The amount for \(line.name) isn’t a number.")
             }
         }
         return nil

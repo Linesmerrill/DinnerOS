@@ -30,7 +30,7 @@ enum ShopPreviewData {
             line(
                 "l2", key: "garlic", name: "Garlic", product: "Sample garlic, 3 ct", size: amount("3", "count", "3 ct"),
                 packages: 1, coverage: "1 × 3 ct", reason: .unitNotConvertible,
-                reasonText: "Check amount: 4 cloves doesn't convert to a 3 ct package"),
+                reasonText: "Check amount: 4 cloves doesn’t convert to a 3 ct package"),
             line(
                 "l3", key: "onion", name: "Yellow Onion", product: "Sample yellow onions, 3 lb",
                 size: amount("3", "lb"), packages: 1, coverage: "1 × 3 lb covers this week",

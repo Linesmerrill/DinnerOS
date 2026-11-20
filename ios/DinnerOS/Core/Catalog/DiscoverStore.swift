@@ -271,7 +271,7 @@ final class DiscoverStore {
     var reportError: String?
     /// The titles of those alerts: a report's, or hiding a cook's.
     private(set) var reportTitle = String(localized: "Reported")
-    private(set) var reportErrorTitle = String(localized: "Couldn't Report That Recipe")
+    private(set) var reportErrorTitle = String(localized: "Couldn’t Report That Recipe")
 
     /// Reports a shared recipe and takes it off the list. Returns whether it went through.
     @discardableResult
@@ -289,7 +289,7 @@ final class DiscoverStore {
             return false
         } catch {
             Self.logger.notice("Report failed: \(Self.describe(error), privacy: .public)")
-            reportErrorTitle = String(localized: "Couldn't Report That Recipe")
+            reportErrorTitle = String(localized: "Couldn’t Report That Recipe")
             reportError = HouseholdStore.message(for: error)
             return false
         }
@@ -317,7 +317,7 @@ final class DiscoverStore {
             return false
         } catch {
             Self.logger.notice("Hide cook failed: \(Self.describe(error), privacy: .public)")
-            reportErrorTitle = String(localized: "Couldn't Hide That Cook")
+            reportErrorTitle = String(localized: "Couldn’t Hide That Cook")
             reportError = HouseholdStore.message(for: error)
             return false
         }

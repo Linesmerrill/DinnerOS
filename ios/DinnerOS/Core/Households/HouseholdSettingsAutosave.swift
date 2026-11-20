@@ -255,6 +255,6 @@ final class HouseholdSettingsAutosave {
 
     private static func failureMessage(for changes: HouseholdChanges, error: any Error) -> String {
         let fields = HouseholdSettingsDraft.fieldNames(changes).formatted(.list(type: .and))
-        return String(localized: "Couldn't save the \(fields). \(HouseholdStore.message(for: error))")
+        return String(localized: "Couldn’t save the \(fields). \(HouseholdStore.message(for: error))")
     }
 }

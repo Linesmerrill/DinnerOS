@@ -357,7 +357,7 @@ struct AutopilotStoreTests {
         await store.reloadWeek()
         #expect(store.chosenPairingIDs.count == 2)
 
-        // Wednesday's meal goes, so its add-on goes with it.
+        // Wednesday’s meal goes, so its add-on goes with it.
         store.setSlot("wed", included: false)
         let result = try #require(try await store.accept())
 

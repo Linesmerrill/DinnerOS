@@ -75,7 +75,7 @@ struct CatalogRecipeDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You won't see anything they share in Shared Recipes.")
+            Text("You won’t see anything they share in Shared Recipes.")
         }
         .confirmationDialog(
             "Why are you reporting this recipe?", isPresented: $isChoosingReason, titleVisibility: .visible
@@ -90,7 +90,7 @@ struct CatalogRecipeDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("You won't see it again. We'll take a look.")
+            Text("You won’t see it again. We’ll take a look.")
         }
         .task { await load() }
     }

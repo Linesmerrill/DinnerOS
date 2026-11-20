@@ -175,42 +175,42 @@ final class DinnerIntentActions {
 
 /// The intents' deterministic wording.
 nonisolated enum DinnerIntentText {
-    static let signedOut = String(localized: "You're signed out of DinnerOS. Open the app and sign in first.")
+    static let signedOut = String(localized: "You’re signed out of DinnerOS. Open the app and sign in first.")
     static let noHousehold = String(
-        localized: "You're not in a household yet. Open DinnerOS to create or join one first.")
+        localized: "You’re not in a household yet. Open DinnerOS to create or join one first.")
 
     static func planDinners(_ outcome: PlanDinnersOutcome, locale: Locale = .autoupdatingCurrent) -> String {
         switch outcome {
         case .signedOut: return signedOut
         case .noHousehold: return noHousehold
         case .unavailable(let message):
-            return String(localized: "DinnerOS couldn't plan your dinners right now. \(message)")
+            return String(localized: "DinnerOS couldn’t plan your dinners right now. \(message)")
         case .notAllowed:
             return String(localized: "Only household members who can plan meals can run Autopilot.")
         case .notSetUp:
-            return String(localized: "Autopilot isn't set up yet. Open DinnerOS and answer a few questions first.")
+            return String(localized: "Autopilot isn’t set up yet. Open DinnerOS and answer a few questions first.")
         case .finalized(let week):
             return String(
                 localized:
                     "The week of \(week.rangeLabel(locale: locale)) is finalized. Reopen it in DinnerOS to plan again.")
         case .skipped(let week):
             return String(
-                localized: "You're skipping the week of \(week.rangeLabel(locale: locale)), so there's nothing to plan."
+                localized: "You’re skipping the week of \(week.rangeLabel(locale: locale)), so there’s nothing to plan."
             )
         case .nothingSuggested(let week):
             return String(
                 localized:
-                    "Autopilot couldn't find dinners for the week of \(week.rangeLabel(locale: locale)). Open DinnerOS to see why."
+                    "Autopilot couldn’t find dinners for the week of \(week.rangeLabel(locale: locale)). Open DinnerOS to see why."
             )
         case .planned(let week, let meals):
             let range = week.rangeLabel(locale: locale)
             let first = meals.first.map { String(localized: "\($0.name) on \($0.day.name(locale: locale))") } ?? ""
             if meals.count == 1 {
-                return String(localized: "Autopilot suggested \(first) for \(range). It's ready for you to review.")
+                return String(localized: "Autopilot suggested \(first) for \(range). It’s ready for you to review.")
             }
             return String(
                 localized:
-                    "Autopilot suggested \(meals.count) dinners for \(range), starting with \(first). They're ready for you to review."
+                    "Autopilot suggested \(meals.count) dinners for \(range), starting with \(first). They’re ready for you to review."
             )
         }
     }
@@ -220,14 +220,14 @@ nonisolated enum DinnerIntentText {
         case .signedOut: return signedOut
         case .noHousehold: return noHousehold
         case .unavailable(let message):
-            return String(localized: "DinnerOS couldn't check tonight's dinner right now. \(message)")
+            return String(localized: "DinnerOS couldn’t check tonight’s dinner right now. \(message)")
         case .nothingPlanned:
-            return String(localized: "Nothing's planned for dinner tonight.")
+            return String(localized: "Nothing’s planned for dinner tonight.")
         case .planned(let mains, let addOns):
             let meal = mains.formatted(.list(type: .and).locale(locale))
-            guard !addOns.isEmpty else { return String(localized: "Tonight's dinner is \(meal).") }
+            guard !addOns.isEmpty else { return String(localized: "Tonight’s dinner is \(meal).") }
             let extras = addOns.formatted(.list(type: .and).locale(locale))
-            return String(localized: "Tonight's dinner is \(meal), with \(extras).")
+            return String(localized: "Tonight’s dinner is \(meal), with \(extras).")
         }
     }
 }

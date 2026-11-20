@@ -49,7 +49,7 @@ final class AccountDeletionQATests: XCTestCase {
             .first { $0.frame != rowFrame && $0.isHittable }
         XCTAssertNotNil(confirm, "No Delete Account in the confirmation")
         confirm?.tap()
-        XCTAssertTrue(app.textFields["Subject"].waitForExistence(timeout: 20), "Didn't return to sign-in")
+        XCTAssertTrue(app.textFields["Subject"].waitForExistence(timeout: 20), "Didn’t return to sign-in")
         snap(app, "Account deletion › back at sign-in")
 
         // The same name again is a new person: no household to open.

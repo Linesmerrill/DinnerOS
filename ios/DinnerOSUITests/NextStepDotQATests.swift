@@ -75,17 +75,17 @@ final class NextStepDotQATests: XCTestCase {
             XCTAssertTrue(button.waitForExistence(timeout: 15), "Setup has no \(step)")
             button.tap()
         }
-        XCTAssertTrue(app.staticTexts["You’re All Set"].waitForExistence(timeout: 15), "Setup didn't finish")
+        XCTAssertTrue(app.staticTexts["You’re All Set"].waitForExistence(timeout: 15), "Setup didn’t finish")
         app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(waitGone(app.staticTexts["You’re All Set"], timeout: 10), "Setup didn't close")
-        XCTAssertTrue(waitGone(app.buttons["Set Up Autopilot"], timeout: 10), "Autopilot isn't set up")
+        XCTAssertTrue(waitGone(app.staticTexts["You’re All Set"], timeout: 10), "Setup didn’t close")
+        XCTAssertTrue(waitGone(app.buttons["Set Up Autopilot"], timeout: 10), "Autopilot isn’t set up")
 
         // 3. Every dot is gone: on the way back and on the tab.
-        app.navigationBars.buttons.firstMatch.tap()
+        backButton(app).tap()
         XCTAssertTrue(app.navigationBars["Planning"].waitForExistence(timeout: 10))
         XCTAssertTrue(waitGone(dot("autopilotPreferences", in: app)), "Autopilot Preferences kept its dot")
         snap(app, "Next steps › Cleared in Planning (\(mode))")
-        app.navigationBars.buttons.firstMatch.tap()
+        backButton(app).tap()
         XCTAssertTrue(waitGone(dot("planning", in: app)), "The Planning row kept its dot")
         XCTAssertTrue(waitFor(tab, value: false), "The Household tab kept its dot")
         snap(app, "Next steps › Cleared (\(mode))")

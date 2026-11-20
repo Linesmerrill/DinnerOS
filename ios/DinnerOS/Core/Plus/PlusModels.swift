@@ -141,7 +141,7 @@ nonisolated struct FreeMonthCode: Codable, Hashable, Sendable {
     /// "Your code is copied. Paste it in Apple's screen."
     var copiedText: String? = nil
 
-    static let bundledCopiedText = String(localized: "Your code is copied. Paste it in Apple's screen.")
+    static let bundledCopiedText = String(localized: "Your code is copied. Paste it in Apple’s screen.")
 
     private enum CodingKeys: String, CodingKey {
         case code, copiedText

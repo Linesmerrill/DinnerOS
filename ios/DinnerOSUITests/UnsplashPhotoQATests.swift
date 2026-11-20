@@ -66,7 +66,7 @@ final class UnsplashPhotoQATests: XCTestCase {
         (sheetDone.exists ? sheetDone : app.buttons["Done"].firstMatch).tap()
         // With the keyboard up, the first Done can only put it away; a second closes the sheet.
         if !waitGone(app.navigationBars["New Ingredient"], timeout: 3), sheetDone.exists { sheetDone.tap() }
-        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"], timeout: 5), "New Ingredient didn't close")
+        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"], timeout: 5), "New Ingredient didn’t close")
         let step = app.textViews["Step 1"].exists ? app.textViews["Step 1"] : app.textFields["Step 1"]
         reveal(step, in: app)
         // On an iPad in landscape the field can report itself not hittable under the form's
@@ -77,7 +77,7 @@ final class UnsplashPhotoQATests: XCTestCase {
         app.buttons["Save"].tap()
 
         // The recipe page credits the photo under it.
-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 15), "The saved recipe didn't open")
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 15), "The saved recipe didn’t open")
         let pageCredit = app.descendants(matching: .any)["PhotoCredit"].firstMatch
         XCTAssertTrue(pageCredit.waitForExistence(timeout: 10), "No credit on the recipe page")
         XCTAssertTrue(pageCredit.label.contains(credit))

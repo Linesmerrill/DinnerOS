@@ -29,8 +29,8 @@ nonisolated enum PlusPurchaseError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notOpen: String(localized: "DinnerOS Plus isn't for sale yet.")
-        case .productMissing: String(localized: "The App Store didn't answer. Try again in a minute.")
+        case .notOpen: String(localized: "DinnerOS Plus isn’t for sale yet.")
+        case .productMissing: String(localized: "The App Store didn’t answer. Try again in a minute.")
         }
     }
 }
@@ -140,9 +140,14 @@ final class PlusStore {
     /// behind the welcome sheet after sign-in, comes back on the next check.
     private func offerCompThanks(_ comp: PlusComp?, householdID: String) async {
         guard let comp, compThanks == nil, !defaults.bool(forKey: Self.compThanksKey(householdID)) else { return }
-        guard BuildChannel.showsTesterThanks(buildChannel(), comp: comp) else { return }
         // Let sign-in's own screens settle first.
         try? await Task.sleep(for: compThanksDelay)
+        // The channel comes from StoreKit just after launch: wait a moment for it rather than
+        // skip the thank-you until the next reload (it then arrived over other screens).
+        for _ in 0..<20 where buildChannel() == nil {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard BuildChannel.showsTesterThanks(buildChannel(), comp: comp) else { return }
         guard householdID == self.householdID, compThanks == nil else { return }
         compThanks = comp
     }
@@ -364,7 +369,7 @@ final class PlusStore {
                     monthID: month.id,
                     text: String(
                         localized:
-                            "Apple's screen didn't open. Your code is copied. In the App Store, tap your picture, then Redeem Gift Card or Code."
+                            "Apple’s screen didn’t open. Your code is copied. In the App Store, tap your picture, then Redeem Gift Card or Code."
                     ),
                     isError: true)
             }

@@ -794,7 +794,7 @@ private struct PrepCardPreview: View {
             }
             .environment(\.imageLoader, PrepPreviewData.imageLoader)
         } else {
-            Text("Preview data didn't decode.")
+            Text("Preview data didn’t decode.")
         }
     }
 }

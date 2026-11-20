@@ -39,7 +39,7 @@ extension XCTestCase {
             .first { $0.frame != rowFrame && $0.isHittable }
         XCTAssertNotNil(confirm, "No Sign Out in the confirmation")
         confirm?.tap()
-        XCTAssertTrue(app.textFields["Subject"].waitForExistence(timeout: 15), "Didn't sign out")
+        XCTAssertTrue(app.textFields["Subject"].waitForExistence(timeout: 15), "Didn’t sign out")
     }
 
     @MainActor
@@ -53,7 +53,7 @@ extension XCTestCase {
             subject.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2))
         }
         subject.typeText(name)
-        XCTAssertEqual(subject.value as? String, name, "The sign-in field didn't take the name")
+        XCTAssertEqual(subject.value as? String, name, "The sign-in field didn’t take the name")
         // The button names the account once the field has taken the text.
         let button = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch
         let words = name.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
@@ -93,7 +93,7 @@ extension XCTestCase {
         app.buttons["Add a Recipe"].firstMatch.tap()
         // The choices, then Import From a Website, which also takes pasted text.
         let importChoice = app.buttons["AddChoice-import"]
-        XCTAssertTrue(importChoice.waitForExistence(timeout: 5), "Add a Recipe didn't show its choices")
+        XCTAssertTrue(importChoice.waitForExistence(timeout: 5), "Add a Recipe didn’t show its choices")
         importChoice.tap()
         let pasteText = app.buttons["Paste Text"].firstMatch
         XCTAssertTrue(pasteText.waitForExistence(timeout: 5), "Import has no Paste Text")
@@ -106,7 +106,7 @@ extension XCTestCase {
         XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 10))
         app.buttons["Save"].tap()
         // Save opens the new recipe; come back to the menu.
-        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "\(name) didn't save")
+        XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "\(name) didn’t save")
         app.navigationBars.buttons.firstMatch.tap()
     }
 
@@ -120,7 +120,7 @@ extension XCTestCase {
         XCTAssertTrue(card.label.contains("\(done) of \(total) done"), "The card says \(card.label)")
         snap(app, name)
         card.tap()
-        XCTAssertTrue(waitGone(card, timeout: 5), "Tapping the step card didn't close it")
+        XCTAssertTrue(waitGone(card, timeout: 5), "Tapping the step card didn’t close it")
     }
 
     /// One recipe on this week's menu.
@@ -135,7 +135,7 @@ extension XCTestCase {
         // The sheet's own Done; on iPad another Done can come first.
         let done = app.navigationBars["Add Recipes"].buttons["Done"]
         if done.exists { done.tap() } else { app.buttons["Done"].firstMatch.tap() }
-        XCTAssertTrue(waitGone(app.navigationBars["Add Recipes"], timeout: 5), "Add Recipes didn't close")
+        XCTAssertTrue(waitGone(app.navigationBars["Add Recipes"], timeout: 5), "Add Recipes didn’t close")
     }
 }
 

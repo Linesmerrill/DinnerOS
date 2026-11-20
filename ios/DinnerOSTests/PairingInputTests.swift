@@ -54,7 +54,7 @@ struct PairingInputTests {
         neither.add = PairingRuleTarget()
         #expect(
             PairingInput.validationMessage(for: neither, limits: limits)
-                == "Choose an add-on recipe, or type a grocery item — not both.")
+                == "Choose an add-on recipe or type a grocery item, not both.")
 
         var both = recipeRule()
         both.add = PairingRuleTarget(
@@ -95,7 +95,7 @@ struct PairingInputTests {
 
         #expect(
             PairingInput.validationMessage(for: [recipeRule(), recipeRule()], limits: limits)
-                == "Two rules can't add the same thing to the same meals.")
+                == "Two rules can’t add the same thing to the same meals.")
         // The same add for a different meal category is fine.
         var other = recipeRule()
         other.when = PairingRuleConditions(mealCategories: [.soup])

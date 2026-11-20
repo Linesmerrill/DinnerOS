@@ -95,7 +95,7 @@ struct SameItemsTests {
                 (key: "i-cumin", name: "Cumin"),
             ])
         #expect(choices.map(\.name) == ["Chipotle Chili Powder", "Onion", "Cumin"])
-        #expect(choices.map(\.detail) == ["On this week's list", "On this week's list", "In your pantry"])
+        #expect(choices.map(\.detail) == ["On this week’s list", "On this week’s list", "In your pantry"])
         #expect(SameItemChoice.filter(choices, by: " chipotle ").map(\.key) == ["i-ccp"])
         #expect(SameItemChoice.filter(choices, by: "").count == 3)
     }

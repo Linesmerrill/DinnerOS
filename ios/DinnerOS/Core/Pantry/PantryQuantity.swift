@@ -11,8 +11,8 @@ nonisolated enum PantryQuantityError: Error, Equatable, Sendable {
 extension PantryQuantityError: LocalizedError {
     nonisolated var errorDescription: String? {
         switch self {
-        case .negative: String(localized: "An amount can't be negative.")
-        case .zero: String(localized: "An amount must be more than zero. Leave it empty if you didn't measure.")
+        case .negative: String(localized: "An amount can’t be negative.")
+        case .zero: String(localized: "An amount must be more than zero. Leave it empty if you didn’t measure.")
         case .invalid: String(localized: "Enter an amount such as 2, 0.5, 1/2, or 1 1/2.")
         case .tooLong: String(localized: "That amount is too long.")
         }

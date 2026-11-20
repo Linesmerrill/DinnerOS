@@ -114,7 +114,7 @@ struct InvitationPreviewTests {
     func withoutAnInviterName(inviter: String?) {
         #expect(
             preview(inviter: inviter, role: .member).joinMessage
-                == "You're invited to join as a member. Joining shares your name with its members.")
+                == "You’re invited to join as a member. Joining shares your name with its members.")
     }
 
     @Test func unknownRolesUseTheirName() {

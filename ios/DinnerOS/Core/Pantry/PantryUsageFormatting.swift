@@ -90,8 +90,8 @@ nonisolated enum PantryUsageFormat {
     static func skippedRecipes(_ estimate: PantryEstimate) -> String? {
         switch estimate.skippedRecipes {
         case ...0: nil
-        case 1: String(localized: "1 recipe couldn't be counted")
-        default: String(localized: "\(estimate.skippedRecipes) recipes couldn't be counted")
+        case 1: String(localized: "1 recipe couldn’t be counted")
+        default: String(localized: "\(estimate.skippedRecipes) recipes couldn’t be counted")
         }
     }
 

@@ -65,7 +65,7 @@ final class PermissionsDeniedQATests: XCTestCase {
             sleep(2)
             snap(app, "Account › notifications denied")
         }
-        XCTAssertTrue(app.state == .runningForeground, "The app isn't running after saying no")
+        XCTAssertTrue(app.state == .runningForeground, "The app isn’t running after saying no")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Menu"].firstMatch.tap()
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 5))

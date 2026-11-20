@@ -117,7 +117,7 @@ struct StoreFinderTests {
         #expect(finder.errorMessage == "Location is off for this app. Turn it on in Settings, or type your ZIP code.")
 
         #expect(!(await finder.fillZIP(with: FakeLocator(.failure(.unavailable)))))
-        #expect(!finder.locationDenied && finder.errorMessage == "Couldn't find your ZIP code. Type it instead.")
+        #expect(!finder.locationDenied && finder.errorMessage == "Couldn’t find your ZIP code. Type it instead.")
 
         finder.zip = "85004"
         await finder.find(using: { _ in [phoenix] }, remember: { _ in }, storeName: "Fry's", message: { _ in "x" })

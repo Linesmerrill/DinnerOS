@@ -399,7 +399,7 @@ enum PantryPreviewData {
             id: "p1", name: "Olive Oil", category: "pantry", quantity: "31/50", value: 0.62, unit: "cup", staple: true,
             estimate: estimate),
         item(id: "p2", name: "Carrots", category: "produce", status: .low, statusSource: .estimate),
-        item(id: "p3", name: "Za'atar", category: "spices", status: .out),
+        item(id: "p3", name: "Za’atar", category: "spices", status: .out),
         item(
             id: "p4", name: "Greek Yogurt", category: "dairy-eggs", quantity: "2", value: 2, unit: "cup",
             expiresOn: PantryDate.string(from: .now.addingTimeInterval(2 * 86_400), timeZone: .autoupdatingCurrent)),

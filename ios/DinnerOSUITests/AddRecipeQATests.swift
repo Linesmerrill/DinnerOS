@@ -33,7 +33,7 @@ final class AddRecipeQATests: XCTestCase {
         XCTAssertEqual(servings.value as? String, "36")
         XCTAssertTrue(app.buttons["Done"].firstMatch.exists, "No Done above the number pad")
         app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn't put the number pad away")
+        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn’t put the number pad away")
 
         // Prep 15 min, cook 4 hr, from the quick picks.
         app.buttons["Prep time"].tap()
@@ -45,7 +45,7 @@ final class AddRecipeQATests: XCTestCase {
         app.buttons["Cook time"].tap()
         let total = app.staticTexts["Total: 4 hr 15 min"]
         reveal(total, in: app, maxSwipes: 3)
-        XCTAssertTrue(total.waitForExistence(timeout: 3), "Total didn't add up")
+        XCTAssertTrue(total.waitForExistence(timeout: 3), "Total didn’t add up")
 
         // Choose Photo opens the chooser. The local API has no photo search key, so there's no
         // Search the Web, only the library (decision 704).
@@ -92,7 +92,7 @@ final class AddRecipeQATests: XCTestCase {
         app.buttons["Next"].firstMatch.tap()
         app.typeText("Oats")
         app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["2 Tbsp, minced"].waitForExistence(timeout: 5), "Row didn't show amount, note")
+        XCTAssertTrue(app.staticTexts["2 Tbsp, minced"].waitForExistence(timeout: 5), "Row didn’t show amount, note")
         snap(app, "08 Ingredients list")
 
         // Reorder & Delete: delete one, undo, delete it again.
@@ -103,7 +103,7 @@ final class AddRecipeQATests: XCTestCase {
         snap(app, "09 Reorder and Delete")
         app.buttons["Delete 1"].tap()
         app.buttons["Undo"].tap()
-        XCTAssertTrue(app.staticTexts["Oats"].exists, "Undo didn't bring it back")
+        XCTAssertTrue(app.staticTexts["Oats"].exists, "Undo didn’t bring it back")
         app.staticTexts["Oats"].tap()
         app.buttons["Delete 1"].tap()
         app.buttons["Done"].firstMatch.tap()
@@ -120,7 +120,7 @@ final class AddRecipeQATests: XCTestCase {
         step.typeText("Boil the butter, sugar and milk for one minute.")
         XCTAssertTrue(app.buttons["Done"].firstMatch.exists, "No Done above the keyboard in a step")
         app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn't put the keyboard away in a step")
+        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn’t put the keyboard away in a step")
         app.buttons["Add Step"].tap()
         app.typeText("Stir in the oats and drop by spoonfuls.")
         app.swipeDown(velocity: .slow)
@@ -142,7 +142,7 @@ final class AddRecipeQATests: XCTestCase {
 
         // Save and open it.
         app.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 15), "The saved recipe didn't open")
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 15), "The saved recipe didn’t open")
         snap(app, "12 Recipe page")
 
         // The toolbar has no blank buttons: More holds Edit and Delete.

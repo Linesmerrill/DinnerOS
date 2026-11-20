@@ -88,7 +88,7 @@ final class StoreFinderState {
         } catch is CancellationError {
             return false
         } catch {
-            errorMessage = String(localized: "Couldn't find your ZIP code. Type it instead.")
+            errorMessage = String(localized: "Couldn’t find your ZIP code. Type it instead.")
         }
         return false
     }

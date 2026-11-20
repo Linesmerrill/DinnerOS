@@ -35,7 +35,7 @@ final class AnyListGuideQATests: XCTestCase {
         app.buttons["Send to AnyList"].firstMatch.tap()
         XCTAssertTrue(
             app.navigationBars["Add Your List to AnyList"].waitForExistence(timeout: 3),
-            "The guide didn't show a second time")
+            "The guide didn’t show a second time")
         app.buttons["Done"].firstMatch.tap()
 
         // Copy in the ⋯ menu says Copied too.
@@ -57,7 +57,7 @@ final class AnyListGuideQATests: XCTestCase {
 
         // Copy List and Open AnyList, on this week's list: copied, said so, one item per line.
         let copy = app.buttons["Copy List and Open AnyList"]
-        XCTAssertTrue(copy.isEnabled, "Copy is off with items on this week's list")
+        XCTAssertTrue(copy.isEnabled, "Copy is off with items on this week’s list")
         copy.tap()
         // AnyList's App Store page comes up next, so only the HUD's showing is checked here.
         assertCopiedHUD(app, "AnyList guide › Copied (\(mode))", checkGone: false)
@@ -89,7 +89,7 @@ final class AnyListGuideQATests: XCTestCase {
         let hud = app.descendants(matching: .any)["CopiedHUD"].firstMatch
         XCTAssertTrue(hud.waitForExistence(timeout: 3), "No Copied HUD after copying")
         snap(app, name)
-        if checkGone { XCTAssertTrue(waitGone(hud, timeout: 10), "The Copied HUD didn't go away") }
+        if checkGone { XCTAssertTrue(waitGone(hud, timeout: 10), "The Copied HUD didn’t go away") }
     }
 
     @MainActor

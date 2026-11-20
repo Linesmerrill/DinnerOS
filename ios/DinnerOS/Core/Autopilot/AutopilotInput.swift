@@ -195,16 +195,16 @@ nonisolated extension AutopilotSettings {
             return String(localized: "Choose at least one day to plan.")
         }
         if !(1...schedule.planDays.count).contains(schedule.mealsPerWeek) {
-            return String(localized: "Meals per week can't be more than the days you plan.")
+            return String(localized: "Meals per week can’t be more than the days you plan.")
         }
         if cookTime.mediumMaxMinutes <= cookTime.quickMaxMinutes {
             return String(localized: "The medium limit must be longer than the quick limit.")
         }
         if let rule = weekdayRules.first(where: { !$0.hasPreference }) {
-            return String(localized: "\(rule.day.name())'s rule needs at least one preference.")
+            return String(localized: "\(rule.day.name())’s rule needs at least one preference.")
         }
         if let rule = weekdayRules.first(where: { !Set($0.methods).isSubset(of: equipment) }) {
-            return String(localized: "\(rule.day.name())'s rule uses equipment the household doesn't have.")
+            return String(localized: "\(rule.day.name())’s rule uses equipment the household doesn’t have.")
         }
         return nil
     }

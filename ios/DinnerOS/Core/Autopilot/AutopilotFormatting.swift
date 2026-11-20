@@ -230,7 +230,7 @@ nonisolated enum AutopilotFormat {
             let titles = (item.sections ?? []).map { AutopilotSection(rawValue: $0)?.title ?? $0 }
             return titles.isEmpty ? String(localized: "Preferences") : titles.formatted(.list(type: .and))
         case AutopilotHistoryItem.weekContextUpdated:
-            guard let week = item.week.flatMap({ ISOWeek($0) }) else { return String(localized: "This Week's Plans") }
+            guard let week = item.week.flatMap({ ISOWeek($0) }) else { return String(localized: "This Week’s Plans") }
             return week.weekOf(weekStartsOn: weekStartsOn, locale: locale)
         case AutopilotHistoryItem.recipeOverrideUpdated:
             let method = label(item.method ?? "", vocabulary?.equipment ?? [])

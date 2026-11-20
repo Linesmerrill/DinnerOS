@@ -107,7 +107,7 @@ struct RecipeDraftStoreTests {
         let error = APIError.server(status: 422, code: "fetch_failed", message: "", requestID: nil)
         #expect(
             error.errorDescription
-                == "Couldn't find a recipe at that link. Check the link, or copy the recipe and paste it as text.")
+                == "Couldn’t find a recipe at that link. Check the link, or copy the recipe and paste it as text.")
     }
 
     @Test func aStoreSiteGoesStraightToTheWebView() async throws {
@@ -199,16 +199,16 @@ struct RecipeDraftStoreTests {
             parseResponse: { _ in Self.failure("page_needs_phone", "That site only shows its recipes in a web browser.")
             })
         await harness.store.parse(url: "https://www.kroger.com/r/x")
-        #expect(harness.store.errorMessage == "That page didn't load. Check the link and try again.")
+        #expect(harness.store.errorMessage == "That page didn’t load. Check the link and try again.")
         #expect(harness.store.failedLink == "https://www.kroger.com/r/x")
     }
 
     @Test func whenThePhoneCantLoadThePageEitherTheServersReasonIsShown() async throws {
         let harness = try await makeHarness(
-            parseResponse: { _ in Self.failure("fetch_failed", "That page didn't load. Check the link and try again.") }
+            parseResponse: { _ in Self.failure("fetch_failed", "That page didn’t load. Check the link and try again.") }
         )
         await harness.store.parse(url: "https://recipes.invalid/nope")
-        #expect(harness.store.errorMessage == "That page didn't load. Check the link and try again.")
+        #expect(harness.store.errorMessage == "That page didn’t load. Check the link and try again.")
         #expect(harness.transport.requests.count == 1, "nothing to send when neither loader got the page")
     }
 
@@ -218,7 +218,7 @@ struct RecipeDraftStoreTests {
             parseResponse: { _ in (403, Data(#"{"error":{"code":"forbidden","message":"no"}}"#.utf8)) },
             webPageLoader: renders.loader { _ in "<rendered>" })
         await harness.store.parse(url: "https://example.test/a")
-        #expect(harness.store.errorMessage == "Your role in this household doesn't allow that.")
+        #expect(harness.store.errorMessage == "Your role in this household doesn’t allow that.")
         #expect(renders.count == 0)
         #expect(harness.store.failedLink == "https://example.test/a")
     }

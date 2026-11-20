@@ -166,6 +166,6 @@ private func getStartedPreview(canEdit: Bool = true) -> some View {
     getStartedPreview()
 }
 
-#Preview("Can't add recipes") {
+#Preview("Can’t add recipes") {
     getStartedPreview(canEdit: false)
 }

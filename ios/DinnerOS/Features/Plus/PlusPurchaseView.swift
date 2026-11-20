@@ -311,7 +311,7 @@ extension View {
         static let offer = PlusOffer(
             title: "DinnerOS Plus", subtitle: "Let DinnerOS plan your week and track what you spend.",
             benefits: [
-                "Autopilot plans the week's dinners for you.", "See what each week costs and how much you save.",
+                "Autopilot plans the week’s dinners for you.", "See what each week costs and how much you save.",
                 "One plan covers everyone in your household.",
             ],
             plans: [

@@ -1120,7 +1120,7 @@ final class ShoppingStore {
             linkProgress = progress
             linkError = nil
         } else {
-            linkError = String(localized: "Couldn't open \(providerName). Try again.")
+            linkError = String(localized: "Couldn’t open \(providerName). Try again.")
         }
     }
 
@@ -1378,7 +1378,7 @@ final class ShoppingStore {
             costPhase = .loaded
         } catch let error as APIError where error.status == 404 {
             guard started == scope, week == self.week else { return }
-            Self.logger.info("Week cost isn't available on this API yet")
+            Self.logger.info("Week cost isn’t available on this API yet")
             weekCost = nil
             isCostAvailable = false
             costPhase = .loaded
@@ -1663,7 +1663,7 @@ final class ShoppingStore {
             catalogPhase = .loaded
         } catch let error as APIError where error.status == 404 {
             guard started == scope else { return }
-            Self.logger.info("Store catalog isn't available on this API yet")
+            Self.logger.info("Store catalog isn’t available on this API yet")
             catalog = []
             storeRequests = []
             isCatalogAvailable = false
@@ -1827,10 +1827,10 @@ final class ShoppingStore {
     /// Like `HouseholdStore.message(for:)`, with shopping's meaning of `provider_unavailable`.
     static func message(for error: any Error) -> String {
         if error is StoreConnectError || error is StoreSignInService.SignInError {
-            return String(localized: "Couldn't sign in to the store. Try again.")
+            return String(localized: "Couldn’t sign in to the store. Try again.")
         }
         if (error as? APIError)?.code == "provider_unavailable" {
-            return String(localized: "This store isn't available right now. Try again later.")
+            return String(localized: "This store isn’t available right now. Try again later.")
         }
         return HouseholdStore.message(for: error)
     }

@@ -348,7 +348,7 @@ func (p *PrepSession) count() {
 	switch {
 	case len(p.Cards) == 0:
 		p.State = PrepNothingToDo
-		p.Headline = "Nothing to prep this week — every pack was about the size the week needs."
+		p.Headline = "Nothing to prep this week. Every pack was about the size the week needs."
 	case p.Pending == 0:
 		p.State = PrepFinished
 		p.Headline = "Everything’s put away."

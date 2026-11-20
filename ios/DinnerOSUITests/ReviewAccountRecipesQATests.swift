@@ -60,7 +60,7 @@ final class ReviewAccountRecipesQATests: XCTestCase {
 
             // The review: name, servings, times and cuisine as read, then the photo.
             let nameField = app.textFields["Recipe name"].firstMatch
-            XCTAssertTrue(nameField.waitForExistence(timeout: 20), "\(name): the review didn't open")
+            XCTAssertTrue(nameField.waitForExistence(timeout: 20), "\(name): the review didn’t open")
             XCTAssertEqual(nameField.value as? String, name)
             let cuisineRow = app.buttons["RecipeCuisine"].firstMatch
             reveal(cuisineRow, in: app)
@@ -81,16 +81,16 @@ final class ReviewAccountRecipesQATests: XCTestCase {
             reveal(choose, in: app)
             choose.tap()
             let pick = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", photographer)).firstMatch
-            XCTAssertTrue(pick.waitForExistence(timeout: 15), "\(name): \(photographer)'s photo isn't in the search")
+            XCTAssertTrue(pick.waitForExistence(timeout: 15), "\(name): \(photographer)'s photo isn’t in the search")
             pick.tap()
             XCTAssertTrue(
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", photographer)).firstMatch
-                    .waitForExistence(timeout: 15), "\(name): the photo credit didn't show")
+                    .waitForExistence(timeout: 15), "\(name): the photo credit didn’t show")
             snap(app, "Review recipe › \(name)")
 
             app.buttons["Save"].firstMatch.tap()
             // Saving opens the new recipe.
-            XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 20), "\(name): didn't save")
+            XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 20), "\(name): didn’t save")
             sleep(1)
             let back = app.navigationBars.buttons.element(boundBy: 0)
             if back.exists { back.tap() }
@@ -116,7 +116,7 @@ final class ReviewAccountRecipesQATests: XCTestCase {
         app.buttons["signIn.email.submit"].tap()
         let start = app.buttons["Start Planning"].firstMatch
         if start.waitForExistence(timeout: 20) { start.tap() }
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 20), "The Menu didn't open")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 20), "The Menu didn’t open")
         for title in ["Thanks", "Skip"] where app.buttons[title].firstMatch.exists {
             app.buttons[title].firstMatch.tap()
         }

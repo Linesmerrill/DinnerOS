@@ -90,10 +90,10 @@ struct PantryUsageFormattingTests {
         #expect(PantryUsageFormat.skippedRecipes(PantryFixtures.estimate()) == nil)
         #expect(
             PantryUsageFormat.skippedRecipes(PantryFixtures.estimate(skippedRecipes: 1))
-                == "1 recipe couldn't be counted")
+                == "1 recipe couldn’t be counted")
         #expect(
             PantryUsageFormat.skippedRecipes(PantryFixtures.estimate(skippedRecipes: 3))
-                == "3 recipes couldn't be counted")
+                == "3 recipes couldn’t be counted")
         #expect(PantryUsageFormat.threshold(80, locale: locale) == "80% used")
         #expect(PantryUsageFormat.thresholdSource(.household) == "Household setting")
         #expect(PantryUsageFormat.thresholdSource(.item) == "Set for this item")

@@ -146,7 +146,7 @@ struct RatingFeedbackTests {
             ])
         #expect(
             saved.ingredientFeedback == [
-                "Creamy Sauce (Onions): didn't like it",
+                "Creamy Sauce (Onions): didn’t like it",
                 "Peanuts: too much",
                 "Ramen Noodles: not enough, the product I bought. “Get lo mein noodles”",
             ])
