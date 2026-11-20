@@ -39,7 +39,7 @@ extension XCTestCase {
     @MainActor
     func closeNewsBanner(_ app: XCUIApplication) {
         let banner = app.descendants(matching: .any)["NewsBanner"].firstMatch
-        guard banner.waitForExistence(timeout: 3) else { return }
+        guard banner.waitForExistence(timeout: 2) else { return }
         let close = banner.buttons["Close"].firstMatch
         if close.exists { close.tap() }
         _ = waitGone(banner, timeout: 3)

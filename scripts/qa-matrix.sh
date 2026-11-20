@@ -27,7 +27,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light duo-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID StartCookingQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens+StartCookingQATests ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID"}
 STALL=${STALL:-600}
 # Tests to run on a second simulator per config, "QA matrix <config> 2", at the same time as the
 # first. Off by default: on this Mac (build 118) 17 simulators ran 40 to 70% slower each and
@@ -98,7 +98,11 @@ run_test() {
     [ "$test" = UnsplashPhotoQATests ] && { port=8083; search=on; }
     # The review path needs a starter library, which only 8083 copies into new households.
     [ "$test" = ReviewPathQATests ] && port=8083
-    local name="$config-$(echo "$test" | tr '/' '-')"
+    local name="$config-$(echo "$test" | tr '/+' '--')"
+    # "A+B": tests that share a starting state (the signed-in test household) run in one
+    # session, saving a reinstall and a test runner start (build 121).
+    local only=() part
+    for part in ${test//+/ }; do only+=("-only-testing:DinnerOSUITests/$part"); done
     local xctestrun
     xctestrun=$(ls "$OUT/dd-$port"/Build/Products/*.xctestrun | head -1)
     xcrun simctl uninstall "$id" com.linesmerrill.dinneros 2>/dev/null
@@ -112,7 +116,7 @@ run_test() {
         TEST_RUNNER_QA_REVIEW_EMAIL="${REVIEW_ACCOUNT_EMAIL:-}" TEST_RUNNER_QA_REVIEW_PASSWORD="${REVIEW_ACCOUNT_PASSWORD:-}" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
         -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
-        -resultBundlePath "$OUT/$name.xcresult" -only-testing:"DinnerOSUITests/$test" \
+        -resultBundlePath "$OUT/$name.xcresult" "${only[@]}" \
         >"$OUT/$name.log" 2>&1 &
     local pid=$!
     while kill -0 $pid 2>/dev/null; do
@@ -160,7 +164,7 @@ run_test() {
     # screens keep theirs for screenshot QA, and every failure keeps its own.
     # Screenshot tests keep their results; other passing tests don't, to save disk.
     case "$verdict $test" in
-    "ok AppSweepQATests/"* | "ok ScreensQATests/"* | "ok StartCookingQATests" | "ok BiometricSignInQATests/testSignInScreenWithFaceID") ;;
+    "ok AppSweepQATests/"* | "ok ScreensQATests/"* | "ok StartCookingQATests"* | "ok BiometricSignInQATests/testSignInScreenWithFaceID") ;;
     "ok "*) rm -rf "$OUT/$name.xcresult" ;;
     esac
 }
