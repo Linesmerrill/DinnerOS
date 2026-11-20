@@ -20,7 +20,7 @@ private struct SignInScreen: View {
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
-    @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = 50
+    @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = DS.ButtonSize.large.height
     @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 72
 
     init(model: SignInModel) {
@@ -30,14 +30,14 @@ private struct SignInScreen: View {
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: DS.Space.xxxl) {
                     Spacer(minLength: 16)
                     header
                     Spacer(minLength: 16)
                     actions
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
+                .padding(.horizontal, DS.Space.xxl)
+                .padding(.vertical, DS.Space.l)
                 .frame(maxWidth: 480)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
@@ -59,23 +59,23 @@ private struct SignInScreen: View {
     }
 
     private var header: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DS.Space.l) {
             Image(systemName: "fork.knife.circle.fill")
                 .font(.system(size: markSize))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
             Text(configuration.displayName)
-                .font(.largeTitle.bold())
+                .font(DS.Typography.largeTitle)
                 .accessibilityAddTraits(.isHeader)
             Text("Plan the week's dinners together, shop once, and cook with less guesswork.")
-                .font(.title3)
+                .font(DS.Typography.subtitle)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
     }
 
     private var actions: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DS.Space.m) {
             if let message = model.errorMessage {
                 errorBanner(message)
             }
@@ -90,9 +90,11 @@ private struct SignInScreen: View {
 
             if model.isWorking {
                 ProgressView("Signing in…")
-                    .padding(.bottom, 4)
+                    .padding(.bottom, DS.Space.xxs)
             }
 
+            // Apple's own button, as the Human Interface Guidelines ask: its title is 43% of its
+            // height, and the other sign-in buttons match it (DS.Typography.signInButton).
             SignInWithAppleButton(.continue) { request in
                 model.prepareAppleRequest(request)
             } onCompletion: { result in
@@ -102,7 +104,8 @@ private struct SignInScreen: View {
             // The button doesn't restyle when the color scheme changes; rebuild it.
             .id(colorScheme)
             .frame(height: buttonHeight)
-            .clipShape(.rect(cornerRadius: 12, style: .continuous))
+            .clipShape(Capsule())
+            .accessibilityIdentifier("signIn.apple")
 
             if model.isGoogleAvailable {
                 GoogleSignInButton {
@@ -121,14 +124,14 @@ private struct SignInScreen: View {
             #endif
 
             Text("Only the people you invite can see your household's plans.")
-                .font(.footnote)
+                .font(DS.Typography.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.top, 8)
+                .padding(.top, DS.Space.s)
 
             if let privacyURL = configuration.privacyPolicyURL {
                 Link("Privacy Policy", destination: privacyURL)
-                    .font(.footnote)
+                    .font(DS.Typography.footnote)
             }
         }
         .disabled(model.isWorking)
@@ -139,18 +142,16 @@ private struct SignInScreen: View {
         /// `environment == .development` check, so it can't reach a Release build or a
         /// build pointed at production.
         private var developerSignIn: some View {
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.s) {
                 Button {
                     Task { await model.signInForDevelopment() }
                 } label: {
                     Label("Developer sign-in as \(model.developerIdentity.displayName)", systemImage: "hammer")
-                        .frame(maxWidth: .infinity, minHeight: buttonHeight)
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.roundedRectangle(radius: 12))
+                .buttonStyle(.dsSecondary(fullWidth: true))
                 .accessibilityHint("Signs in with a test account on the development server.")
 
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     TextField("Subject", text: $model.developerSubject)
                         .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.never)
@@ -178,12 +179,14 @@ private struct SignInScreen: View {
         return Button {
             Task { await lock.signIn() }
         } label: {
-            Label(kind.toggleTitle, systemImage: kind.systemImage)
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: buttonHeight)
+            SignInButtonLabel(title: Text(kind.toggleTitle), height: buttonHeight) {
+                Image(systemName: kind.systemImage)
+                    .resizable()
+                    .scaledToFit()
+                    .fontWeight(.medium)
+            }
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.roundedRectangle(radius: 12))
+        .buttonStyle(.dsPrimary(fullWidth: true, font: DS.Typography.signInButton(height: buttonHeight)))
         .disabled(lock.isSigningIn)
         .accessibilityIdentifier("signIn.biometric")
     }
@@ -191,17 +194,17 @@ private struct SignInScreen: View {
     /// Why Face ID sign-in stopped.
     private func noticeBanner(_ message: String) -> some View {
         Label(message, systemImage: "faceid")
-            .font(.callout)
+            .font(DS.Typography.callout)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 12, style: .continuous))
+            .padding(DS.Space.l)
+            .background(DS.Colors.noticeFill, in: .rect(cornerRadius: DS.Radius.medium, style: .continuous))
             .accessibilityIdentifier("signIn.biometricNotice")
     }
 
     private func errorBanner(_ message: String) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DS.Space.m) {
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout)
+                .font(DS.Typography.callout)
                 .foregroundStyle(.primary)
                 .symbolRenderingMode(.multicolor)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,12 +212,12 @@ private struct SignInScreen: View {
                 Button("Try Again") {
                     Task { await model.retry() }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding()
-        .background(Color.red.opacity(0.12), in: .rect(cornerRadius: 12, style: .continuous))
+        .padding(DS.Space.l)
+        .background(DS.Colors.errorFill, in: .rect(cornerRadius: DS.Radius.medium, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 
