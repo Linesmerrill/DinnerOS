@@ -176,6 +176,13 @@ private struct CompanionSeed {
                 }
             }
         }
+        // A week's list holds at most 50 paired grocery items, and every run adds one: take off
+        // the ones runs that died left behind (the same 12 minutes as their companions).
+        await pruneGroceryItems(api: api, token: token, householdID: householdID, week: week) { item in
+            let name = (item["groceryItem"] as? [String: Any])?["name"] as? String ?? ""
+            let added = (item["addedAt"] as? String).flatMap(parseDate) ?? .now
+            return name.hasPrefix("QA Companion ") && added < stale
+        }
         let plan = try await call(
             api, "POST", "households/\(householdID)/plans/\(week)/entries", token: token,
             body: ["recipeId": recipeID, "day": NSNull(), "servings": 2])
@@ -185,13 +192,30 @@ private struct CompanionSeed {
             cuisine: pick.1)
     }
 
-    /// Takes the seeded dinner off the week and deletes it, so the shared household stays small.
+    /// Takes the seeded dinner and its companion off the week and deletes the dinner, so the
+    /// shared household stays small.
     func cleanUp() async throws {
+        let entryID = entryID
+        await Self.pruneGroceryItems(api: api, token: token, householdID: householdID, week: week) { item in
+            item["entryId"] as? String == entryID
+        }
         if !entryID.isEmpty {
             _ = try? await Self.call(
                 api, "DELETE", "households/\(householdID)/plans/\(week)/entries/\(entryID)", token: token)
         }
         _ = try? await Self.call(api, "DELETE", "households/\(householdID)/recipes/\(recipeID)", token: token)
+    }
+
+    /// Deletes the week's paired grocery items that `matches` picks.
+    static func pruneGroceryItems(
+        api: URL, token: String, householdID: String, week: String, matches: ([String: Any]) -> Bool
+    ) async {
+        let base = "households/\(householdID)/autopilot/weeks/\(week)/pairings"
+        guard let pairings = try? await call(api, "GET", base, token: token) else { return }
+        for item in pairings["groceryItems"] as? [[String: Any]] ?? [] where matches(item) {
+            guard let id = item["id"] as? String else { continue }
+            _ = try? await call(api, "DELETE", "\(base)/grocery-items/\(id)", token: token)
+        }
     }
 
     /// The week after the one the app shows today: the ISO week of a week from today moved back

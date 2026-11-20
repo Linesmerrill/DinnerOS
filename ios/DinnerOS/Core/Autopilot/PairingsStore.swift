@@ -22,6 +22,12 @@ final class PairingsStore {
     private(set) var busyKeys: Set<String> = []
     /// Grocery items being removed from the week's list.
     private(set) var busyItemIDs: Set<String> = []
+    /// Suggestions accepted on this device for the shown week, keyed by `<entryId>/<key>`, and
+    /// left out of `openSuggestions` from then on. The reload after an accept can fail and get
+    /// the saved, older list replayed instead (`ResponseCache`), which put an accepted
+    /// suggestion back on the Menu (QA, build 121). Cleared when the week changes, and for a
+    /// pairing taken back off the week.
+    private(set) var acceptedKeys: Set<String> = []
     /// A failed change, for an alert.
     var errorMessage: String?
     /// The role may not change plans, so every control is hidden and nothing is loaded.
@@ -65,12 +71,21 @@ final class PairingsStore {
     /// The week's open suggestions, in plan order. Accepted and dismissed ones are already
     /// left out by the API.
     var openSuggestions: [(meal: MealPairings, pairing: Pairing)] {
-        pairings.openSuggestions
+        pairings.openSuggestions.filter { !isAccepted(entryID: $0.meal.entryID, key: $0.pairing.key) }
     }
 
     /// The suggestions offered with one planned meal.
     func suggestions(forEntry entryID: String) -> [Pairing] {
-        pairings.meal(entryID: entryID)?.pairings ?? []
+        (pairings.meal(entryID: entryID)?.pairings ?? []).filter { !isAccepted(entryID: entryID, key: $0.key) }
+    }
+
+    private func isAccepted(entryID: String, key: String) -> Bool {
+        acceptedKeys.contains(Self.busyKey(entryID: entryID, key: key))
+    }
+
+    /// Lets a pairing taken back off the week be suggested again.
+    private func forgetAccepted(key: String) {
+        acceptedKeys = acceptedKeys.filter { !$0.hasSuffix("/\(key)") }
     }
 
     /// The paired grocery item behind a grocery list extra, so it can be taken off the list.
@@ -104,6 +119,7 @@ final class PairingsStore {
             generation += 1
             week = newWeek
             pairings = .empty
+            acceptedKeys = []
         }
         await load()
     }
@@ -155,6 +171,9 @@ final class PairingsStore {
             try await api.acceptPairing(
                 householdID: householdID, week: target, entryID: entryID, key: key, accessToken: token)
         } handle: { [weak self] result in
+            // Off the list now, whatever the reload that follows brings back (see
+            // `acceptedKeys`).
+            self?.acceptedKeys.insert(Self.busyKey(entryID: entryID, key: key))
             self?.planDidChange?(result.plan)
         }
     }
@@ -202,6 +221,7 @@ final class PairingsStore {
     func removeGroceryItem(id: String) async throws {
         guard let api, let householdID, let target = week else { throw AuthSessionError.notConfigured }
         guard !busyItemIDs.contains(id) else { return }
+        if let key = groceryLine(id: id)?.key { forgetAccepted(key: key) }
         busyItemIDs.insert(id)
         defer { busyItemIDs.remove(id) }
         do {
@@ -244,6 +264,7 @@ final class PairingsStore {
     /// Takes an accepted pairing back off the week: an add-on's plan entry is deleted, a
     /// grocery item is taken off the list.
     func remove(_ pairing: Pairing, mainEntryID: String?) async throws {
+        forgetAccepted(key: pairing.key)
         switch pairing.target {
         case .recipe(let recipe):
             guard let entry = addonEntry(recipeID: recipe.id, mainEntryID: mainEntryID) else { return }
@@ -279,6 +300,7 @@ final class PairingsStore {
         pairings = .empty
         isLoading = false
         busyKeys = []
+        acceptedKeys = []
         busyItemIDs = []
         errorMessage = nil
         isForbidden = false

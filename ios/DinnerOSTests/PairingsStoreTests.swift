@@ -147,6 +147,29 @@ struct PairingsStoreTests {
         #expect(store.groceryLine(id: "item-1")?.name == "Club Crackers")
     }
 
+    /// The reload after an accept can fail and replay the saved, older list (`ResponseCache`).
+    /// The accepted suggestion stays off the Menu anyway (QA, build 121: "The suggestion stayed
+    /// after Add" on an iPad sharing a busy API).
+    @Test func anAcceptedSuggestionStaysOffWhenAnOlderListComesBack() async throws {
+        let harness = try await activated()
+        let store = harness.store
+        let key = "grocery:club crackers"
+        #expect(store.openSuggestions.contains { $0.pairing.key == key })
+
+        _ = try await store.accept(entryID: "entry-2", key: key)
+        #expect(!store.openSuggestions.contains { $0.pairing.key == key })
+
+        // A list from before the accept, as a replayed response would be.
+        harness.server.update { $0.accepted.remove("entry-2/\(key)") }
+        await store.reload()
+        #expect(!store.openSuggestions.contains { $0.pairing.key == key })
+        #expect(store.suggestions(forEntry: "entry-2").allSatisfy { $0.key != key })
+
+        // Another week starts fresh.
+        await store.showWeek(week.next, householdID: "household-1")
+        #expect(store.acceptedKeys.isEmpty)
+    }
+
     @Test func acceptingTwiceChangesNothingAndReportsAlreadyAdded() async throws {
         let harness = try await activated()
         let store = harness.store
