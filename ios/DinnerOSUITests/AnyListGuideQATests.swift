@@ -125,7 +125,7 @@ final class AnyListGuideQATests: XCTestCase {
         if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) {
             app.buttons["Done"].firstMatch.tap()
         } else {
-            app.swipeDown(velocity: .fast)
+            pullDown(app)
         }
         XCTAssertTrue(list.waitForExistence(timeout: 10), "No Grocery List button on the Menu")
         list.tap()

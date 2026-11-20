@@ -86,7 +86,7 @@ final class ReviewPathQATests: XCTestCase {
             snap(app, "07 Companions")
             close(app)
         } else {
-            app.swipeDown()
+            pullDown(app)
             problems.append("Week Menu: no Companions")
         }
 
@@ -149,8 +149,8 @@ final class ReviewPathQATests: XCTestCase {
                 return
             }
         }
-        let back = app.navigationBars.buttons.element(boundBy: 0)
-        if back.exists, back.isHittable { back.tap() } else { app.swipeDown(velocity: .fast) }
+        let back = backButton(app)
+        if back.exists, back.isHittable { back.tap() } else { pullDown(app) }
         sleep(1)
     }
 }

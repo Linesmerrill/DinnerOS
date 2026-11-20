@@ -145,7 +145,7 @@ final class ReviewAccountQATests: XCTestCase {
                 return
             }
         }
-        app.swipeDown(velocity: .fast)
+        pullDown(app)
         sleep(1)
     }
 

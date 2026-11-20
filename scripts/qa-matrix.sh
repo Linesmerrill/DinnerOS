@@ -136,6 +136,14 @@ run_test() {
             return
         fi
     done
+    # iPadOS 26 switched a simulator to windowed apps mid-run once (build 121): put it back on
+    # Full Screen Apps and retry the test once.
+    if [ "$attempt" = 1 ] && grep -q "QA-WINDOWED" "$OUT/$name.log"; then
+        echo "$config $test: the iPad was in windowed apps mode; set Full Screen Apps and retried" >>"$OUT/summary.txt"
+        full_screen_apps "$id" "$xctestrun"
+        run_test "$config" "$id" "$3" 2
+        return
+    fi
     # A fresh simulator can refuse the first install ("Internal error"): retry that once.
     if [ "$attempt" = 1 ] && grep -q "failed to install the application\|Unable to Install" "$OUT/$name.log"; then
         echo "$config $test: install failed, retried" >>"$OUT/summary.txt"
@@ -157,6 +165,13 @@ run_test() {
     "ok AppSweepQATests/"* | "ok ScreensQATests/"* | "ok StartCookingQATests" | "ok BiometricSignInQATests/testSignInScreenWithFaceID") ;;
     "ok "*) rm -rf "$OUT/$name.xcresult" ;;
     esac
+}
+
+# Settings › Multitasking & Gestures › Full Screen Apps on an iPad simulator (QASetupTests).
+full_screen_apps() {
+    local id=$1 xctestrun=$2
+    xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
+        -only-testing:DinnerOSUITests/QASetupTests/testFullScreenApps >/dev/null 2>&1
 }
 
 # Whether a test runs on a config: the placement rules for every test.
@@ -226,6 +241,8 @@ run_config() {
     xcrun simctl boot "$id" 2>/dev/null
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
+    # iPads start on Full Screen Apps (build 121), whatever an earlier run left.
+    case $config in ipad*) [ -z "${PLAN_ONLY:-}" ] && full_screen_apps "$id" "$(ls "$OUT/dd-8082"/Build/Products/*.xctestrun | head -1)" ;; esac
     # No "Slide to type" tip over the keyboard in screenshots (build 121).
     xcrun simctl spawn "$id" defaults write com.apple.Preferences KeyboardContinuousPathEnabled -bool false 2>/dev/null
     xcrun simctl spawn "$id" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true 2>/dev/null

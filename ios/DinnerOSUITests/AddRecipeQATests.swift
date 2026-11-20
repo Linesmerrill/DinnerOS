@@ -123,7 +123,7 @@ final class AddRecipeQATests: XCTestCase {
         XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn’t put the keyboard away in a step")
         app.buttons["Add Step"].tap()
         app.typeText("Stir in the oats and drop by spoonfuls.")
-        app.swipeDown(velocity: .slow)
+        pullDown(app)
         snap(app, "10 Steps")
 
         // Nutrition.

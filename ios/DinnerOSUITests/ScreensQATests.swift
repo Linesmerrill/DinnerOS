@@ -185,7 +185,7 @@ final class ScreensQATests: XCTestCase {
             // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
             // to the top in case it ever scrolls away again.
             let startCooking = app.buttons["Start Cooking"].firstMatch
-            for _ in 0..<3 where !startCooking.exists { app.swipeDown() }
+            for _ in 0..<3 where !startCooking.exists { pullDown(app) }
             startCooking.tap()
             sleep(2)
             shot(app, "Cooking › \(kind)")
@@ -229,7 +229,7 @@ final class ScreensQATests: XCTestCase {
             shot(app, "Autopilot setup")
             back(app)
         } else {
-            app.swipeDown()
+            pullDown(app)
         }
 
         // Shop: choosing products in Walmart, given time to load.
@@ -357,7 +357,7 @@ final class ScreensQATests: XCTestCase {
         if back.exists, back.isHittable {
             back.tap()
         } else {
-            app.swipeDown(velocity: .fast)
+            pullDown(app)
         }
         sleep(1)
     }

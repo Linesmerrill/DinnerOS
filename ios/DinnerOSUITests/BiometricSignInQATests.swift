@@ -295,6 +295,7 @@ final class BiometricSignInQATests: XCTestCase {
         if let fake { app.launchEnvironment["DINNEROS_FAKE_BIOMETRICS"] = fake }
         if let relockSeconds { app.launchEnvironment["QA_RELOCK_SECONDS"] = String(relockSeconds) }
         app.launch()
+        assertFullScreen(app)
         return app
     }
 

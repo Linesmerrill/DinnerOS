@@ -21,6 +21,7 @@ extension XCTestCase {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
         app.launch()
+        assertFullScreen(app)
         let devSignIn = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch
         if devSignIn.waitForExistence(timeout: 8) {
             devSignIn.tap()
@@ -29,6 +30,22 @@ extension XCTestCase {
         if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn’t open after sign-in")
         return app
+    }
+
+    /// iPadOS 26 can switch a simulator to windowed apps, and then every test runs in a small
+    /// window (build 121). Says so plainly in the log (QA-WINDOWED), so the matrix can put the
+    /// simulator back on Full Screen Apps (QASetupTests) and retry.
+    @MainActor
+    func assertFullScreen(_ app: XCUIApplication) {
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        let screen = XCUIApplication(bundleIdentifier: "com.apple.springboard").frame
+        let window = app.windows.firstMatch
+        guard window.waitForExistence(timeout: 10), !screen.isEmpty else { return }
+        let frame = window.frame
+        if frame.width < screen.width - 2 || frame.height < screen.height - 2 {
+            print("QA-WINDOWED: the app is a \(Int(frame.width))x\(Int(frame.height)) window")
+            XCTFail("The iPad is in windowed apps mode (QA-WINDOWED); QASetupTests puts it back")
+        }
     }
 
     /// Portrait unless the run sets QA_ORIENTATION=landscape (the kitchen iPad lives on a
@@ -169,6 +186,16 @@ extension XCTestCase {
             }
             swipes += 1
         }
+    }
+
+    /// Pulls a sheet down, or scrolls content back, with a drag that starts a third of the way
+    /// down. Never `swipeDown()`: a fast downward swipe on iPadOS 26 can switch the iPad to
+    /// windowed apps (build 121).
+    @MainActor
+    func pullDown(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
     }
 
     /// Scrolls content back toward the top with a drag that starts mid-screen. A downward swipe

@@ -126,7 +126,7 @@ final class InviteLinkQATests: XCTestCase {
         if app.buttons["Done"].firstMatch.exists {
             app.buttons["Done"].firstMatch.tap()
         } else {
-            app.swipeDown(velocity: .fast)
+            pullDown(app)
         }
         XCTAssertTrue(card.waitForExistence(timeout: 10))
         app.buttons["Hide"].firstMatch.tap()

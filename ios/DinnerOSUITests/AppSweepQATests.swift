@@ -137,7 +137,7 @@ final class AppSweepQATests: XCTestCase {
             back.tap()
             sleep(1)
         } else {
-            app.swipeDown(velocity: .fast)
+            pullDown(app)
             sleep(1)
             if app.navigationBars.count > 1 { problems.append("\(name): no way back") }
         }
