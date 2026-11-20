@@ -42,26 +42,31 @@ struct Build121MenuLayoutTests {
         #expect(!MenuCardMetrics.reservesTitleHeight(hasRowBelow: true))
     }
 
-    @Test func allMealsIsOneColumnOnAPhone() {
-        let columns = AllMealsLayout.columns(isWide: false)
-        #expect(columns.count == 1)
-        guard case .flexible = columns[0].size else {
-            Issue.record("A phone's column should fill the width")
-            return
-        }
+    @Test(arguments: [(0.0, 1), (279.0, 1), (500.0, 1), (576.0, 2), (800.0, 2), (1100.0, 3), (1300.0, 4)])
+    func anIPadRowHoldsAsManyCardsAsFit(width: Double, columns: Int) {
+        #expect(AllMealsLayout.columnCount(width: CGFloat(width)) == columns)
     }
 
-    @Test func allMealsIsACardGridOnAnIPadSoOneResultStaysCardSized() {
-        let columns = AllMealsLayout.columns(isWide: true)
-        #expect(columns.count == 1)
-        guard case .adaptive(let minimum, let maximum) = columns[0].size else {
-            Issue.record("An iPad's cards should sit in an adaptive grid")
-            return
-        }
-        #expect(minimum == AllMealsLayout.minimumCardWidth)
-        // A lone result is never wider than a card.
-        #expect(maximum == AllMealsLayout.maximumCardWidth)
-        #expect(maximum < 600)
+    @Test func aLoneResultStaysCardSized() {
+        // One card across a landscape iPad is never wider than a card.
+        let width: CGFloat = 1100
+        let columns = AllMealsLayout.columnCount(width: width)
+        let card = AllMealsLayout.cardWidth(width: width, columns: columns)
+        #expect(card <= AllMealsLayout.maximumCardWidth)
+        #expect(card >= AllMealsLayout.minimumCardWidth)
+        // The cards and their gaps fit the row.
+        #expect(card * CGFloat(columns) + AllMealsLayout.columnSpacing * CGFloat(columns - 1) <= width)
+    }
+
+    @Test func allMealsSplitsIntoRowsInOrder() throws {
+        let cards = MenuPreviewData.cards
+        try #require(cards.count >= 3)
+        let rows = AllMealsLayout.rows(cards, columns: 2)
+        #expect(rows.count == (cards.count + 1) / 2)
+        #expect(rows.flatMap { $0.cards.map(\.card.id) } == cards.map(\.id))
+        #expect(rows.flatMap { $0.cards.map(\.index) } == Array(cards.indices))
+        #expect(rows.first?.id == cards.first?.id)
+        #expect(AllMealsLayout.rows([], columns: 3).isEmpty)
     }
 
     @Test func everySharedRecipesRowUsesOneCardSize() {

@@ -12,6 +12,8 @@ struct AllMealsSection: View {
 
     @State private var isSearching = false
     @State private var searchText = ""
+    /// The width the cards share, for the iPad's rows of cards (`AllMealsLayout`).
+    @State private var cardsWidth: CGFloat = 0
 
     /// Long enough to skip requests while typing, short enough to feel live.
     private static let searchDebounce = Duration.milliseconds(350)
@@ -89,21 +91,21 @@ struct AllMealsSection: View {
                 let canAdd = canAdd
                 let width = MenuRecipeCard.fullWidthEstimate
                 // Lazy all the way down: All Meals can hold hundreds of cards. One column on a
-                // phone; on an iPad a lazy grid of cards, so one search result stays card-sized
-                // instead of filling the screen.
+                // phone; on an iPad rows of cards, so one search result stays card-sized instead
+                // of filling the screen. Rows of this lazy stack, not a LazyVGrid nested in it:
+                // the nested grid kept re-measuring cards of different heights while the Menu
+                // scrolled, and on an iPad in landscape the main thread never got free (QA, build
+                // 121).
                 LazyVStack(alignment: .leading, spacing: DS.Space.xxl) {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
                     if sizeClass == .regular {
-                        LazyVGrid(
-                            columns: AllMealsLayout.columns(isWide: true), alignment: .leading, spacing: DS.Space.xxl
-                        ) {
-                            ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
-                                MenuCardRow(
-                                    index: index, card: card, size: .fullWidth, canAdd: canAdd, photoURLs: urls,
-                                    photoWidth: width)
-                            }
+                        let columns = AllMealsLayout.columnCount(width: cardsWidth)
+                        let cardWidth = AllMealsLayout.cardWidth(width: cardsWidth, columns: columns)
+                        ForEach(AllMealsLayout.rows(list.items, columns: columns), id: \.id) { @Sendable row in
+                            MenuCardGridRow(
+                                row: row, cardWidth: cardWidth, canAdd: canAdd, photoURLs: urls, photoWidth: width)
                         }
                     } else {
                         ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
@@ -113,6 +115,12 @@ struct AllMealsSection: View {
                         }
                     }
                     pageFooter
+                }
+                // The cards' width doesn't depend on the cards, so measuring it can't loop.
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.width
+                } action: {
+                    cardsWidth = $0
                 }
             }
         }
@@ -161,21 +169,74 @@ struct AllMealsSection: View {
 }
 
 /// How All Meals lays out its cards.
-enum AllMealsLayout {
-    /// The narrowest a card gets in the iPad grid.
+nonisolated enum AllMealsLayout {
+    /// The narrowest a card gets in an iPad row.
     static let minimumCardWidth: CGFloat = 280
-    /// The widest a card gets in the iPad grid, so one result is card-sized, not screen-sized.
+    /// The widest a card gets in an iPad row, so one result is card-sized, not screen-sized.
     static let maximumCardWidth: CGFloat = 400
+    /// The gap between cards in a row.
+    static let columnSpacing: CGFloat = 16
 
-    /// One full-width column on a phone; on a wide screen, as many cards as fit, each at most
-    /// `maximumCardWidth`.
-    static func columns(isWide: Bool) -> [GridItem] {
-        guard isWide else { return [GridItem(.flexible(), alignment: .top)] }
-        return [
-            GridItem(
-                .adaptive(minimum: minimumCardWidth, maximum: maximumCardWidth), spacing: DS.Space.l,
-                alignment: .top)
-        ]
+    /// One row of cards, with each card's place in the whole list (for warming photos).
+    struct Row: Sendable {
+        let id: String
+        let cards: [(index: Int, card: MenuCard)]
+    }
+
+    /// How many cards fit across `width`, each at least `minimumCardWidth`. At least one, and one
+    /// before the width is measured.
+    static func columnCount(width: CGFloat) -> Int {
+        guard width > 0 else { return 1 }
+        return max(1, Int(((width + columnSpacing) / (minimumCardWidth + columnSpacing)).rounded(.down)))
+    }
+
+    /// Each card's width: an equal share of the row, never wider than `maximumCardWidth`.
+    static func cardWidth(width: CGFloat, columns: Int) -> CGFloat {
+        guard width > 0, columns > 0 else { return maximumCardWidth }
+        let share = (width - columnSpacing * CGFloat(columns - 1)) / CGFloat(columns)
+        return min(maximumCardWidth, share.rounded(.down))
+    }
+
+    /// `items` in rows of `columns`, in order.
+    static func rows(_ items: [MenuCard], columns: Int) -> [Row] {
+        let size = max(1, columns)
+        let indexed = Array(items.enumerated())
+        return stride(from: 0, to: indexed.count, by: size).map { start in
+            let slice = indexed[start..<min(start + size, indexed.count)]
+            return Row(id: slice.first?.element.id ?? "\(start)", cards: slice.map { ($0.offset, $0.element) })
+        }
+    }
+}
+
+/// One row of All Meals' cards on an iPad, built off the main actor like `MenuCardRow`
+/// (decision 701).
+struct MenuCardGridRow: View {
+    let row: AllMealsLayout.Row
+    let cardWidth: CGFloat
+    let canAdd: Bool
+    let photoURLs: [URL?]
+    let photoWidth: CGFloat
+
+    nonisolated init(row: AllMealsLayout.Row, cardWidth: CGFloat, canAdd: Bool, photoURLs: [URL?], photoWidth: CGFloat)
+    {
+        self.row = row
+        self.cardWidth = cardWidth
+        self.canAdd = canAdd
+        self.photoURLs = photoURLs
+        self.photoWidth = photoWidth
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: AllMealsLayout.columnSpacing) {
+            ForEach(row.cards, id: \.card.id) { item in
+                MenuCardRow(
+                    index: item.index, card: item.card, size: .fullWidth, canAdd: canAdd, photoURLs: photoURLs,
+                    photoWidth: photoWidth
+                )
+                .frame(width: cardWidth)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
