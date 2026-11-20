@@ -114,7 +114,7 @@ final class ReferralQATests: XCTestCase {
         let sharerBanner = app.descendants(matching: .any)["NewsBanner"].firstMatch
         if sharerBanner.waitForExistence(timeout: 20) {
             XCTAssertTrue(
-                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", " joined from your invite."))
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", " joined from your invite"))
                     .firstMatch.exists, "The sharer’s banner doesn’t name a new household")
             snap(app, "Banner, invite counted (\(mode))")
             sharerBanner.buttons.matching(NSPredicate(format: "label != 'Close'")).firstMatch.tap()

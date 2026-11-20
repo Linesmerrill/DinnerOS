@@ -33,7 +33,12 @@ final class DiscoverQATests: XCTestCase {
         XCTAssertTrue(app.buttons["Menu"].firstMatch.waitForExistence(timeout: 20), "No Menu after sign-in")
 
         // Shared Recipes, from its row on the Menu.
-        let entry = app.staticTexts["Shared Recipes"].firstMatch
+        // A new household's Get Started card offers it as a button (build 121: one way in at a
+        // time); otherwise it's the row under Your Meals.
+        let button = app.buttons["Shared Recipes"].firstMatch
+        let text = app.staticTexts["Shared Recipes"].firstMatch
+        if !button.waitForExistence(timeout: 5) { reveal(text, in: app, maxSwipes: 10) }
+        let entry = button.exists ? button : text
         reveal(entry, in: app, maxSwipes: 10)
         entry.tap()
         XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn’t open")

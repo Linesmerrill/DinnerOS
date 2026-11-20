@@ -29,7 +29,20 @@ extension XCTestCase {
         // Shown once after a fresh install to a household with Plus on the house.
         if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn’t open after sign-in")
+        closeNewsBanner(app)
         return app
+    }
+
+    /// Closes the news banner ("2 invites counted") if one shows: it's news for the shared test
+    /// household, not part of the screen under test, and on an iPhone SE it takes room the
+    /// screen's content needs (build 121, Hark's review item 4).
+    @MainActor
+    func closeNewsBanner(_ app: XCUIApplication) {
+        let banner = app.descendants(matching: .any)["NewsBanner"].firstMatch
+        guard banner.waitForExistence(timeout: 3) else { return }
+        let close = banner.buttons["Close"].firstMatch
+        if close.exists { close.tap() }
+        _ = waitGone(banner, timeout: 3)
     }
 
     /// iPadOS 26 can switch a simulator to windowed apps, and then every test runs in a small

@@ -200,10 +200,10 @@ runs_on() {
     ImportFailureQATests) placed=duo-dark ;;
     DiscoverQATests) placed=small-light ;;
     CuisineQATests) placed=ipadP-dark ;;
-    NextStepDotQATests) placed=duo-dark ;;
+    NextStepDotQATests) placed=duo-light ;;
     ReportRecipeQATests) placed=small-dark ;;
     # Pre-submission checks (decisions 741, 749).
-    ReviewPathQATests) placed=ipadL-light ;;
+    ReviewPathQATests) placed=ipadP-dark ;;
     AccountDeletionQATests) placed=ipadP-light ;;
     PermissionsDeniedQATests) placed=small-light ;;
     # Face ID sign-in (decision 760): fake biometrics on the upright iPad, the simulator's own
@@ -230,8 +230,6 @@ run_config() {
     xcrun simctl boot "$id" 2>/dev/null
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
-    # iPads start on Full Screen Apps (build 121), whatever an earlier run left.
-    case $config in ipad*) [ -z "${PLAN_ONLY:-}" ] && full_screen_apps "$id" "$(ls "$OUT/dd-8082"/Build/Products/*.xctestrun | head -1)" ;; esac
     # No "Slide to type" tip over the keyboard in screenshots (build 121).
     xcrun simctl spawn "$id" defaults write com.apple.Preferences KeyboardContinuousPathEnabled -bool false 2>/dev/null
     xcrun simctl spawn "$id" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true 2>/dev/null
