@@ -41,8 +41,12 @@ extension XCTestCase {
         let screen = XCUIApplication(bundleIdentifier: "com.apple.springboard").frame
         let window = app.windows.firstMatch
         guard window.waitForExistence(timeout: 10), !screen.isEmpty else { return }
+        // SpringBoard reports its frame upright even when the iPad is on its side: compare the
+        // longer and shorter sides, not width with width.
         let frame = window.frame
-        if frame.width < screen.width - 2 || frame.height < screen.height - 2 {
+        let (long, short) = (max(frame.width, frame.height), min(frame.width, frame.height))
+        let (screenLong, screenShort) = (max(screen.width, screen.height), min(screen.width, screen.height))
+        if long < screenLong - 2 || short < screenShort - 2 {
             print("QA-WINDOWED: the app is a \(Int(frame.width))x\(Int(frame.height)) window")
             XCTFail("The iPad is in windowed apps mode (QA-WINDOWED); QASetupTests puts it back")
         }

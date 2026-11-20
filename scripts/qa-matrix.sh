@@ -27,10 +27,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light duo-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID StartCookingQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID StartCookingQATests"}
 STALL=${STALL:-600}
-# Which side runs the long flows this build (runs_on): iphone or ipad, flipping each ISO week.
-FLOW_SIDE=${FLOW_SIDE:-$([ $((10#$(date +%V) % 2)) = 0 ] && echo iphone || echo ipad)}
 # Tests to run on a second simulator per config, "QA matrix <config> 2", at the same time as the
 # first. Off by default: on this Mac (build 118) 17 simulators ran 40 to 70% slower each and
 # filled the disk. Set it (space-separated, with a space at each end) on a bigger machine.
@@ -176,63 +174,54 @@ full_screen_apps() {
 
 # Whether a test runs on a config: the placement rules for every test.
 # Build 121 (Hark's screenshot review): every config, the Duo in dark included, runs every
-# screenshot test (the sweep, both screen tests, the sign-in screen, Start Cooking). The flow
-# tests each run on one iPhone and one iPad (the short ones) or once, placed so every config's
-# minutes come out about even (build 120's times: the screenshot tests about 15 minutes per
-# config, the flows below about 10 to 13 more). PLAN_ONLY=1 prints the result.
+# screenshot test (the sweep, both screen tests, the sign-in screen, Start Cooking): about 15
+# of each config's minutes under the load of ten simulators. Every other test runs once. The
+# long flows run one test method per config, one on an iPhone and one on an iPad, so each
+# build covers both. Placed from build 121's measured times so every config lands near 28
+# minutes. PLAN_ONLY=1 prints the result.
 runs_on() {
     local config=$1 test=$2
     case $test in
     AppSweepQATests/SWEEP | ScreensQATests/* | BiometricSignInQATests/testSignInScreenWithFaceID | StartCookingQATests) return 0 ;;
     esac
     local placed
-    # Build 121: ten simulators run every test 30 to 50% slower than nine did, so the four long
-    # flows (Referral, AnyList, invite link, Companions) run once per build instead of on an
-    # iPhone and an iPad. FLOW_SIDE picks the side: by default it flips each ISO week, so
-    # consecutive builds cover both. On the iPad side, each iPhone config trades its flows with
-    # its iPad partner, which keeps every config's minutes about even.
-    local home=$config
-    if [ "$FLOW_SIDE" = ipad ]; then
-        case $config in
-        large-light) home=ipadL-light ;; ipadL-light) home=large-light ;;
-        large-dark) home=ipadL-dark ;; ipadL-dark) home=large-dark ;;
-        small-light) home=ipadP-dark ;; ipadP-dark) home=small-light ;;
-        small-dark) home=ipadP-light ;; ipadP-light) home=small-dark ;;
-        esac
-    fi
     case $test in
-    ReferralQATests) placed="large-light" ;;
-    AnyListGuideQATests | SaveThenOpenQATests) placed="large-dark" ;;
-    InviteLinkQATests) placed="small-light" ;;
-    CompanionQATests | PermissionsDeniedQATests) placed="small-dark" ;;
-    AddRecipeQATests) placed="ipadL-light" ;;
-    UnsplashPhotoQATests) placed="ipadL-light ipadP-dark" ;;
-    AddRecipeChooserQATests) placed="ipadL-light" ;;
-    ImportFailureQATests) placed="small-light ipadL-light" ;;
-    DiscoverQATests) placed="duo-light ipadL-dark" ;;
-    CuisineQATests) placed="small-dark ipadL-dark" ;;
-    NextStepDotQATests) placed="duo-dark ipadL-dark" ;;
-    ReportRecipeQATests) placed="duo-light ipadP-dark" ;;
+    ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp) placed=large-light ;;
+    ReferralQATests/testANewOrCustomCodeReplacesTheOldOne) placed=ipadL-light ;;
+    AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList) placed=ipadL-dark ;;
+    AnyListGuideQATests/testCopyShowsTheCopiedHUD) placed=small-dark ;;
+    InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist) placed=small-light ;;
+    InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds) placed=ipadP-light ;;
+    # Adding by hand end to end, on the large iPhone.
+    AddRecipeQATests | SaveThenOpenQATests) placed=large-dark ;;
+    CompanionQATests) placed=small-dark ;;
+    UnsplashPhotoQATests) placed=duo-light ;;
+    AddRecipeChooserQATests) placed=large-light ;;
+    ImportFailureQATests) placed=duo-dark ;;
+    DiscoverQATests) placed=small-light ;;
+    CuisineQATests) placed=ipadP-dark ;;
+    NextStepDotQATests) placed=duo-dark ;;
+    ReportRecipeQATests) placed=small-dark ;;
     # Pre-submission checks (decisions 741, 749).
-    ReviewPathQATests) placed="duo-dark ipadP-dark" ;;
-    AccountDeletionQATests) placed="ipadP-light" ;;
+    ReviewPathQATests) placed=ipadL-light ;;
+    AccountDeletionQATests) placed=ipadP-light ;;
+    PermissionsDeniedQATests) placed=small-light ;;
     # Face ID sign-in (decision 760): fake biometrics on the upright iPad, the simulator's own
-    # Face ID on the Duo, and the whole loop (build 119) on the Duo and the upright iPad.
-    BiometricSignInQATests/testFakeFaceID) placed="ipadP-light" ;;
-    BiometricSignInQATests/testSimulatorFaceID) placed="duo-dark" ;;
-    BiometricSignInQATests/testFaceIDSignInLoop) placed="duo-light ipadP-light" ;;
+    # Face ID on the Duo in dark, and the whole loop (build 119) on the Duo in light.
+    BiometricSignInQATests/testFakeFaceID) placed=ipadP-light ;;
+    BiometricSignInQATests/testSimulatorFaceID) placed=duo-dark ;;
+    BiometricSignInQATests/testFaceIDSignInLoop) placed=duo-light ;;
     # The App Review account (decision 752) is one account, so its test runs once, and only
     # when the review account's email and password are exported for it.
     ReviewAccountQATests)
-        placed="ipadL-dark"
-        if [ "$home" = ipadL-dark ] && { [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; }; then
+        placed=ipadP-dark
+        if [ "$config" = ipadP-dark ] && { [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; }; then
             echo "$config $test: skipped (export REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD)" >>"$OUT/summary.txt"
             return 1
         fi ;;
     *) return 0 ;;
     esac
-    case " $placed " in *" $home "*) return 0 ;; esac
-    return 1
+    [ "$placed" = "$config" ]
 }
 
 run_config() {
@@ -306,7 +295,7 @@ seed_offer_codes 8082
 build 8082 &
 [ $need8083 = yes ] && build 8083 &
 wait
-echo "built in $(($(date +%s) - start))s; long flows on the $FLOW_SIDE side" >>"$OUT/summary.txt"
+echo "built in $(($(date +%s) - start))s" >>"$OUT/summary.txt"
 # A full disk crashed local Mongo once (build 118). Below 5 GB free, stop every test and say so.
 (
     while sleep 10; do

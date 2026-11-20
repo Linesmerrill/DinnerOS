@@ -332,7 +332,11 @@ final class ScreensQATests: XCTestCase {
 
     @MainActor
     private func scrollToTop(_ app: XCUIApplication) {
-        for _ in 0..<3 { scrollBack(app) }
+        // One long drag from near the top: enough for a recipe page, and cheaper than three.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0)
     }
 
     /// Closes an open menu by tapping the top corner of the screen, away from its items.
