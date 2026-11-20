@@ -200,7 +200,7 @@ runs_on() {
     ImportFailureQATests) placed=duo-dark ;;
     DiscoverQATests) placed=small-light ;;
     CuisineQATests) placed=ipadP-dark ;;
-    NextStepDotQATests) placed=duo-light ;;
+    NextStepDotQATests) placed=duo-dark ;;
     ReportRecipeQATests) placed=small-dark ;;
     # Pre-submission checks (decisions 741, 749).
     ReviewPathQATests) placed=ipadP-dark ;;

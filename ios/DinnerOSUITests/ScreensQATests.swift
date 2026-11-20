@@ -113,7 +113,9 @@ final class ScreensQATests: XCTestCase {
             let field = app.textFields["Search meals"].firstMatch
             if !field.exists {
                 let search = app.buttons["Search meals"].firstMatch
-                reveal(search, in: app, maxSwipes: 12)
+                // All Meals is the Menu's last section and the list is lazy: on a large iPhone
+                // with a full week it can take more than 12 swipes to reach (build 121).
+                reveal(search, in: app, maxSwipes: 24)
                 search.tap()
             }
             XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -142,9 +144,13 @@ final class ScreensQATests: XCTestCase {
             }
             let cards = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
             var card: XCUIElement?
-            for _ in 0..<10 where card == nil {
+            for attempt in 0..<12 where card == nil {
                 card = cards.allElementsBoundByIndex.first { $0.isHittable }
-                if card == nil { sleep(1) }
+                if card == nil {
+                    // The result can sit below the fold under the bars: bring it up once.
+                    if attempt == 5, cards.firstMatch.exists { reveal(cards.firstMatch, in: app, maxSwipes: 6) }
+                    sleep(1)
+                }
             }
             guard let card else {
                 snap(app, "Recipe page › \(kind): search result missing (\(mode))")
