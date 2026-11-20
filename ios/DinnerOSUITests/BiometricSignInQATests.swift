@@ -355,8 +355,17 @@ final class BiometricSignInQATests: XCTestCase {
         if app.switches["account.biometricSignIn"].exists { return }
         let household = app.buttons.matching(NSPredicate(format: "label == 'Household' AND identifier == 'person.2'"))
             .firstMatch
-        (household.waitForExistence(timeout: 5) ? household : householdTab(app)).tap()
         let account = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Account'")).firstMatch
+        // The Face ID offer and the thanks sheet can come up late, after the steps that answer them
+        // stopped waiting, and take the tap meant for the tab: answer them and tap again.
+        for _ in 0..<3 where !app.navigationBars["Household"].exists {
+            let offer = app.alerts["Use Face ID to sign in next time?"]
+            if offer.exists { offer.buttons["Not Now"].tap() }
+            // The one-time "Thanks for testing" sheet can also come up after signInIfNeeded looked.
+            if app.buttons["Thanks"].exists { app.buttons["Thanks"].tap() }
+            (household.waitForExistence(timeout: 5) ? household : householdTab(app)).tap()
+            _ = app.navigationBars["Household"].waitForExistence(timeout: 4)
+        }
         reveal(account, in: app)
         account.tap()
         _ = app.switches["account.biometricSignIn"].firstMatch.waitForExistence(timeout: 8)
