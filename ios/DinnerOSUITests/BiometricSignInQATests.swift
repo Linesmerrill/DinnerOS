@@ -163,6 +163,12 @@ final class BiometricSignInQATests: XCTestCase {
     @MainActor
     func testSignInScreenWithFaceID() throws {
         let app = launch(fake: "match")
+        // First the sign-in screen as everyone sees it, without Face ID.
+        if devSignIn(app).waitForExistence(timeout: 10) {
+            XCTAssertFalse(faceIDButton(app).exists, "Face ID showed before it was turned on")
+            sleep(1)
+            snap(app, "Sign-in (\(mode))")
+        }
         signInIfNeeded(app)
         answerOffer(app, use: false)
         setToggle(app, on: true)

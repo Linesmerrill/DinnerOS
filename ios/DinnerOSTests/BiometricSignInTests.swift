@@ -273,7 +273,9 @@ struct BiometricSessionTests {
         return Setup(session: session, store: store, protected: protectedStore, setting: setting, transport: transport)
     }
 
-    private var saved: StoredSession { StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user) }
+    // Built once per test: Fixtures.tokens() reads the clock, so a second ticking over between
+    // two reads made them unequal (a flaky CI failure).
+    private let saved = StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)
 
     @Test func offByDefaultRestoresAsBefore() async throws {
         let s = try setup(stored: saved)

@@ -457,6 +457,30 @@ The job runs `bundle exec fastlane beta`, which:
 4. archives a Release build with manual signing, using the match profile
 5. uploads to TestFlight, where the internal group receives it automatically
 
+### Screenshot review (Hark, from build 120)
+
+Nothing goes to TestFlight until Hark has reviewed that build's screenshots.
+
+1. Run the full QA matrix (`scripts/qa-matrix.sh`, docs/development.md) and rerun only what
+   failed. Screenshots come from the seeded local test accounts only (developer sign-in on the
+   local API), never a real account.
+2. Publish them: `scripts/qa-screenshots.py <build> <matrix OUT> [<rerun OUT> ...]` (later folders
+   win for the same config and test). It writes one PNG per screen per config: every tab and
+   sheet from the sweeps and screen tests, the sign-in screen with and without Face ID, and Start
+   Cooking on a scrolled recipe, in light and dark, on the small and large iPhone, the iPhone Duo
+   cover screen, and the iPad upright and on its side. `manifest.json` lists each `file`,
+   `screen`, `config`, `device` and `state` (appearance and orientation).
+3. The script attaches the zip to a temporary draft release and runs the `QA screenshots`
+   workflow (`.github/workflows/qa-screenshots.yml`), which publishes the GitHub Actions artifact
+   **`qa-screenshots-<build>`** on Linesmerrill/DinnerOS (kept 30 days) and deletes the draft. The
+   PNGs are never committed.
+4. Post **`SCREENSHOTS READY build <n>, run <run-id>`** (the script prints it).
+5. Wait for Hark's **`Screenshots approved for build <n>`**. Until then, don't dispatch the
+   TestFlight upload. Fix every numbered issue Hark sends, rerun the affected QA, publish again
+   with the same build number, and post SCREENSHOTS READY again.
+6. Once approved: fast-forward `main` with a `[skip ci]` head commit and dispatch `iOS CI` on
+   `main` with `internal_only=true`.
+
 ### Signing (fastlane match)
 
 One Apple Distribution certificate and one App Store profile are shared by every

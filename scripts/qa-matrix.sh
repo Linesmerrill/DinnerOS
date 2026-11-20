@@ -164,7 +164,7 @@ runs_on() {
     if [ "${config%%-*}" = duo ]; then
         case $test in
         AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) return 0 ;;
-        StartCookingQATests | BiometricSignInQATests/testSignInScreenWithFaceID) return 0 ;;
+        StartCookingQATests | BiometricSignInQATests/testSignInScreenWithFaceID | UnsplashPhotoQATests) return 0 ;;
         BiometricSignInQATests/testFaceIDSignInLoop) return 0 ;;
         *) return 1 ;;
         esac
@@ -180,25 +180,28 @@ runs_on() {
     # 28 minutes. PLAN_ONLY=1 prints the result.
     case $test in
     AppSweepQATests/SWEEP | ScreensQATests/*) return 0 ;;
+    # Build 120: every config ran 2-3 minutes longer and three passed 30, so Unsplash moved to the
+    # Duo, Report and Start Cooking to the upright iPad, and Discover and the chooser left the
+    # large iPhone (each still runs on an iPhone and an iPad).
     # Build 119: the sign-in screen with Face ID kept is a screen to check everywhere. Start
     # Cooking pinned to the bottom (the Duo's cover screen) is checked on the Duo and, where it
     # must not move, on an iPhone of each size and both iPads.
     BiometricSignInQATests/testSignInScreenWithFaceID) return 0 ;;
-    StartCookingQATests) case $config in large-light | small-dark | ipadL-light | ipadP-dark) ;; *) return 1 ;; esac ;;
+    StartCookingQATests) case $config in large-light | small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
     ReferralQATests) case $config in large-light | ipadL-light) ;; *) return 1 ;; esac ;;
     InviteLinkQATests) case $config in small-light | ipadP-dark) ;; *) return 1 ;; esac ;;
     AnyListGuideQATests) case $config in large-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
-    UnsplashPhotoQATests) case $config in large-light | small-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
-    AddRecipeChooserQATests) case $config in large-light | small-dark | ipadL-light) ;; *) return 1 ;; esac ;;
+    UnsplashPhotoQATests) case $config in large-light | small-dark | duo-light) ;; *) return 1 ;; esac ;;
+    AddRecipeChooserQATests) case $config in small-dark | ipadL-light) ;; *) return 1 ;; esac ;;
     ImportFailureQATests) case $config in large-dark | small-light | ipadL-light) ;; *) return 1 ;; esac ;;
-    DiscoverQATests) case $config in large-light | small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
+    DiscoverQATests) case $config in small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
     # The end-to-end add tests run once each: adding by hand on the large iPhone, companions and
     # cuisine on a small iPhone and on the iPad on its side (where their forms are a sheet).
     AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || return 1 ;;
     CompanionQATests) case $config in small-light | ipadL-dark) ;; *) return 1 ;; esac ;;
     CuisineQATests) case $config in small-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
     NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) return 1 ;; esac ;;
-    ReportRecipeQATests) case $config in small-dark | ipadL-light) ;; *) return 1 ;; esac ;;
+    ReportRecipeQATests) case $config in small-dark | ipadP-light) ;; *) return 1 ;; esac ;;
     # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
     # account deletion and denied permissions once each.
     ReviewPathQATests) case $config in small-dark | ipadP-dark) ;; *) return 1 ;; esac ;;
