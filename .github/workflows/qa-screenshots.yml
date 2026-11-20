@@ -1,0 +1,61 @@
+name: QA screenshots
+
+# Hark reviews every build's screenshots before TestFlight (docs/deployment.md, "Screenshot
+# review"). scripts/qa-screenshots.sh takes them in the local QA matrix, zips them with
+# manifest.json, attaches the zip to a temporary draft release (never committed), and dispatches
+# this workflow, which publishes the zip's contents as the artifact qa-screenshots-<build> and
+# deletes the draft release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: "Build number, e.g. 120"
+        required: true
+        type: string
+      release:
+        description: "Tag of the draft release holding the zip"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qa-screenshots-${{ inputs.build }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Upload qa-screenshots-${{ inputs.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: ${{ inputs.release }}
+      BUILD: ${{ inputs.build }}
+    steps:
+      - name: Check the inputs
+        run: |
+          [[ "$BUILD" =~ ^[0-9]+$ ]] || { echo "build must be a number"; exit 1; }
+          [[ "$RELEASE" =~ ^qa-screenshots-[0-9]+-[0-9]+$ ]] || { echo "unexpected release tag"; exit 1; }
+
+      - name: Download the zip
+        run: |
+          gh release download "$RELEASE" --repo "$GITHUB_REPOSITORY" --pattern '*.zip' --dir zip
+          mkdir screenshots
+          unzip -q zip/*.zip -d screenshots
+          test -f screenshots/manifest.json
+          echo "PNGs: $(find screenshots -name '*.png' | wc -l)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qa-screenshots-${{ inputs.build }}
+          path: screenshots
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Delete the draft release
+        if: always()
+        run: gh release delete "$RELEASE" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
