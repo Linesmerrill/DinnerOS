@@ -341,10 +341,19 @@ struct MealCard: View {
             // opinion about the food. A meal counts as made unless someone says it wasn't
             // (decision 662), so the row only offers that, once the night is over.
             MealOutcomeRow(entry: entry)
-            if let feedbackRecipe,
-                MealRating.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date))
-            {
-                MealRatingRow(recipe: feedbackRecipe)
+            if let feedbackRecipe {
+                switch MealRating.row(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date)) {
+                case .shown:
+                    MealRatingRow(recipe: feedbackRecipe)
+                case .heldSpace:
+                    // Not asked yet, but the row's height is kept: cards of different heights in
+                    // this carousel kept the Menu's lazy stack re-measuring on every frame, and
+                    // an iPad in landscape froze while scrolling (QA, build 121).
+                    MealRatingRow(recipe: feedbackRecipe)
+                        .hidden()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .contextMenu { menuItems }
@@ -618,5 +627,16 @@ nonisolated enum MealRating {
         case .skipped: false
         case nil: nightHasPassed
         }
+    }
+
+    /// The rating row on a planned meal's card: the stars, or the same space left empty, so
+    /// every card in Your Meals is one height whether it asks or not.
+    enum Row: Equatable {
+        case shown
+        case heldSpace
+    }
+
+    static func row(outcome: MealOutcome?, nightHasPassed: Bool) -> Row {
+        shows(outcome: outcome, nightHasPassed: nightHasPassed) ? .shown : .heldSpace
     }
 }

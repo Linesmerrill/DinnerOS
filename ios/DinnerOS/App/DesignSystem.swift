@@ -125,9 +125,8 @@ nonisolated enum DS {
         static let readableWidth: CGFloat = 640
         /// A recipe's photo is never taller than this on a wide screen.
         static let heroMaxHeight: CGFloat = 360
-        /// The height of `DSSegmentedControl`: short enough that its capsule thumb stays round inside
-        /// a toolbar item.
-        static let segmentedHeight: CGFloat = 32
+        /// How far the scrim under the floating tab bar reaches above the bottom safe area.
+        static let tabBarScrimHeight: CGFloat = 64
     }
 
     /// Button heights. Each style has one fixed height per size; it scales with Dynamic Type.
@@ -455,66 +454,4 @@ extension ButtonStyle where Self == DSTextLinkButtonStyle {
         Button("Sign in with email") {}.buttonStyle(.dsTextLink)
     }
     .padding(DS.Space.l)
-}
-
-// MARK: Segmented control
-
-/// A capsule segmented control: the choices in a row, the selected one on a round thumb (build
-/// 121). Used instead of `Picker(.segmented)`, which in a toolbar drew its own outline inside the
-/// toolbar's glass, offset from it, with a thumb cut flat at the bottom (Hark's review, iPad).
-///
-/// In a toolbar on iOS 26 and later the toolbar's glass is the track (`inGlassToolbar`), so
-/// there is one outline; elsewhere the control draws its own capsule track.
-struct DSSegmentedControl<Value: Hashable>: View {
-    @Binding var selection: Value
-    let options: [(value: Value, title: LocalizedStringKey)]
-    var inGlassToolbar = false
-
-    @Namespace private var thumb
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var drawsTrack: Bool {
-        if #available(iOS 26.0, *) { return !inGlassToolbar }
-        return true
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
-                segment(option.value, title: option.title)
-            }
-        }
-        .padding(DS.Space.hairline)
-        .background {
-            if drawsTrack {
-                Capsule().fill(DS.Colors.fill)
-            }
-        }
-        .fixedSize()
-    }
-
-    private func segment(_ value: Value, title: LocalizedStringKey) -> some View {
-        let isSelected = value == selection
-        return Button {
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection = value }
-        } label: {
-            Text(title)
-                .font(DS.Typography.subheadline.weight(isSelected ? .semibold : .regular))
-                .foregroundStyle(Color.primary)
-                .lineLimit(1)
-                .padding(.horizontal, DS.Space.ml)
-                .frame(minHeight: DS.Size.segmentedHeight - DS.Space.hairline * 2)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill(DS.Colors.raisedSurface)
-                            .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
-                            .matchedGeometryEffect(id: "thumb", in: thumb)
-                    }
-                }
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
 }

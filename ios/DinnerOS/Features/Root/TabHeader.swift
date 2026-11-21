@@ -37,13 +37,23 @@ extension View {
 }
 
 extension View {
-    /// A solid edge where a tab's scroll view runs under the floating tab bar (iOS 26 and
-    /// later), so a bright card scrolling behind it doesn't tint the bar's glass and its labels
-    /// keep their contrast (Hark's review item 11).
+    /// A scrim under the floating tab bar (iOS 26 and later), so a bright card scrolling behind
+    /// it doesn't tint the bar's glass and its labels keep their contrast (Hark's review item
+    /// 11). An overlay, so it never changes the layout: a hard scroll edge here
+    /// (`scrollEdgeEffectStyle(.hard, for: .bottom)`) froze the iPad Menu in landscape.
     @ViewBuilder
     func tabBarEdge() -> some View {
         if #available(iOS 26.0, *) {
-            scrollEdgeEffectStyle(.hard, for: .bottom)
+            overlay(alignment: .bottom) {
+                LinearGradient(
+                    colors: [DS.Colors.barBackground.opacity(0), DS.Colors.barBackground.opacity(0.9)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: DS.Size.tabBarScrimHeight)
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
         } else {
             self
         }

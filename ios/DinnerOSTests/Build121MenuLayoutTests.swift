@@ -136,6 +136,23 @@ struct Build121MenuLayoutTests {
         #expect(!MealRating.shows(outcome: .skipped(nil), nightHasPassed: true))
     }
 
+    /// All Meals' title steps aside while the search field is open, and only then; nothing about
+    /// the header follows keyboard focus (the iPad freeze, QA build 121).
+    @Test func allMealsHidesItsTitleOnlyWhileSearching() {
+        #expect(AllMealsLayout.showsTitle("All Meals", isSearching: false))
+        #expect(!AllMealsLayout.showsTitle("All Meals", isSearching: true))
+        #expect(!AllMealsLayout.showsTitle(nil, isSearching: false))
+    }
+
+    /// An uncooked meal keeps the rating row's space, so every Your Meals card is one height:
+    /// cards of different heights froze the Menu on an iPad in landscape (QA build 121).
+    @Test func anUncookedMealHoldsTheRatingRowsSpace() {
+        #expect(MealRating.row(outcome: .cooked, nightHasPassed: false) == .shown)
+        #expect(MealRating.row(outcome: nil, nightHasPassed: true) == .shown)
+        #expect(MealRating.row(outcome: nil, nightHasPassed: false) == .heldSpace)
+        #expect(MealRating.row(outcome: .skipped(nil), nightHasPassed: true) == .heldSpace)
+    }
+
     @Test func theEmptyWeekHintIsASentence() {
         #expect(MenuFormat.addMealsYourselfHint == "You can also add meals yourself below.")
     }

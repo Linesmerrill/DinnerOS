@@ -15,9 +15,6 @@ struct AllMealsSection: View {
 
     @State private var isSearching = false
     @State private var searchText = ""
-    /// The search field has the keyboard: the header shrinks to the field alone, so a result
-    /// shows above the keyboard on a short screen (the Duo's cover screen, Hark's review item 10).
-    @State private var isTyping = false
     /// The width the cards share, as measured here, for the iPad's rows of cards
     /// (`AllMealsLayout`). Only used without a `containerWidth`.
     @State private var measuredWidth: CGFloat = 0
@@ -38,17 +35,20 @@ struct AllMealsSection: View {
                     .padding(.horizontal, DS.Space.l)
             } header: {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    // The title steps aside while searching, so a result clears the tab bar
-                    // after Done on a small phone (Hark's review item 4).
-                    if let title, !isTyping, !isSearching {
+                    // The title steps aside while the search field is open, so a result clears
+                    // the tab bar after Done on a small phone and shows more of itself above the
+                    // keyboard (Hark's review items 4 and 10). Driven by the search chip's tap
+                    // alone: a header that followed the field's keyboard focus froze the Menu on
+                    // an iPad, because the lazy stack rebuilds this pinned header as it scrolls
+                    // and each rebuild changed the section's state again (QA, build 121).
+                    if AllMealsLayout.showsTitle(title, isSearching: isSearching), let title {
                         Text(title)
                             .font(.title3.bold())
                             .accessibilityAddTraits(.isHeader)
                             .padding(.horizontal, DS.Space.l)
                     }
                     MenuChipBar(
-                        list: list, options: options, isSearching: $isSearching, searchText: $searchText,
-                        isTyping: $isTyping)
+                        list: list, options: options, isSearching: $isSearching, searchText: $searchText)
                 }
                 .padding(.vertical, DS.Space.s)
                 .background(.bar)
@@ -207,6 +207,11 @@ nonisolated enum AllMealsLayout {
         return max(0, containerWidth - horizontalMargin * 2)
     }
 
+    /// Whether the section shows its title: not while the search field is open.
+    static func showsTitle(_ title: String?, isSearching: Bool) -> Bool {
+        title != nil && !isSearching
+    }
+
     /// How many cards fit across `width`, each at least `minimumCardWidth`. At least one, and one
     /// before the width is measured.
     static func columnCount(width: CGFloat) -> Int {
@@ -270,18 +275,12 @@ struct MenuChipBar: View {
     let options: MenuFilterOptions
     @Binding var isSearching: Bool
     @Binding var searchText: String
-    /// Whether the search field has the keyboard.
-    @Binding var isTyping: Bool
-
     @State private var isShowingFilters = false
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         VStack(spacing: DS.Space.s) {
-            // The chips step aside while the field has the keyboard.
-            if !isSearchFocused {
-                chips
-            }
+            chips
             if isSearching {
                 HStack(spacing: DS.Space.s) {
                     Image(systemName: "magnifyingglass")
@@ -304,9 +303,6 @@ struct MenuChipBar: View {
                 .background(DS.Colors.surface, in: .capsule)
                 .padding(.horizontal, DS.Space.l)
             }
-        }
-        .onChange(of: isSearchFocused) { _, focused in
-            withAnimation(.snappy) { isTyping = focused }
         }
         .sheet(isPresented: $isShowingFilters) {
             MenuFilterSheet(query: list.query, options: options) { query in

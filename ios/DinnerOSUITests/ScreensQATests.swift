@@ -203,6 +203,16 @@ final class ScreensQATests: XCTestCase {
                 shot(app, "Recipe page › \(kind) › More menu")
                 dismissMenu(app)
             }
+            // The page as it opens (its first tab), so the scrolled shot isn't the Nutrition tab
+            // again: on a short page both scroll to the same bottom (build 122).
+            let firstTab = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier IN %@", ["recipeTab.description", "recipeTab.customize"]))
+                .firstMatch
+            if firstTab.exists {
+                reveal(firstTab, in: app)
+                firstTab.tap()
+                sleep(1)
+            }
             scrollToTop(app)
             let top = snap(app, "debug top before scrolling", settle: false)
             scrollContent(app)

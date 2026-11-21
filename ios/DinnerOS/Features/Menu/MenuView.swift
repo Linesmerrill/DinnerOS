@@ -450,11 +450,15 @@ struct MenuView: View {
         // On an iPad the principal item gets a row of its own under the tab bar; leading puts the
         // switch in the tab bar's row instead, a whole row back for the meals.
         ToolbarItem(placement: horizontalSizeClass == .regular ? .topBarLeading : .principal) {
-            // One capsule control, the toolbar's glass its only outline (Hark's review item 7).
-            // The leading item (iPad) sits on the toolbar's glass; the principal one (iPhone) doesn't.
-            DSSegmentedControl(
-                selection: $mode, options: MenuMode.allCases.map { ($0, $0.title) },
-                inGlassToolbar: horizontalSizeClass == .regular)
+            // The system's segmented control. A custom SwiftUI capsule control here (build 121,
+            // Hark's review item 7) froze the Menu on an iPad in landscape (QA, build 122).
+            Picker("View", selection: $mode) {
+                ForEach(MenuMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
         }
         // Every tab's toolbar reads bell, +, more (`TabHeader`): the bell comes from
         // `.notificationsToolbar()`, outside this one.
