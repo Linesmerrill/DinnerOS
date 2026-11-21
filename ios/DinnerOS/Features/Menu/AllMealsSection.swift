@@ -6,14 +6,18 @@ struct AllMealsSection: View {
     let list: MenuRecipeList
     var title: String? = String(localized: "All Meals")
     var canAdd = true
+    /// The width of the scroll view the section sits in, from a parent that lives as long as the
+    /// screen (the Menu). `nil` where the section isn't inside a lazy stack and can measure itself.
+    var containerWidth: CGFloat?
 
     @Environment(MenuStore.self) private var menu
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var isSearching = false
     @State private var searchText = ""
-    /// The width the cards share, for the iPad's rows of cards (`AllMealsLayout`).
-    @State private var cardsWidth: CGFloat = 0
+    /// The width the cards share, as measured here, for the iPad's rows of cards
+    /// (`AllMealsLayout`). Only used without a `containerWidth`.
+    @State private var measuredWidth: CGFloat = 0
 
     /// Long enough to skip requests while typing, short enough to feel live.
     private static let searchDebounce = Duration.milliseconds(350)
@@ -101,6 +105,8 @@ struct AllMealsSection: View {
                         FormErrorLabel(message: refreshError)
                     }
                     if sizeClass == .regular {
+                        let cardsWidth = AllMealsLayout.cardsWidth(
+                            containerWidth: containerWidth, measured: measuredWidth)
                         let columns = AllMealsLayout.columnCount(width: cardsWidth)
                         let cardWidth = AllMealsLayout.cardWidth(width: cardsWidth, columns: columns)
                         ForEach(AllMealsLayout.rows(list.items, columns: columns), id: \.id) { @Sendable row in
@@ -116,11 +122,10 @@ struct AllMealsSection: View {
                     }
                     pageFooter
                 }
-                // The cards' width doesn't depend on the cards, so measuring it can't loop.
                 .onGeometryChange(for: CGFloat.self) {
                     $0.size.width
                 } action: {
-                    cardsWidth = $0
+                    measuredWidth = $0
                 }
             }
         }
@@ -181,6 +186,19 @@ nonisolated enum AllMealsLayout {
     struct Row: Sendable {
         let id: String
         let cards: [(index: Int, card: MenuCard)]
+    }
+
+    /// The section's side margins (the cards sit inside them).
+    static let horizontalMargin: CGFloat = 16
+
+    /// The width the cards share. From the Menu's own width when it's known: a width measured
+    /// inside the section starts at zero every time the Menu's lazy stack makes the section
+    /// again, which laid the cards out one to a row (three times as tall), then three to a row,
+    /// and the jump in height moved the page and made the section again. On an iPad in
+    /// landscape the Menu never stopped laying itself out (QA, build 121).
+    static func cardsWidth(containerWidth: CGFloat?, measured: CGFloat) -> CGFloat {
+        guard let containerWidth, containerWidth > 0 else { return measured }
+        return max(0, containerWidth - horizontalMargin * 2)
     }
 
     /// How many cards fit across `width`, each at least `minimumCardWidth`. At least one, and one

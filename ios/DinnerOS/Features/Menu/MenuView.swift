@@ -46,6 +46,9 @@ struct MenuView: View {
     @State private var readerScrolling = false
     /// The menu's tallest visible height, so a narrowed All Meals can fill it (see below).
     @State private var viewportHeight: CGFloat = 0
+    /// The menu's width, for All Meals' iPad rows. Kept here, not in All Meals, which the lazy
+    /// stack makes again as it scrolls (`AllMealsLayout.cardsWidth`).
+    @State private var menuWidth: CGFloat = 0
 
     /// VoiceOver always gets the pills. Collapsing would take away an element a reader may be
     /// focused on, or be sitting next to, and the screen space it buys is not what someone
@@ -289,7 +292,7 @@ struct MenuView: View {
                     PairingSuggestionsSection()
                     sections
                     if menu.selectedTiming != .past {
-                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals)
+                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals, containerWidth: menuWidth)
                             // A search or filter can leave All Meals one card long at the bottom of
                             // the menu. Closing the keyboard then left too little page to stay
                             // scrolled there, and the results slid away (seen on iPad). Filling a
@@ -313,6 +316,12 @@ struct MenuView: View {
                     Button("Done") { Keyboard.dismiss() }
                         .fontWeight(.semibold)
                 }
+            }
+            // The scroll view's width doesn't depend on what's in it, so this can't loop.
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                menuWidth = $0
             }
             // How far the menu is scrolled decides the week strip's form, and nothing else
             // reads it; `MenuChromeCollapse` holds the rule.

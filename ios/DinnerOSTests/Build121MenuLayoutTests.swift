@@ -58,6 +58,20 @@ struct Build121MenuLayoutTests {
         #expect(card * CGFloat(columns) + AllMealsLayout.columnSpacing * CGFloat(columns - 1) <= width)
     }
 
+    /// The cards' width comes from the Menu's width whenever it's known, so All Meals made
+    /// again by the lazy stack (its own measurement back at zero) lays out the same rows at once
+    /// instead of one card to a row first (the landscape iPad freeze, QA build 121).
+    @Test func theCardsWidthDoesNotDependOnARemeasure() {
+        let fresh = AllMealsLayout.cardsWidth(containerWidth: 1194, measured: 0)
+        let settled = AllMealsLayout.cardsWidth(containerWidth: 1194, measured: 1162)
+        #expect(fresh == settled)
+        #expect(fresh == 1194 - AllMealsLayout.horizontalMargin * 2)
+        #expect(AllMealsLayout.columnCount(width: fresh) == 3)
+        // Without the Menu's width (Show More), the section's own measurement is used.
+        #expect(AllMealsLayout.cardsWidth(containerWidth: nil, measured: 700) == 700)
+        #expect(AllMealsLayout.cardsWidth(containerWidth: 0, measured: 700) == 700)
+    }
+
     @Test func allMealsSplitsIntoRowsInOrder() throws {
         let cards = MenuPreviewData.cards
         try #require(cards.count >= 3)
