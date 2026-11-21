@@ -272,7 +272,16 @@ struct MenuView: View {
     private var menuContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: DS.Space.xxl) {
+                // A plain stack, not a lazy one. Its rows are a dozen sections of very different
+                // heights (Your Meals, a one-card carousel, the Shared Recipes row, All Meals),
+                // and a lazy stack guesses the ones it hasn't laid out from the ones it has.
+                // Scrolling toward All Meals on an iPad in landscape, each guess moved the
+                // content, which changed what was laid out and so the next guess: the main
+                // thread laid the Menu out again every frame and never got free (QA, build 122;
+                // the same with every card, photo, shimmer and All Meals change ruled out one at
+                // a time). Every section here is measured, so nothing is guessed. All Meals, the
+                // one long list, stays lazy inside its own section.
+                VStack(alignment: .leading, spacing: DS.Space.xxl) {
                     if let refreshError = menu.refreshError {
                         FormErrorLabel(message: refreshError)
                             .padding(.horizontal, DS.Space.l)
