@@ -6,6 +6,181 @@ import XCTest
     static var lastBannerCheck = Date.distantPast
 }
 
+/// A screenshot reduced to one pixel per point, for telling two shots apart.
+struct QAShotImage {
+    let width: Int
+    let height: Int
+    /// RGBX, a row at a time from the top.
+    let pixels: [UInt8]
+    /// Per 8-point cell, row by row: whether it lies clear of the status bar and home indicator.
+    let cellKept: [Bool]
+    let columns: Int
+    /// Per cell, its average red, green and blue, for a quick first look.
+    let cellMeans: [Double]
+}
+
+/// Tells whether two screenshots show the same screen (Hark's review, build 122 item 13a).
+///
+/// Two shots of one screen used to pass because the clock had moved on. Here the status bar and
+/// the home indicator are left out, the screen is cut into 8-point cells, and two shots count as
+/// the same when fewer than 1% of the cells changed (a cell changes when any pixel's color moves
+/// by more than 24 of 255). Cells rather than pixels: a menu or a household name changes few
+/// pixels (thin text on white, under 1%) but many cells (3% or more), while the same screen
+/// changes none, or a few under the toolbar's glass. scripts/qa_shot_compare.py does the same
+/// before publishing; keep the two in step.
+enum QAShotCompare {
+    static let sameScreen = 0.01
+    static let channelTolerance = 24
+    static let cell = 8
+
+    /// Points to leave out: the status bar (top), the home indicator (bottom) and, on the iPhone
+    /// Duo cover screen, the status bar at the top of the right-hand rail (x from 382, 160 tall).
+    static func mask(width: Int, height: Int, pad: Bool) -> (top: Int, bottom: Int, rail: (x: Int, height: Int)?) {
+        if pad { return (24, 20, nil) }
+        if width == 466 && height == 678 { return (0, 0, (382, 160)) }
+        if max(width, height) <= 667 { return (20, 0, nil) }
+        return (62, 34, nil)
+    }
+
+    /// The PNG at one pixel per point (`scale` pixels per point in the PNG), sampled, not blended.
+    static func image(png: Data, scale: CGFloat, pad: Bool) -> QAShotImage? {
+        guard let source = UIImage(data: png)?.cgImage, scale > 0 else { return nil }
+        let width = Int((CGFloat(source.width) / scale).rounded())
+        let height = Int((CGFloat(source.height) / scale).rounded())
+        guard width > 0, height > 0 else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard
+                let context = CGContext(
+                    data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                    bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+            else { return false }
+            context.interpolationQuality = .none
+            context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        return QAShotImage(
+            width: width, height: height, pixels: pixels,
+            cellKept: keptCells(width: width, height: height, mask: mask(width: width, height: height, pad: pad)),
+            columns: width / cell, cellMeans: means(pixels, width: width, height: height))
+    }
+
+    /// Each whole cell's average color, three values a cell, row by row.
+    static func means(_ pixels: [UInt8], width: Int, height: Int) -> [Double] {
+        let columns = width / cell
+        let rows = height / cell
+        var sums = [Double](repeating: 0, count: columns * rows * 3)
+        for y in 0..<(rows * cell) {
+            let rowBase = (y / cell) * columns
+            for x in 0..<(columns * cell) {
+                let p = (y * width + x) * 4
+                let c = (rowBase + x / cell) * 3
+                sums[c] += Double(pixels[p])
+                sums[c + 1] += Double(pixels[p + 1])
+                sums[c + 2] += Double(pixels[p + 2])
+            }
+        }
+        let area = Double(cell * cell)
+        return sums.map { $0 / area }
+    }
+
+    /// True when the cell averages alone prove at least `share` of the cells changed: a cell whose
+    /// average moved by more than the tolerance in a channel has a pixel that did too. Cheap, so
+    /// most pairs of different screens never need the pixel by pixel look.
+    static func surelyDifferent(_ a: QAShotImage, _ b: QAShotImage, share: Double) -> Bool {
+        guard a.cellMeans.count == b.cellMeans.count else { return true }
+        let total = a.cellKept.filter { $0 }.count
+        guard total > 0 else { return false }
+        var moved = 0
+        for index in a.cellKept.indices where a.cellKept[index] {
+            let c = index * 3
+            let shift = max(
+                abs(a.cellMeans[c] - b.cellMeans[c]), abs(a.cellMeans[c + 1] - b.cellMeans[c + 1]),
+                abs(a.cellMeans[c + 2] - b.cellMeans[c + 2]))
+            if shift > Double(channelTolerance) { moved += 1 }
+        }
+        return Double(moved) / Double(total) >= share
+    }
+
+    /// Which whole cells lie clear of the masked areas.
+    static func keptCells(width: Int, height: Int, mask: (top: Int, bottom: Int, rail: (x: Int, height: Int)?))
+        -> [Bool]
+    {
+        let columns = width / cell
+        let rows = height / cell
+        var kept = [Bool](repeating: true, count: columns * rows)
+        for row in 0..<rows {
+            let top = row * cell
+            let bottom = top + cell
+            for column in 0..<columns {
+                let left = column * cell
+                let right = left + cell
+                let inStatusBar = top < mask.top
+                let inHomeIndicator = bottom > height - mask.bottom
+                let inRail = mask.rail.map { right > $0.x && top < $0.height } ?? false
+                if inStatusBar || inHomeIndicator || inRail { kept[row * columns + column] = false }
+            }
+        }
+        return kept
+    }
+
+    /// The share of kept cells (0 to 1) in which some pixel changed; 1 for shots of different sizes.
+    /// Stops counting once the share passes `enough`.
+    static func changedShare(_ a: QAShotImage, _ b: QAShotImage, enough: Double = 1) -> Double {
+        guard a.width == b.width, a.height == b.height else { return 1 }
+        let total = a.cellKept.filter { $0 }.count
+        guard total > 0 else { return 0 }
+        let limit = Int((enough * Double(total)).rounded(.up))
+        var changed = [Bool](repeating: false, count: a.cellKept.count)
+        var count = 0
+        let rows = a.height / cell
+        a.pixels.withUnsafeBufferPointer { pa in
+            b.pixels.withUnsafeBufferPointer { pb in
+                for y in 0..<(rows * cell) {
+                    let rowBase = (y / cell) * a.columns
+                    for x in 0..<(a.columns * cell) {
+                        let index = rowBase + x / cell
+                        guard a.cellKept[index], !changed[index] else { continue }
+                        let p = (y * a.width + x) * 4
+                        let moved =
+                            max(
+                                abs(Int(pa[p]) - Int(pb[p])), abs(Int(pa[p + 1]) - Int(pb[p + 1])),
+                                abs(Int(pa[p + 2]) - Int(pb[p + 2]))) > channelTolerance
+                        if moved {
+                            changed[index] = true
+                            count += 1
+                            if count >= limit { return }
+                        }
+                    }
+                }
+            }
+        }
+        return Double(count) / Double(total)
+    }
+
+    static func isSameScreen(_ a: QAShotImage, _ b: QAShotImage) -> Bool {
+        !surelyDifferent(a, b, share: sameScreen) && changedShare(a, b, enough: sameScreen) < sameScreen
+    }
+}
+
+/// The screenshots this test run has kept, to refuse a second copy of a screen.
+@MainActor enum QAShots {
+    static var kept: [(name: String, image: QAShotImage)] = []
+}
+
+/// A screenshot taken but not yet kept: its PNG and its reduced copy for comparing.
+struct QAShot {
+    let data: Data
+    let image: QAShotImage?
+
+    func isSameScreen(as other: QAShot) -> Bool {
+        guard let image, let otherImage = other.image else { return data == other.data }
+        return QAShotCompare.isSameScreen(image, otherImage)
+    }
+}
+
 /// Shared steps for the QA runs: sign in on the development server, wait for things, and keep a
 /// named screenshot of every screen for the checklist.
 extension XCTestCase {
@@ -89,11 +264,27 @@ extension XCTestCase {
     /// settles (no spinner, no keyboard tip, no system banner or toast); then it's kept as an
     /// upright PNG: an iPad in landscape once came out as a portrait image tagged with an EXIF
     /// rotation and cut off (build 120), so the pixels are redrawn the right way up.
+    ///
+    /// A screen this run already kept (status bar and home indicator aside, under 1% changed) fails
+    /// the test and isn't kept again (Hark's review, build 122 item 13a). `unique: false` is for a
+    /// shot of what went wrong, kept beside a failure: it may well be a screen seen before.
     @MainActor
-    /// Returns the PNG data kept, so a caller can tell two screenshots apart (build 121: some
-    /// "scrolled" shots were byte for byte the tab shot before them).
     @discardableResult
-    func snap(_ app: XCUIApplication, _ name: String, settle: Bool = true) -> Data {
+    func snap(_ app: XCUIApplication, _ name: String, settle: Bool = true, unique: Bool = true) -> Data {
+        let shot = capture(app, settle: settle)
+        keep(shot, name, unique: unique)
+        return shot.data
+    }
+
+    /// Whether this test's screenshots go to Hark (scripts/qa-screenshots.py TESTS).
+    var publishesScreenshots: Bool {
+        let published = ["AppSweepQATests", "ScreensQATests", "StartCookingQATests"]
+        return published.contains(String(describing: type(of: self))) || name.contains("testSignInScreenWithFaceID")
+    }
+
+    /// Takes a screenshot without keeping it, to compare before deciding.
+    @MainActor
+    func capture(_ app: XCUIApplication, settle: Bool = true) -> QAShot {
         if settle { settleForScreenshot(app) }
         let screenshot = XCUIScreen.main.screenshot()
         let orientation = XCUIDevice.shared.orientation
@@ -101,11 +292,46 @@ extension XCTestCase {
         let data =
             orientation == .landscapeLeft || orientation == .landscapeRight
             ? Self.uprightPNG(screenshot.image) : screenshot.pngRepresentation
-        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
+        let pad = UIDevice.current.userInterfaceIdiom == .pad
+        return QAShot(data: data, image: QAShotCompare.image(png: data, scale: screenshot.image.scale, pad: pad))
+    }
+
+    /// Keeps a captured screenshot in the test results under its checklist name, unless it shows
+    /// a screen already kept: then the test fails, naming both.
+    ///
+    /// Only the tests whose screenshots are published are held to this (the publisher's list,
+    /// scripts/qa-screenshots.py TESTS). A flow test may come back to where it began on purpose
+    /// (CompanionQATests: the list after a delete is the list it started from).
+    @MainActor
+    func keep(_ shot: QAShot, _ name: String, unique: Bool = true) {
+        if unique, publishesScreenshots, let image = shot.image {
+            for earlier in QAShots.kept where QAShotCompare.isSameScreen(image, earlier.image) {
+                let share = QAShotCompare.changedShare(image, earlier.image)
+                XCTFail(
+                    "QA-DUPLICATE: “\(name)” is the same screen as “\(earlier.name)” "
+                        + "(\(String(format: "%.2f", share * 100))% changed)")
+                return
+            }
+            QAShots.kept.append((name, image))
+        }
+        let attachment = XCTAttachment(data: shot.data, uniformTypeIdentifier: "public.png")
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
-        return data
+    }
+
+    /// Keeps a "scrolled" screenshot only when the page moved: one the same as `before` (a page
+    /// that fits on the screen) is left out, with a QA-SKIP line in the log, instead of
+    /// publishing a copy (Hark's review, build 122 item 13c). Returns whether it was kept.
+    @MainActor
+    @discardableResult
+    func keepIfScrolled(_ shot: QAShot, _ name: String, before: QAShot) -> Bool {
+        if shot.isSameScreen(as: before) {
+            print("QA-SKIP: “\(name)” left out: the page didn’t scroll (it fits on the screen)")
+            return false
+        }
+        keep(shot, name)
+        return true
     }
 
     /// The screenshot as PNG data with its rotation applied to the pixels and no EXIF tag.
@@ -161,6 +387,17 @@ extension XCTestCase {
     func waitGone(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
         return XCTWaiter.wait(for: [gone], timeout: timeout) == .completed
+    }
+
+    /// The cooking screen for this recipe is up: its title heads the page and the cooking
+    /// screen's own help button is in the bar (the recipe page has neither the button nor the
+    /// walkthrough's title).
+    @MainActor
+    func openedCooking(_ recipe: String, in app: XCUIApplication) -> Bool {
+        let help = app.buttons["How the Cooking Screen Works"].firstMatch
+        guard help.waitForExistence(timeout: 10) else { return false }
+        let title = app.staticTexts.matching(NSPredicate(format: "label == %@", recipe)).firstMatch
+        return title.waitForExistence(timeout: 5) && !app.staticTexts["Welcome to Cooking with DinnerOS"].exists
     }
 
     /// The keyboard is up; tapping outside the field must put it away.

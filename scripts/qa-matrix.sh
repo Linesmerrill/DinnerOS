@@ -111,7 +111,7 @@ run_test() {
     xcrun simctl keychain "$id" reset 2>/dev/null
     rm -rf "$OUT/$name.xcresult"
     TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
-        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_BUILD_CHANNEL=appStore TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
+        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_BUILD_CHANNEL=appStore TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Pesto Bow Tie Pasta" \
         TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" TEST_RUNNER_QA_EXPECT_START_COOKING=$cook \
         TEST_RUNNER_QA_REVIEW_EMAIL="${REVIEW_ACCOUNT_EMAIL:-}" TEST_RUNNER_QA_REVIEW_PASSWORD="${REVIEW_ACCOUNT_PASSWORD:-}" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \

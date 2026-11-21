@@ -118,15 +118,15 @@ nonisolated enum MenuFormat {
         return count == 1 ? String(localized: "1 meal this week") : String(localized: "\(count) meals this week")
     }
 
-    /// For example "1 in your week (2 servings)".
+    /// For example "1 in your week (serves 2)".
     static func planCount(_ count: Int, servings: Int) -> String {
-        let servingsText =
-            servings == 1 ? String(localized: "1 serving") : String(localized: "\(servings) servings")
-        return String(localized: "\(count) in your week (\(servingsText))")
+        String(localized: "\(count) in your week (serves \(servings))")
     }
 
+    /// "Serves 2": the one way the app labels a serving size, on cards, steppers, the recipe
+    /// page and cooking alike (build 122 review: "2 servings", "2 Servings" and "Serves 2" mixed).
     static func servings(_ count: Int) -> String {
-        count == 1 ? String(localized: "1 serving") : String(localized: "\(count) servings")
+        String(localized: "Serves \(count)")
     }
 
     // MARK: Weeks

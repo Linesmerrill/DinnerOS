@@ -154,26 +154,52 @@ struct RecipePageLayoutTests {
             id: name, name: name, amountText: nil, prep: nil, parts: [], isLeftOut: false, ingredientKey: key)
     }
 
-    /// Sip Fudge: Step 1 uses exactly what Have Ready lists, so it isn't listed twice.
-    @Test func aFirstStepThatRepeatsHaveReadyShowsNoList() {
+    /// Sip Fudge (Hark's review item 16): sugar and butter go in at Step 1, so they're listed
+    /// there and not again under Have Ready, which goes away when nothing is left in it.
+    @Test func whatAStepUsesIsntListedUnderHaveReady() {
         let groups = [
             CookStepGroup(index: 0, items: [item("sugar"), item("butter")]),
             CookStepGroup(index: 1, items: [item("Butter"), item("Sugar")]),
             CookStepGroup(index: 2, items: [item("sugar")]),
         ]
-        let shown = CookStepGroups.collapsingRepeatedFirstStep(groups)
-        #expect(shown.map(\.index) == [0, 1, 2])
-        #expect(shown[0].items.count == 2)
-        #expect(shown[1].items.isEmpty)
-        #expect(shown[2].items.count == 1)
+        let shown = CookStepGroups.shown(groups)
+        #expect(shown.map(\.index) == [1, 2])
+        #expect(shown[0].items.map(\.name) == ["Butter", "Sugar"])
     }
 
-    @Test func aFirstStepWithPartOfTheListKeepsIt() {
+    /// Salt no step names stays under Have Ready; the rice Step 1 uses moves to Step 1 alone.
+    @Test func haveReadyKeepsWhatNoStepNames() {
         let groups = [
             CookStepGroup(index: 0, items: [item("Rice", key: "rice"), item("Salt", key: "salt")]),
             CookStepGroup(index: 1, items: [item("Rice", key: "rice")]),
         ]
-        #expect(CookStepGroups.collapsingRepeatedFirstStep(groups) == groups)
+        let shown = CookStepGroups.shown(groups)
+        #expect(shown.map(\.index) == [0, 1])
+        #expect(shown[0].items.map(\.name) == ["Salt"])
+        #expect(shown[1].items.map(\.name) == ["Rice"])
+    }
+
+    /// Getting something ready ahead is a job of its own: butter cut up for Step 2 and a blend
+    /// to mix first stay under Have Ready even though a step uses them.
+    @Test func readyAheadAndBlendsStayUnderHaveReady() {
+        let butter = CookStepItem(
+            id: "b@ahead", name: "Butter", amountText: "2 Tbsp", prep: "cut into pieces, for step 2", parts: [],
+            isLeftOut: false, ingredientKey: "butter")
+        let blend = CookStepItem(
+            id: "s@0", name: "Spice Blend", amountText: "1 Tbsp", prep: nil, parts: ["1 tsp Cumin"],
+            isLeftOut: false, ingredientKey: "spice")
+        let groups = [
+            CookStepGroup(index: 0, items: [butter, blend]),
+            CookStepGroup(index: 1, items: [item("Spice Blend", key: "spice")]),
+            CookStepGroup(index: 2, items: [item("Butter", key: "butter")]),
+        ]
+        #expect(CookStepGroups.shown(groups) == groups)
+    }
+
+    /// A recipe without a Have Ready group is shown as it is.
+    @Test func noHaveReadyIsUnchanged() {
+        let groups = [CookStepGroup(index: 1, items: [item("Rice", key: "rice")])]
+        #expect(CookStepGroups.shown(groups) == groups)
     }
 
     @Test func amountsReadInTheKitchenForm() {

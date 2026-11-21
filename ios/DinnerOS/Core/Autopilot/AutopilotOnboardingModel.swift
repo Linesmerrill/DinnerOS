@@ -248,6 +248,46 @@ nonisolated enum CuisineTiles {
         }
     }
 
+    /// How the "What do you like?" grid is laid out in the space it has.
+    struct GridLayout: Equatable {
+        let columns: Int
+        let tileWidth: Double
+        let tileHeight: Double
+        /// False when even the shortest tiles don't fit, so the grid scrolls.
+        let fits: Bool
+    }
+
+    /// Picks a grid that shows every tile without scrolling when it can (build 122, Hark's
+    /// review item 4: the third row was cut off on iPad and a large iPhone). Square tiles at
+    /// the usual size first; then more, smaller columns, while a tile stays `minWidth` wide for
+    /// its name; then shorter tiles, down to `minHeightRatio` of their width. If nothing fits,
+    /// the usual square grid, which scrolls.
+    static func gridLayout(
+        count: Int, width: Double, height: Double, spacing: Double, preferredWidth: Double, minWidth: Double,
+        minHeightRatio: Double
+    ) -> GridLayout {
+        let preferred = max(1, Int((width + spacing) / (preferredWidth + spacing)))
+        let most = max(preferred, Int((width + spacing) / (minWidth + spacing)))
+        func tileWidth(_ columns: Int) -> Double { (width - spacing * Double(columns - 1)) / Double(columns) }
+        func rows(_ columns: Int) -> Int { max(1, (count + columns - 1) / columns) }
+        func fitHeight(_ columns: Int) -> Double {
+            (height - spacing * Double(rows(columns) - 1)) / Double(rows(columns))
+        }
+        func square(_ columns: Int, fits: Bool = true) -> GridLayout {
+            GridLayout(columns: columns, tileWidth: tileWidth(columns), tileHeight: tileWidth(columns), fits: fits)
+        }
+        guard count > 0, width > 0, height > 0 else { return square(preferred) }
+        for columns in preferred...most where fitHeight(columns) >= tileWidth(columns) {
+            return square(columns)
+        }
+        // Shorter tiles: the widest that still fit.
+        for columns in preferred...most where fitHeight(columns) >= tileWidth(columns) * minHeightRatio {
+            return GridLayout(
+                columns: columns, tileWidth: tileWidth(columns), tileHeight: fitHeight(columns), fits: true)
+        }
+        return square(preferred, fits: false)
+    }
+
     /// Gives each tile a photo no other tile is using.
     ///
     /// Cuisines overlap — a recipe can be both Italian and Mediterranean — so the same recipe

@@ -28,4 +28,24 @@ final class MenuScrollStressQATests: XCTestCase {
         snap(app, "Menu after the scroll stress")
         XCTAssertTrue(app.buttons["Week Menu"].exists || app.buttons["Menu"].exists, "The Menu is gone")
     }
+
+    /// Ten scrolls down and up the Menu with a pause after each, for a CPU sampler outside the
+    /// test to check the app settles within 2 s (the iPad landscape freeze, build 122). Prints
+    /// "QA-SCROLL <n> <down|up> <epoch>" when each scroll ends.
+    @MainActor
+    func testTenScrollsSettle() {
+        let app = launchSignedIn()
+        app.buttons["Menu"].firstMatch.tap()
+        sleep(3)
+        for round in 1...10 {
+            for direction in ["down", "up"] {
+                for _ in 0..<3 {
+                    if direction == "down" { app.swipeUp() } else { app.swipeDown() }
+                }
+                print("QA-SCROLL \(round) \(direction) \(Date().timeIntervalSince1970)")
+                Thread.sleep(forTimeInterval: 3)
+                XCTAssertEqual(app.state, .runningForeground, "The app stopped during round \(round)")
+            }
+        }
+    }
 }

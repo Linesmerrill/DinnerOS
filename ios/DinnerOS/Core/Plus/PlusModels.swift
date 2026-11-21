@@ -408,14 +408,15 @@ nonisolated enum PlusPurchaseResult: Hashable, Sendable {
 
 /// Words the Plus screens show that don't come from the API.
 nonisolated enum PlusText {
-    /// A status line for someone who has Plus. `testerThanks` adds the beta thank-you to a
-    /// comp's line; callers pass `BuildChannel.showsTesterThanks(for:)`, which is never true in
-    /// an App Store build (build 121).
-    static func status(_ status: PlusStatus, testerThanks: Bool = false, now: Date = .now) -> String {
+    /// A status line for someone who has Plus. A comp is "on the house" only where
+    /// `BuildChannel.showsCompWording(channel)` allows: a Debug build on the development
+    /// channel. Release builds, and an unknown channel, say "You have DinnerOS Plus."
+    /// (build 122, review 2).
+    static func status(_ status: PlusStatus, channel: BuildChannel? = nil, now: Date = .now) -> String {
         if status.comp != nil {
-            return testerThanks
+            return BuildChannel.showsCompWording(channel)
                 ? String(localized: "Plus is on the house. Thank you for testing.")
-                : String(localized: "Plus is on the house.")
+                : String(localized: "You have DinnerOS Plus.")
         }
         if status.billingIssue {
             return String(localized: "Apple couldn’t charge your last renewal. Check your payment in Settings.")

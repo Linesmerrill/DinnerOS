@@ -334,7 +334,7 @@ struct SuggestedMealPreview: View {
             Label(AutopilotFormat.cookTime(slot.cookMinutes), systemImage: "clock")
                 .labelStyle(.titleAndIcon)
             TimeBandBadge(band: slot.timeBand)
-            Text("\(slot.servings) servings")
+            Text(MenuFormat.servings(slot.servings))
         }
         .font(.subheadline)
         .foregroundStyle(Color.secondary)

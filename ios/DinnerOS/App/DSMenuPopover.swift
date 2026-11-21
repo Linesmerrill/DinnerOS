@@ -18,6 +18,11 @@ struct DSMenuItem: Identifiable {
     let title: String
     let systemImage: String
     var role: ButtonRole?
+    /// Shown dimmed and not tappable, like a system menu's disabled row.
+    var isDisabled = false
+    /// Starts a new group under a line, with this heading over it ("Autopilot"), or with no
+    /// heading when it's empty.
+    var group: String?
     let action: () -> Void
 
     var id: String { title }
@@ -37,15 +42,29 @@ nonisolated enum DSMenuPlacement {
     }
 
     /// The card's top edge: just under the button, or at the top of the safe area when there's
-    /// no button measured yet.
-    static func top(anchor: CGRect, topInset: CGFloat) -> CGFloat {
+    /// no button measured yet. Never above the top of the screen's content (0 here): a button in
+    /// the navigation bar ends inside the bar, and a row drawn there sat under the bar, which
+    /// took its taps, so "Low-Stock Alerts…" and "Edit Recipe" did nothing on a large iPhone
+    /// (build 122).
+    ///
+    /// A button beside the content, in the iPhone Duo's cover-screen rail, has nothing under it
+    /// for the card to hang from, so the card starts at the content's top instead: from under
+    /// the button it had room for half the Menu's week menu (build 122).
+    static func top(anchor: CGRect, topInset: CGFloat, containerWidth: CGFloat = .infinity) -> CGFloat {
         guard anchor.height > 0 else { return topInset + DS.Space.s }
-        return anchor.maxY + DS.Space.s
+        if anchor.minX >= containerWidth { return DS.Space.s }
+        return max(anchor.maxY, 0) + DS.Space.s
     }
 
     /// The card's widest: the space left of its trailing edge, less the leading margin.
     static func maxWidth(trailingEdge: CGFloat, leadingInset: CGFloat) -> CGFloat {
         max(0, trailingEdge - leadingInset - DS.Space.s)
+    }
+
+    /// The card's tallest: from its top to the bottom of the safe area, less a margin. A longer
+    /// menu (the Menu's week menu on the iPhone Duo's cover screen) scrolls inside the card.
+    static func maxHeight(top: CGFloat, containerHeight: CGFloat, bottomInset: CGFloat) -> CGFloat {
+        max(DS.Size.tapTarget, containerHeight - bottomInset - top - DS.Space.s)
     }
 }
 
@@ -107,6 +126,7 @@ private struct DSMenuLayer: View {
             let insets = proxy.safeAreaInsets
             let trailing = DSMenuPlacement.trailingEdge(
                 anchor: local, containerWidth: proxy.size.width, trailingInset: insets.trailing)
+            let top = DSMenuPlacement.top(anchor: local, topInset: 0, containerWidth: proxy.size.width)
             ZStack(alignment: .topLeading) {
                 if isPresented {
                     // A tap anywhere else closes it, as with the system menu.
@@ -115,19 +135,23 @@ private struct DSMenuLayer: View {
                         .onTapGesture { isPresented = false }
                         .ignoresSafeArea()
                         .accessibilityHidden(true)
-                    DSMenuCard(items: items) { isPresented = false }
-                        .frame(
-                            maxWidth: DSMenuPlacement.maxWidth(trailingEdge: trailing, leadingInset: insets.leading),
-                            alignment: .trailing
-                        )
-                        .frame(width: trailing, alignment: .trailing)
-                        .offset(y: DSMenuPlacement.top(anchor: local, topInset: 0))
-                        // Gone at once on closing, so the row tapped can't be found again
-                        // (or tapped) while whatever it opened comes up.
-                        .transition(
-                            .asymmetric(
-                                insertion: .scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity),
-                                removal: .identity))
+                    DSMenuCard(
+                        items: items,
+                        maxHeight: DSMenuPlacement.maxHeight(
+                            top: top, containerHeight: proxy.size.height, bottomInset: insets.bottom)
+                    ) { isPresented = false }
+                    .frame(
+                        maxWidth: DSMenuPlacement.maxWidth(trailingEdge: trailing, leadingInset: insets.leading),
+                        alignment: .trailing
+                    )
+                    .frame(width: trailing, alignment: .trailing)
+                    .offset(y: top)
+                    // Gone at once on closing, so the row tapped can't be found again
+                    // (or tapped) while whatever it opened comes up.
+                    .transition(
+                        .asymmetric(
+                            insertion: .scale(scale: 0.9, anchor: .topTrailing).combined(with: .opacity),
+                            removal: .identity))
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
@@ -144,12 +168,51 @@ private struct DSMenuLayer: View {
 /// The card: one row per item on an opaque surface, the destructive one in red.
 private struct DSMenuCard: View {
     let items: [DSMenuItem]
+    let maxHeight: CGFloat
     let close: () -> Void
 
     var body: some View {
+        // As tall as its rows when they fit, and scrolling inside the tallest it may be when
+        // they don't: a scroll view alone always took the whole height.
+        ViewThatFits(in: .vertical) {
+            card(rows.fixedSize())
+            card(
+                ScrollView {
+                    rows.fixedSize()
+                }
+                .scrollBounceBehavior(.basedOnSize))
+        }
+        // At the top of the room it's given, not centered in it: the card hugs its rows.
+        .frame(maxHeight: maxHeight, alignment: .top)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape) { close() }
+    }
+
+    /// The opaque card around the rows, as wide as its widest row.
+    private func card(_ content: some View) -> some View {
+        content
+            .fixedSize(horizontal: true, vertical: false)
+            .background(DS.Colors.menuSurface, in: .rect(cornerRadius: DS.Radius.large))
+            .clipShape(.rect(cornerRadius: DS.Radius.large))
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.large).strokeBorder(DS.Colors.cardStroke)
+            }
+            .shadow(color: DS.Colors.menuShadow, radius: DS.Space.l, y: DS.Space.xxs)
+    }
+
+    private var rows: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 { Divider() }
+                if let group = item.group, index > 0 {
+                    // A wider gap than a row's line, like a system menu's groups.
+                    DS.Colors.menuGroupGap.frame(height: DS.Space.s)
+                    if !group.isEmpty { groupHeading(group) }
+                } else if let group = item.group, !group.isEmpty {
+                    groupHeading(group)
+                } else if index > 0 {
+                    Divider()
+                }
                 Button(role: item.role) {
                     // Closed first, so whatever the row opens (a sheet, a confirmation) has
                     // nothing over it.
@@ -165,23 +228,26 @@ private struct DSMenuCard: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .disabled(item.isDisabled)
             }
         }
         .padding(.vertical, DS.Space.xxs)
-        .frame(minWidth: DS.Size.menuMinWidth)
-        .fixedSize()
-        .background(DS.Colors.menuSurface, in: .rect(cornerRadius: DS.Radius.large))
-        .overlay {
-            RoundedRectangle(cornerRadius: DS.Radius.large).strokeBorder(DS.Colors.cardStroke)
-        }
-        .shadow(color: DS.Colors.menuShadow, radius: DS.Space.l, y: DS.Space.xxs)
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.isModal)
-        .accessibilityAction(.escape) { close() }
+        .frame(minWidth: DS.Size.menuMinWidth, alignment: .leading)
+    }
+
+    private func groupHeading(_ title: String) -> some View {
+        Text(title)
+            .font(DS.Typography.footnote.weight(.semibold))
+            .foregroundStyle(DS.Colors.secondaryText)
+            .padding(.horizontal, DS.Space.l)
+            .padding(.top, DS.Space.s)
+            .padding(.bottom, DS.Space.xxs)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func tint(_ item: DSMenuItem) -> Color {
-        item.isDestructive ? DS.Colors.destructive : Color.primary
+        if item.isDisabled { return DS.Colors.disabledText }
+        return item.isDestructive ? DS.Colors.destructive : Color.primary
     }
 }
 
@@ -190,6 +256,8 @@ extension DS.Colors {
     static let menuSurface = Color(.secondarySystemGroupedBackground)
     /// A menu card's shadow, so it lifts off a photo or a white page.
     static let menuShadow = Color.black.opacity(0.22)
+    /// The band between a menu card's groups, a step darker than its rows.
+    static let menuGroupGap = Color(.tertiarySystemFill)
 }
 
 /// The system share sheet, shown from a menu row: a `ShareLink` can't live in a menu that closes

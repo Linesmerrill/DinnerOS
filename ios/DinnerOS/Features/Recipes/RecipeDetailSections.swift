@@ -55,6 +55,9 @@ struct RecipeNotesForNextTime: View {
 /// ordered: everything about the recipe that is read rather than changed.
 struct RecipeDescriptionSection: View {
     let recipe: Recipe
+    /// Whether the meal has been cooked: only then does it ask for a rating
+    /// (`RecipeRatingVisibility`).
+    var hasBeenCooked = false
 
     @Environment(HouseholdStore.self) private var households
 
@@ -71,7 +74,9 @@ struct RecipeDescriptionSection: View {
                 }
             }
             // After the meal itself, where someone who just cooked it finishes reading.
-            RecipeRatingSection(recipe: recipe) { _ in }
+            if hasBeenCooked {
+                RecipeRatingSection(recipe: recipe) { _ in }
+            }
             RecipeAutopilotSection(recipeID: recipe.id)
             DetailSection("Order History") {
                 if recipe.orderWeeks.isEmpty {
@@ -223,9 +228,10 @@ struct IngredientRow: View {
                     ) { leaveOut(.everyDish) }
                 }
             } label: {
+                // The full accent, not a faded tint: an icon that acts needs 3:1 (build 122).
                 Image(systemName: "minus.circle")
                     .imageScale(.large)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DS.Colors.accent)
                     .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
             }
             .accessibilityLabel(state?.isComponent == true ? "Don’t Make \(line.name)" : "Skip \(line.name)")

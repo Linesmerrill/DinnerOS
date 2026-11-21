@@ -192,6 +192,9 @@ type Filter struct {
 	// reported and ones enough households reported. The store drops them
 	// before paging and counting.
 	HiddenGroups []string
+	// HideTestRecipes leaves out QA runs' recipes (IsTestRecipeName); the
+	// service sets it unless the text names one.
+	HideTestRecipes bool
 }
 
 // validate checks q and resolves its cursor to an offset.

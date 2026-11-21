@@ -560,12 +560,42 @@ func (s *Service) Proposal(ctx context.Context, householdID, week string) (Propo
 	if err != nil {
 		return Proposal{}, err
 	}
-	return s.store.GetProposal(ctx, householdID, w.String())
+	p, err := s.store.GetProposal(ctx, householdID, w.String())
+	if err != nil {
+		return Proposal{}, err
+	}
+	return s.withoutRemovedRecipes(ctx, p), nil
+}
+
+// withoutRemovedRecipes leaves out a pending proposal's meals whose recipe
+// the household has since deleted. A saved proposal keeps the name and photo
+// it was made with, so a deleted recipe still showed as a suggestion ("Photo
+// Test Chili" on a placeholder, build 122 review) and couldn't be added.
+// Decided proposals are history and stay as they were.
+func (s *Service) withoutRemovedRecipes(ctx context.Context, p Proposal) Proposal {
+	if p.Status != StatusProposed || s.recipes == nil {
+		return p
+	}
+	kept := make([]Slot, 0, len(p.Slots))
+	for _, slot := range p.Slots {
+		r, err := s.recipes.Get(ctx, p.HouseholdID, slot.RecipeID)
+		if errors.Is(err, recipes.ErrNotFound) || (err == nil && !r.DeletedAt.IsZero()) {
+			continue
+		}
+		kept = append(kept, slot)
+	}
+	if len(kept) < len(p.Slots) {
+		p.Slots, p.Planned = kept, len(kept)
+	}
+	return p
 }
 
 // pending loads a pending proposal at the client's version.
 func (s *Service) pending(ctx context.Context, householdID string, w planning.Week, version int64) (Proposal, error) {
 	p, err := s.store.GetProposal(ctx, householdID, w.String())
+	if err == nil {
+		p = s.withoutRemovedRecipes(ctx, p)
+	}
 	switch {
 	case err != nil:
 		return Proposal{}, err

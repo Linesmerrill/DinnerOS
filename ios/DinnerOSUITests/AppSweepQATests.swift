@@ -31,7 +31,7 @@ final class AppSweepQATests: XCTestCase {
                 if !opened { sleep(1) }
             }
             guard opened else {
-                snap(app, "\(tab) didn’t open (\(mode))")
+                snap(app, "\(tab) didn’t open (\(mode))", unique: false)
                 problems.append("\(tab): tapping the tab didn’t open it")
                 continue
             }

@@ -126,9 +126,9 @@ struct IngredientPhoto: View {
             .frame(width: size, height: size)
             .overlay {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
-                    carrotGlyph
+                    fallbackGlyph
                 } fallback: {
-                    carrotGlyph
+                    fallbackGlyph
                 }
             }
             .clipShape(.circle)
@@ -137,8 +137,9 @@ struct IngredientPhoto: View {
     }
 
     /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the glyph.
-    private var carrotGlyph: some View {
-        Image(systemName: "carrot")
+    /// The glyph is the design system's one neutral fallback, never a particular food.
+    private var fallbackGlyph: some View {
+        Image(systemName: DS.Colors.thumbnailGlyphSymbol)
             .font(.system(size: size * 0.4))
             .foregroundStyle(DS.Colors.thumbnailGlyph)
     }
@@ -339,7 +340,7 @@ struct ServingsStepper: View {
     }
 
     let label: String
-    /// What the label shortens to when it doesn't fit ("2 servings"), instead of being cut off.
+    /// What the label shortens to when it doesn't fit ("Serves 2"), instead of being cut off.
     var shortLabel: String?
     var style: Style = .card
     var isBusy = false
@@ -567,7 +568,7 @@ struct MenuCardPlaceholders: View {
                 .border(.red.opacity(0.4))
             PhotoBadge(text: "20 min", systemImage: "bolt.fill", isProminent: true)
             MenuChip(text: "Thursday", systemImage: "calendar", isProminent: true)
-            ServingsStepper(label: "4 servings", decrease: {}, increase: {})
+            ServingsStepper(label: "Serves 4", decrease: {}, increase: {})
             AddToWeekButton(isInPlan: true, isBusy: false, recipeName: "Tacos") {}
         }
         .padding(DS.Space.l)
@@ -582,8 +583,8 @@ struct MenuCardPlaceholders: View {
                 .frame(width: 300)
             MenuChip(text: "Autopilot Pick", systemImage: "sparkles", isProminent: true)
             MenuChip(text: "Quick", systemImage: "bolt.fill")
-            ServingsStepper(label: "4 servings", decrease: {}, increase: {})
-            ServingsStepper(label: "1 in your week (2 servings)", style: .bar, decrease: {}, increase: {})
+            ServingsStepper(label: "Serves 4", decrease: {}, increase: {})
+            ServingsStepper(label: "1 in your week (serves 2)", style: .bar, decrease: {}, increase: {})
             AddToWeekButton(isInPlan: false, isBusy: false, recipeName: "Tacos") {}
             AddToWeekButton(isInPlan: true, isBusy: false, recipeName: "Tacos") {}
             MenuCardPlaceholders()
@@ -614,8 +615,8 @@ struct MenuCardPlaceholders: View {
                             name: index.isMultiple(of: 3)
                                 ? "Sweet Chili Beef & Green Bean Bowls" : "Turkey Ragù Spaghetti")
                         if index.isMultiple(of: 3) {
-                            ServingsStepper(label: "4 servings", decrease: {}, increase: {})
-                            ServingsStepper(label: "2 servings", decrease: {}, increase: {})
+                            ServingsStepper(label: "Serves 4", decrease: {}, increase: {})
+                            ServingsStepper(label: "Serves 2", decrease: {}, increase: {})
                         }
                     }
                     .containerRelativeFrame(.horizontal) { width, _ in width * 0.84 }

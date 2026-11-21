@@ -329,7 +329,7 @@ struct ProposalSlotRow: View {
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         TimeBandBadge(band: slot.timeBand)
-        Text("\(slot.servings) servings")
+        Text(MenuFormat.servings(slot.servings))
             .font(.caption)
             .foregroundStyle(Color.secondary)
             .lineLimit(1)

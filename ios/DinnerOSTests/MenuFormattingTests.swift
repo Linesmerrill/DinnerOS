@@ -37,8 +37,15 @@ struct MenuFormattingTests {
         #expect(MenuFormat.bottomBarTitle(count: 4, timing: .current) == "4 meals this week")
         #expect(MenuFormat.bottomBarTitle(count: 1, timing: .current) == "1 meal this week")
         #expect(MenuFormat.bottomBarTitle(count: 3, timing: .upcoming) == "3 meals planned")
-        #expect(MenuFormat.planCount(1, servings: 2) == "1 in your week (2 servings)")
-        #expect(MenuFormat.planCount(2, servings: 1) == "2 in your week (1 serving)")
+        #expect(MenuFormat.planCount(1, servings: 2) == "1 in your week (serves 2)")
+        #expect(MenuFormat.planCount(2, servings: 1) == "2 in your week (serves 1)")
+    }
+
+    /// One way to label a serving size everywhere (build 122 review).
+    @Test func servingsReadServesN() {
+        #expect(MenuFormat.servings(2) == "Serves 2")
+        #expect(MenuFormat.servings(1) == "Serves 1")
+        #expect(MenuFormat.servings(12) == "Serves 12")
     }
 
     @Test func weekPills() throws {

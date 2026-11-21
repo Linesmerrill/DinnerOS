@@ -21,7 +21,7 @@ struct PlanEntryRow: View {
                 Text(entry.recipe.name)
                     .font(.headline)
                 HStack(spacing: DS.Space.xs) {
-                    Text("\(entry.servings) servings")
+                    Text(MenuFormat.servings(entry.servings))
                     if menu.isAddOn(entry) {
                         AddOnLabel()
                     }

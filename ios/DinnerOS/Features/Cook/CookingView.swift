@@ -44,6 +44,9 @@ struct CookingView: View {
     /// The walkthrough shows once, the first time the cooking screen opens.
     @AppStorage("cook.hasSeenWelcome") private var hasSeenWelcome = false
     @State private var showsWelcome = false
+    /// The screen's safe area, which shows iPhone Duo's cover-screen button column.
+    @State private var safeArea = EdgeInsets()
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     init(start: CookMeal, meals: [CookMeal]) {
         self.meals = meals.contains { $0.recipeID == start.recipeID } ? meals : [start] + meals
@@ -70,10 +73,10 @@ struct CookingView: View {
                         }
                         .accessibilityLabel("How the Cooking Screen Works")
                     }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            if timers.runningCount > 0 { confirmsLeaving = true } else { dismiss() }
-                        }
+                    // On iPhone Duo's cover screen the top bar hides as the page scrolls, taking
+                    // Done with it, so Done sits beside the dish's name there instead (build 122).
+                    if !hasSideColumn {
+                        ToolbarItem(placement: .confirmationAction) { doneButton }
                     }
                 }
                 .environment(
@@ -97,6 +100,11 @@ struct CookingView: View {
                 }
         }
         .offlineBanner()
+        .onGeometryChange(for: EdgeInsets.self) {
+            $0.safeAreaInsets
+        } action: {
+            safeArea = $0
+        }
         .task(id: recipeID) {
             if sync == nil { sync = CookSync(library: library, session: session, timers: timers) }
             sync?.follow(recipe: recipeID)
@@ -139,6 +147,19 @@ struct CookingView: View {
         }
     }
 
+    /// iPhone Duo's cover screen: the bar's buttons sit in a column beside the page
+    /// (`StartCookingPlacement`).
+    private var hasSideColumn: Bool {
+        StartCookingPlacement.resolve(horizontal: sizeClass, vertical: verticalSizeClass, safeArea: safeArea)
+            == .bottomRow
+    }
+
+    private var doneButton: some View {
+        Button("Done") {
+            if timers.runningCount > 0 { confirmsLeaving = true } else { dismiss() }
+        }
+    }
+
     // MARK: Layouts
 
     /// iPad: ingredients on the left, steps on the right, each scrolling on its own.
@@ -152,14 +173,20 @@ struct CookingView: View {
                         CookNotesEditor(recipeID: dish.recipe.id)
                     }
                     .padding(DS.Space.xxl)
+                    // Clear of the fade under the bar, so the first row starts whole.
+                    .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
                 }
+                // Rows fade out under the bar's buttons instead of being cut at its edge.
+                .dsTopBarEdge(color: DS.Colors.surface)
                 .frame(width: max(320, geometry.size.width * 0.38))
                 .background(DS.Colors.surface)
                 Divider()
                 ScrollView {
                     stepList(dish)
                         .padding(DS.Space.xxl)
+                        .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
                 }
+                .dsTopBarEdge(color: DS.Colors.background)
                 .contentMargins(.bottom, CGFloat(timers.timers.count) * 72, for: .scrollContent)
                 .overlay(alignment: .bottomTrailing) {
                     CookTimerDock(timers: timers, stacked: true)
@@ -186,9 +213,15 @@ struct CookingView: View {
     /// Phone: the dish's name, then one tab at a time.
     private func tabs(_ dish: CookDish) -> some View {
         VStack(spacing: 0) {
-            CookTitle(name: dish.recipe.name)
-                .padding(.horizontal, DS.Space.l)
-                .padding(.top, DS.Space.xs)
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+                CookTitle(name: dish.recipe.name)
+                if hasSideColumn {
+                    doneButton
+                        .buttonStyle(.dsSecondary(.small))
+                }
+            }
+            .padding(.horizontal, DS.Space.l)
+            .padding(.top, DS.Space.xs)
             Picker("Show", selection: $tab) {
                 ForEach(CookTab.allCases) { tab in
                     Text(tab.title).tag(tab)
@@ -197,6 +230,10 @@ struct CookingView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, DS.Space.l)
             .padding(.vertical, DS.Space.s)
+            .background(DS.Colors.background)
+            // Rows fade out under the pinned title and picker instead of being cut at the edge.
+            .dsEdgeFade(.bottom, color: DS.Colors.background)
+            .zIndex(1)
             ScrollView {
                 Group {
                     switch tab {
@@ -212,6 +249,8 @@ struct CookingView: View {
                     }
                 }
                 .padding(DS.Space.l)
+                // Clear of the fade at the top, so the first row starts whole.
+                .padding(.top, DS.Size.edgeFade - DS.Space.l)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CookTimerDock(timers: timers, stacked: false)
@@ -412,7 +451,7 @@ struct CookIngredientList: View {
                 }
             case .byStep:
                 let current = session.current(recipe: dish.recipe.id)
-                ForEach(CookStepGroups.collapsingRepeatedFirstStep(dish.stepGroups)) { group in
+                ForEach(CookStepGroups.shown(dish.stepGroups)) { group in
                     stepGroup(group, isCurrent: group.index == current)
                 }
             }
@@ -432,14 +471,6 @@ struct CookIngredientList: View {
                 .padding(.top, DS.Space.l)
                 .padding(.bottom, DS.Space.xs)
                 .accessibilityAddTraits(.isHeader)
-            if group.items.isEmpty, let text = stepText(group.index) {
-                // Step 1 uses exactly what Have Ready lists: the step, not the list again.
-                Text(text)
-                    .font(DS.Typography.body)
-                    .foregroundStyle(DS.Colors.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, DS.Space.s)
-            }
             ForEach(group.items) { item in
                 stepItemRow(item)
                 ForEach(Array(item.parts.enumerated()), id: \.offset) { index, part in
@@ -454,12 +485,6 @@ struct CookIngredientList: View {
                 .fill(isCurrent ? DS.Colors.accentFill : Color.clear)
                 .padding(.horizontal, -DS.Space.s)
         }
-    }
-
-    /// A step's own words, for a step whose list would only repeat Have Ready.
-    private func stepText(_ index: Int) -> String? {
-        dish.instructions?.steps.first { $0.index == index }?.text
-            ?? dish.recipe.steps.first { $0.index == index }?.text
     }
 
     /// The check, the amount in its column, and the name with what's under it.
@@ -611,19 +636,23 @@ struct CookIngredientList: View {
 
 /// The by-step list's groups as shown.
 enum CookStepGroups {
-    /// When Step 1 uses exactly what Have Ready lists (a short recipe), Step 1 keeps its heading
-    /// and shows its words instead of the same list again. Have Ready keeps its full list
-    /// (decision 635).
-    nonisolated static func collapsingRepeatedFirstStep(_ groups: [CookStepGroup]) -> [CookStepGroup] {
-        guard let ready = groups.first(where: { $0.index == 0 }),
-            let first = groups.firstIndex(where: { $0.index == 1 })
-        else { return groups }
+    /// Each ingredient is listed once (build 122, Hark's review item 16): Have Ready keeps only
+    /// what no step names, plus the rows that are a job of their own before cooking starts (a
+    /// blend to mix first, butter to cut up or soften for a later step). Everything a step uses
+    /// is listed under that step, and Have Ready goes away when nothing is left in it.
+    nonisolated static func shown(_ groups: [CookStepGroup]) -> [CookStepGroup] {
+        guard let readyIndex = groups.firstIndex(where: { $0.index == 0 }) else { return groups }
         let key = { (item: CookStepItem) in item.ingredientKey ?? item.name.lowercased() }
-        let readyKeys = Set(ready.items.map(key))
-        let stepKeys = Set(groups[first].items.map(key))
-        guard !stepKeys.isEmpty, stepKeys == readyKeys else { return groups }
+        let stepKeys = Set(groups.filter { $0.index > 0 }.flatMap(\.items).map(key))
+        let ready = groups[readyIndex].items.filter { item in
+            item.prep != nil || !item.parts.isEmpty || !stepKeys.contains(key(item))
+        }
         var out = groups
-        out[first] = CookStepGroup(index: 1, items: [])
+        if ready.isEmpty {
+            out.remove(at: readyIndex)
+        } else {
+            out[readyIndex] = CookStepGroup(index: 0, items: ready)
+        }
         return out
     }
 }
@@ -644,7 +673,7 @@ struct CookSaveForLaterCard: View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
             Label("Save Some for Later", systemImage: "refrigerator")
                 .font(.headline)
-                .foregroundStyle(Color.orange)
+                .foregroundStyle(DS.Colors.warningText)
                 .accessibilityAddTraits(.isHeader)
             ForEach(notes) { note in
                 (Text(RecipeFormat.displayName(note.name)).fontWeight(.semibold) + Text(": ") + Text(note.text))
@@ -667,7 +696,7 @@ private struct CookSaveBadge: View {
     var body: some View {
         Label(text, systemImage: "refrigerator")
             .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.orange)
+            .foregroundStyle(DS.Colors.warningText)
             .labelStyle(.titleAndIcon)
     }
 }

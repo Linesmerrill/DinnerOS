@@ -35,6 +35,9 @@ struct MenuView: View {
     @State private var welcomeChoice: Welcome.Choice?
     private let welcomeStorage: any WelcomeStorage = UserDefaultsWelcomeStorage()
     @State private var actionError: String?
+    /// The week menu's card, and where its button is (`DSMenuPopover`).
+    @State private var showsWeekMenu = false
+    @State private var weekMenuAnchor: CGRect = .zero
     /// Whether the Get Started card is up. It offers Shared Recipes itself, so the Menu's own
     /// Shared Recipes row waits until it's gone.
     @State private var isGetStartedShown = false
@@ -49,13 +52,21 @@ struct MenuView: View {
     /// The menu's width, for All Meals' iPad rows. Kept here, not in All Meals, which the lazy
     /// stack makes again as it scrolls (`AllMealsLayout.cardsWidth`).
     @State private var menuWidth: CGFloat = 0
+    /// The meal search is open (All Meals' search chip), and the keyboard is up. Together they
+    /// make room for the results above the keyboard (Hark's review item 7, build 122).
+    @State private var isSearchOpen = false
+    @State private var isKeyboardUp = false
 
     /// VoiceOver always gets the pills. Collapsing would take away an element a reader may be
     /// focused on, or be sitting next to, and the screen space it buys is not what someone
     /// moving element by element is short of.
     private var isStripExpanded: Bool {
-        voiceOverEnabled || collapse.isExpanded
+        voiceOverEnabled || (collapse.isExpanded && !isSearchKeyboardUp)
     }
+
+    /// Typing a meal search: the strip folds to its one line and results show as short rows, so
+    /// a whole result fits between the chips and the keyboard, even on the Duo's cover screen.
+    private var isSearchKeyboardUp: Bool { isSearchOpen && isKeyboardUp }
 
     /// Changes the strip's form, animated unless Reduce Motion is on (#458).
     private func changeStrip(_ change: () -> Void) {
@@ -135,6 +146,13 @@ struct MenuView: View {
             }
             .overlay(alignment: .bottom) { toast }
             .recipeUndoToast()
+            // Over the bottom bar too, so a tap anywhere outside the menu closes it. The rows are
+            // read only while it's open, so Autopilot's state doesn't redraw the Menu otherwise.
+            .dsMenuPopover(
+                isPresented: $showsWeekMenu,
+                anchor: weekMenuAnchor,
+                items: showsWeekMenu ? weekMenuItems : []
+            )
             .toolbar { toolbar }
             .notificationsToolbar()
             .modifier(MenuDestinations())
@@ -302,20 +320,34 @@ struct MenuView: View {
                     PairingSuggestionsSection()
                     sections
                     if menu.selectedTiming != .past {
-                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals, containerWidth: menuWidth)
-                            // A search or filter can leave All Meals one card long at the bottom of
-                            // the menu. Closing the keyboard then left too little page to stay
-                            // scrolled there, and the results slid away (seen on iPad). Filling a
-                            // screen keeps them in place.
-                            .frame(
-                                minHeight: menu.allMeals.query.isNarrowed ? viewportHeight : nil,
-                                alignment: .top
-                            )
-                            .id(Self.allMealsAnchor)
+                        AllMealsSection(
+                            list: menu.allMeals, canAdd: canAddMeals, containerWidth: menuWidth,
+                            isKeyboardUp: isKeyboardUp, onSearchChange: { isSearchOpen = $0 }
+                        )
+                        // A search or filter can leave All Meals one card long at the bottom of
+                        // the menu. Closing the keyboard then left too little page to stay
+                        // scrolled there, and the results slid away (seen on iPad). Filling a
+                        // screen keeps them in place.
+                        .frame(
+                            minHeight: menu.allMeals.query.isNarrowed ? viewportHeight : nil,
+                            alignment: .top
+                        )
+                        .id(Self.allMealsAnchor)
                     }
                 }
                 .padding(.top, DS.Space.m)
                 .padding(.bottom, DS.Space.xxl)
+            }
+            // Room for the floating Done above the keyboard, in the bar's color, so Done never
+            // sits on a result and no photo is cut by the keyboard bar's edge. Inside the tab
+            // bar scrim, so its fade lands on this strip and not on the first result.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isSearchKeyboardUp {
+                    Rectangle()
+                        .fill(DS.Colors.barBackground)
+                        .frame(height: DS.Size.keyboardBar)
+                        .accessibilityHidden(true)
+                }
             }
             .tabBarEdge()
             // A drag on the list puts the meal search's keyboard away, and Done above it does
@@ -361,6 +393,24 @@ struct MenuView: View {
             // top on iPad in landscape, away from the results. Bring All Meals back once the
             // keyboard is gone. The strip's collapse is left alone: holding it here made the
             // strip open and lose its week.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardUp = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardUp = false
+            }
+            // Results as rows: bring the first one up under the chips, clear of the keyboard.
+            .onChange(of: isSearchKeyboardUp) { _, typing in
+                guard typing else { return }
+                changeStrip { collapse.hold() }
+                withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
+                }
+                Task {
+                    try? await Task.sleep(for: MenuScroll.jumpSettle)
+                    collapse.release(offset: scrollOffset)
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
                 guard menu.allMeals.query.isNarrowed else { return }
                 withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
@@ -498,45 +548,55 @@ struct MenuView: View {
         }
     }
 
-    /// The week's status for planners, and Autopilot for everyone.
+    /// The week's status for planners, and Autopilot for everyone: an opaque card under the
+    /// button (`DSMenuPopover`), like the recipe page's. The system menu's glass let the photos
+    /// under it show through, about 3:1 in dark mode, and on the iPhone Duo's cover screen it
+    /// spread across the button rail (Hark's review items 10 and 11, build 122).
     private var weekMenu: some View {
-        Menu {
-            if canEdit, let plan = plans.plan {
-                Section {
-                    if plan.status == .draft {
-                        Button("Finalize Week", systemImage: "lock") {
-                            perform { try await plans.setStatus(.finalized) }
-                        }
-                        .disabled(plan.entries.isEmpty)
-                    } else {
-                        Button("Reopen Week", systemImage: "lock.open") {
-                            perform { try await plans.setStatus(.draft) }
-                        }
-                    }
-                }
-            }
-            WeekAutopilotMenuItems(flow: autopilotFlow, canEdit: canEdit)
-            Section {
-                NavigationLink(value: DiscoverRoute()) {
-                    Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
-                }
-                if canAddOwnRecipe {
-                    Button("Add a Recipe", systemImage: "square.and.pencil") {
-                        isAddingOwnRecipe = true
-                    }
-                }
-            }
-            Section {
-                NavigationLink(value: PastWeeksRoute()) {
-                    Label("Past Weeks", systemImage: "clock.arrow.circlepath")
-                }
-                NavigationLink(value: CompanionsRoute()) {
-                    Label("Companions", systemImage: "takeoutbag.and.cup.and.straw")
-                }
-            }
-        } label: {
-            Label("Week Menu", systemImage: TabHeader.moreSystemImage)
+        DSMenuButton(isPresented: $showsWeekMenu, anchor: $weekMenuAnchor, accessibilityLabel: "Week Menu") {
+            Image(systemName: TabHeader.moreSystemImage)
         }
+    }
+
+    private var weekMenuItems: [DSMenuItem] {
+        var items: [DSMenuItem] = []
+        if canEdit, let plan = plans.plan {
+            if plan.status == .draft {
+                items.append(
+                    DSMenuItem(
+                        title: String(localized: "Finalize Week"), systemImage: "lock",
+                        isDisabled: plan.entries.isEmpty
+                    ) { perform { try await plans.setStatus(.finalized) } })
+            } else {
+                items.append(
+                    DSMenuItem(title: String(localized: "Reopen Week"), systemImage: "lock.open") {
+                        perform { try await plans.setStatus(.draft) }
+                    })
+            }
+        }
+        items += WeekAutopilotMenuItems.items(
+            flow: autopilotFlow, canEdit: canEdit, autopilot: autopilot, plans: plans)
+        var recipes = [
+            DSMenuItem(title: SharedRecipes.title, systemImage: SharedRecipes.systemImage, group: "") {
+                tabs?.menuPath.append(DiscoverRoute())
+            }
+        ]
+        if canAddOwnRecipe {
+            recipes.append(
+                DSMenuItem(title: String(localized: "Add a Recipe"), systemImage: "square.and.pencil") {
+                    isAddingOwnRecipe = true
+                })
+        }
+        items += recipes
+        items.append(
+            DSMenuItem(title: String(localized: "Past Weeks"), systemImage: "clock.arrow.circlepath", group: "") {
+                tabs?.menuPath.append(PastWeeksRoute())
+            })
+        items.append(
+            DSMenuItem(title: String(localized: "Companions"), systemImage: "takeoutbag.and.cup.and.straw") {
+                tabs?.menuPath.append(CompanionsRoute())
+            })
+        return items
     }
 
     /// The household and week the suggestions belong to.
@@ -641,32 +701,42 @@ private struct MenuAutoRefresh: ViewModifier {
 
 /// Where the menu's links go. Kept apart from the menu's body so the compiler checks it
 /// quickly.
+/// The Menu tab's pages. Each gets the solid band under an iPad's tab bar (`TabBarBacking`),
+/// which has to go on the page, inside the stack, so the back and more buttons draw over it.
 private struct MenuDestinations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .navigationDestination(for: RecipeSummary.self) { summary in
                 RecipeDetailView(summary: summary)
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: HouseholdRatingsRoute.self) { route in
                 HouseholdRatingsView(route: route)
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: GroceryListRoute.self) { route in
                 GroceryListView(week: route.week)
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: AllMealsRoute.self) { route in
                 AllMealsView(route: route)
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: PastWeeksRoute.self) { _ in
                 PastWeeksView()
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: CompanionsRoute.self) { _ in
                 CompanionsListView()
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: DiscoverRoute.self) { _ in
                 DiscoverView()
+                    .tabBarBacking(.top)
             }
             .navigationDestination(for: CatalogRecipeRoute.self) { route in
                 CatalogRecipeDetailView(route: route)
+                    .tabBarBacking(.top)
             }
     }
 }

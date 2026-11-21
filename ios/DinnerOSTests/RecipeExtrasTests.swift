@@ -99,6 +99,27 @@ struct RecipeExtrasTests {
         #expect(group.choices[3].ingredientName == "Tofu")
     }
 
+    /// A swap with no photo of its own shows the neutral fallback, not the protein it replaces
+    /// (build 122: tofu and pork chops beside the chicken's thumbnail).
+    @Test func swapsNeverBorrowTheLinesPhoto() {
+        let chicken = URL(string: "https://img.example.test/chicken.png")!
+        let tofuPhoto = URL(string: "https://img.example.test/tofu.png")!
+        func choice(_ kind: CustomizationKind, _ image: URL?) -> CustomizationChoice {
+            CustomizationChoice(
+                id: kind.rawValue, label: "x", ingredientName: "x", amountText: "",
+                imageURLString: image?.absoluteString, kind: kind)
+        }
+        let group = CustomizationGroup(
+            ingredientKey: "i", ingredientName: "Chicken Thighs", amountText: "",
+            imageURLString: chicken.absoluteString, choices: [])
+        #expect(choice(.original, nil).thumbnailURL(in: group) == chicken)
+        #expect(choice(.double, nil).thumbnailURL(in: group) == chicken)
+        #expect(choice(.swap, nil).thumbnailURL(in: group) == nil)
+        #expect(choice(.swapDouble, nil).thumbnailURL(in: group) == nil)
+        #expect(choice(.swap, tofuPhoto).thumbnailURL(in: group) == tofuPhoto)
+        #expect(CustomizationKind.swapDouble.isSwap && !CustomizationKind.double.isSwap)
+    }
+
     @Test func customizationsNotFoundMeansNone() async throws {
         let transport = StubTransport { request in
             if request.url?.path().hasSuffix("/customizations") == true

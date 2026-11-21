@@ -13,9 +13,10 @@ struct WeekStripLayoutTests {
     private let iPadLandscape: CGFloat = 1376
     private let iPad11Landscape: CGFloat = 1194
 
-    @Test func aPhoneKeepsTwoAndAHalfWeeksInView() {
+    /// Two whole weeks, not two and a half: the third ran off the edge mid-date (build 122).
+    @Test func aPhoneShowsTwoWholeWeeks() {
         #expect(!WeekStripMetrics.isWide(phone))
-        #expect(WeekStripMetrics.pillWidth(stripWidth: phone, typeSize: .large) == 148)
+        #expect(WeekStripMetrics.pillWidth(stripWidth: phone, typeSize: .large) == 181)
     }
 
     @Test func anIPadShowsMoreWeeksNotBiggerOnes() {

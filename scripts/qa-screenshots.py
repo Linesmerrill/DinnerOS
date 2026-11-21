@@ -137,7 +137,8 @@ def main():
     screens = collections.defaultdict(set)
     for m in manifest:
         screens[m["config"]].add(re.sub(r" \((light|dark)\)$", "", m["screen"]))
-    required = ("Sign-in", "Sign-in › Face ID", "Menu", "Shop", "Pantry", "Household", "Plus paywall")
+    required = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop", "Pantry", "Pantry › Add an Item",
+                "Household", "Plus paywall")
     for c in configs:
         missing = [r for r in required if r not in screens[c]]
         if not any(s.startswith("Start Cooking") or "Start Cooking" in s for s in screens[c]):
@@ -148,6 +149,18 @@ def main():
         print("\n".join(problems), file=sys.stderr)
         if os.environ.get("MISSING_OK") != "1":
             sys.exit("Screenshot coverage is incomplete (MISSING_OK=1 to publish anyway)")
+    # The same screen twice in one config (status bar and home indicator aside, under 1% changed)
+    # is never published: build 122 passed four such pairs because the clock had moved on.
+    try:
+        import qa_shot_compare
+    except ImportError as error:
+        sys.exit(f"Can't check for duplicate screens ({error}): pip3 install pillow numpy")
+    duplicates = [qa_shot_compare.describe(os.path.join(out, c), pair)
+                  for c in configs for pair in qa_shot_compare.folder_duplicates(os.path.join(out, c))]
+    if duplicates:
+        print("\n".join(duplicates), file=sys.stderr)
+        sys.exit(f"{len(duplicates)} pair(s) of screenshots show the same screen: not publishing")
+    print("No duplicate screens")
     archive = shutil.make_archive(out, "zip", out)
     print(f"Folder: {out}\nZip: {archive} ({os.path.getsize(archive) // 1_000_000} MB)")
     if os.environ.get("DRY_RUN") == "1":

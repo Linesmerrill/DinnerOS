@@ -9,6 +9,9 @@ struct MenuRecipeCard: View {
         case carousel
         /// One per row in All Meals.
         case fullWidth
+        /// One line of All Meals while the search keyboard is up: a small photo beside the
+        /// name, time and Add, so a whole result fits above the keyboard (Hark's review item 7).
+        case searchRow
     }
 
     let card: MenuCard
@@ -25,6 +28,14 @@ struct MenuRecipeCard: View {
     private var isBusy: Bool { planner.busyRecipeIDs.contains(card.recipe.id) }
 
     var body: some View {
+        if size == .searchRow {
+            searchRow
+        } else {
+            cardBody
+        }
+    }
+
+    private var cardBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: card.recipe) {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
@@ -46,6 +57,50 @@ struct MenuRecipeCard: View {
         }
         .frame(width: size == .carousel ? carouselWidth : nil, alignment: .leading)
         .recipeDeletion($deleting, isPlanned: { _ in card.inPlan })
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The result as one line: photo, name and time open the recipe; Add sits on its own.
+    private var searchRow: some View {
+        HStack(spacing: DS.Space.m) {
+            NavigationLink(value: card.recipe) {
+                HStack(spacing: DS.Space.m) {
+                    RecipePhoto(
+                        url: card.recipe.imageURL, aspectRatio: 1, pointWidth: DS.Size.searchThumbnail,
+                        cornerRadius: DS.Radius.medium, title: card.recipe.name, showsTitle: false
+                    )
+                    .frame(width: DS.Size.searchThumbnail)
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                        Text(card.recipe.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        if let minutes = card.recipe.displayMinutes, minutes > 0 {
+                            Label(RecipeFormat.minutes(minutes), systemImage: isQuick ? "bolt.fill" : "clock")
+                                .font(.footnote)
+                                .foregroundStyle(Color.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(.rect)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    MenuFormat.cardAccessibilityLabel(
+                        name: card.recipe.name, minutes: card.recipe.displayMinutes, isQuick: isQuick,
+                        badge: contextBadge?.text, isAddOn: card.recipe.isAddon, inPlan: card.inPlan))
+            }
+            .buttonStyle(.plain)
+            if canAdd {
+                AddToWeekButton(
+                    isInPlan: card.inPlan, isBusy: isBusy, recipeName: card.recipe.name, action: toggle
+                )
+                .contextMenu { dayMenuItems }
+            }
+        }
+        // A readable line on an iPad, from the leading edge like the chips above it.
+        .frame(maxWidth: DS.Size.readableWidth, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
 

@@ -70,6 +70,7 @@ struct HouseholdView: View {
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
+                .noTopSectionMargin()
                 Section {
                     NavigationLink {
                         page("Members") {
@@ -162,9 +163,10 @@ struct HouseholdView: View {
                 operatorSection
             }
         }
-        // No tall empty band between the bar and the household card.
+        // No tall empty band between the bar and the household card: the list's own top
+        // spacing is gap enough (build 122, Hark's review item 16: too large on the Duo).
         .listSectionSpacing(.compact)
-        .contentMargins(.top, DS.Space.s, for: .scrollContent)
+        .contentMargins(.top, 0, for: .scrollContent)
         .dsReadableForm()
         // The shared tab header: a small title in the bar, with the household's name one step
         // down in the card, so the tab never shows two large titles (build 121).
@@ -219,13 +221,12 @@ struct HouseholdView: View {
         }
     }
 
-    /// The header card's Plus line, or nil while Plus is off. The tester thank-you only where
-    /// `BuildChannel.showsTesterThanks` allows it, never in an App Store build.
+    /// The header card's Plus line, or nil while Plus is off. A comp says "on the house" only
+    /// where `BuildChannel.showsCompWording` allows it, never in a Release build.
     private var plusLine: String? {
         guard let plus, plus.isEnabled, let status = plus.status else { return nil }
         guard status.active else { return String(localized: "No Plus Yet") }
-        let thanks = BuildChannel.showsTesterThanks(BuildChannelStore.shared.channel, comp: status.comp)
-        return PlusText.status(status, testerThanks: thanks)
+        return PlusText.status(status, channel: BuildChannelStore.shared.channel)
     }
 
     /// A standard row like the others: the same icon column, text color and chevron, whether
@@ -762,5 +763,18 @@ private struct HouseholdHeaderCard: View {
     static func initials(_ name: String) -> String {
         let letters = name.split(separator: " ").prefix(2).compactMap(\.first)
         return letters.isEmpty ? "?" : String(letters).uppercased()
+    }
+}
+
+extension View {
+    /// No list spacing above this section, so the first card sits right under the bar's title
+    /// (build 122, Hark's review item 16: the gap was too large on the Duo). iOS 26 and later.
+    @ViewBuilder
+    fileprivate func noTopSectionMargin() -> some View {
+        if #available(iOS 26.0, *) {
+            listSectionMargins(.top, 0)
+        } else {
+            self
+        }
     }
 }

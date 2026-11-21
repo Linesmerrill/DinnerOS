@@ -45,6 +45,8 @@ struct AutopilotOnboardingView: View {
                     Text(step.explanation)
                 }
         }
+        // One known sheet color, so the footer's solid fill matches it exactly (build 122).
+        .presentationBackground(DS.Colors.barBackground)
         .interactiveDismissDisabled(isSaving)
         .task { await prepare() }
     }
@@ -92,7 +94,9 @@ struct AutopilotOnboardingView: View {
             }
         }
         .dsReadableWidth()
-        .dsBottomBar {
+        // Solid, in the sheet's color: "Set Up Later" sat on the food photos and couldn't be
+        // read (build 122, Hark's review item 4).
+        .dsBottomBar(solid: true) {
             if let errorMessage {
                 FormErrorLabel(message: errorMessage)
                     .font(.footnote)

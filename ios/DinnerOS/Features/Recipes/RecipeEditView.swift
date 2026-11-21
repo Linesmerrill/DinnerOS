@@ -54,7 +54,7 @@ struct RecipeEditView: View {
                         Section {
                             Picker("Amounts for", selection: $draft.servings) {
                                 ForEach(draft.servingSizes, id: \.self) { size in
-                                    Text("\(size) servings").tag(size)
+                                    Text(MenuFormat.servings(size)).tag(size)
                                 }
                             }
                             .pickerStyle(.segmented)

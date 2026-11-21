@@ -11,27 +11,41 @@ struct AutopilotTasteStep: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var columns: [GridItem] {
-        // One column at accessibility sizes, so the name always fits on its photo.
-        let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 260 : 150
-        return [GridItem(.adaptive(minimum: minimum), spacing: DS.Space.m)]
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = layout(in: proxy.size)
+            ScrollView {
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: DS.Space.m), count: layout.columns),
+                    spacing: DS.Space.m
+                ) {
+                    // Alphabetical on screen, so the grid reads the same on every device and in
+                    // light and dark mode, whatever the recipe counts did (build 121, review 2).
+                    ForEach(CuisineTiles.displayOrder(tiles)) { tile in
+                        CuisineTileView(
+                            tile: tile, preference: settings.preference(for: tile.value, kind: .cuisine),
+                            aspectRatio: layout.tileWidth / max(layout.tileHeight, 1),
+                            cycle: { cycle(tile) }, set: { set($0, on: tile) })
+                    }
+                }
+                .padding(.horizontal, DS.Space.l)
+                .padding(.bottom, DS.Space.s)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
     }
 
-    var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: DS.Space.m) {
-                // Alphabetical on screen, so the grid reads the same on every device and in
-                // light and dark mode, whatever the recipe counts did (build 121, review 2).
-                ForEach(CuisineTiles.displayOrder(tiles)) { tile in
-                    CuisineTileView(
-                        tile: tile, preference: settings.preference(for: tile.value, kind: .cuisine),
-                        cycle: { cycle(tile) }, set: { set($0, on: tile) })
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, DS.Space.s)
-        }
-        .scrollBounceBehavior(.basedOnSize)
+    /// Every tile on screen at once where the sheet has room: on an iPad and a large iPhone the
+    /// third row was cut off under the footer (build 122, Hark's review item 4). One column at
+    /// accessibility sizes, so the name always fits on its photo.
+    private func layout(in size: CGSize) -> CuisineTiles.GridLayout {
+        let large = dynamicTypeSize.isAccessibilitySize
+        return CuisineTiles.gridLayout(
+            count: tiles.count, width: size.width - DS.Space.l * 2, height: size.height - DS.Space.s,
+            spacing: DS.Space.m,
+            preferredWidth: large ? DS.Size.cuisineTileWidthLarge : DS.Size.cuisineTileWidth,
+            minWidth: large ? DS.Size.cuisineTileWidthLarge : DS.Size.cuisineTileMinWidth,
+            minHeightRatio: DS.Size.cuisineTileMinHeightRatio)
     }
 
     private func cycle(_ tile: CuisineTile) {
@@ -47,6 +61,8 @@ struct AutopilotTasteStep: View {
 private struct CuisineTileView: View {
     let tile: CuisineTile
     let preference: AutopilotTastePreference
+    /// Width over height: 1 for a square, more when the grid shortens tiles to fit.
+    let aspectRatio: Double
     let cycle: () -> Void
     let set: (AutopilotTastePreference) -> Void
 
@@ -83,7 +99,7 @@ private struct CuisineTileView: View {
     @ViewBuilder
     private var artwork: some View {
         if let url = tile.imageURL {
-            RecipePhoto(url: url, aspectRatio: 1, pointWidth: 200, cornerRadius: Self.cornerRadius)
+            RecipePhoto(url: url, aspectRatio: aspectRatio, pointWidth: 200, cornerRadius: Self.cornerRadius)
                 // A photo that doesn't load leaves the plate glyph, never a blank gray tile.
                 .background { placeholder }
                 .overlay {
@@ -107,7 +123,7 @@ private struct CuisineTileView: View {
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: Self.cornerRadius)
             .fill(DS.Colors.surface)
-            .aspectRatio(1, contentMode: .fit)
+            .aspectRatio(aspectRatio, contentMode: .fit)
             .overlay {
                 Image(systemName: "fork.knife")
                     .font(DS.Typography.largeTitle)

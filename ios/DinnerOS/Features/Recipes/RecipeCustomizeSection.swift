@@ -46,7 +46,7 @@ struct RecipeCustomizeSection: View {
             Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                 .font(.title3)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
-            IngredientPhoto(url: choice.imageURL ?? group.imageURL, size: 40)
+            IngredientPhoto(url: choice.thumbnailURL(in: group), size: 40)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(choice.label)
                     .font(.headline)

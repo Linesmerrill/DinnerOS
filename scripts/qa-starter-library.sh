@@ -14,11 +14,12 @@
 # tests photograph one steady household (build 122: three Chicken Bowls on the Menu, 41 meals in
 # one shot and 42 in the next). Tests that add, plan or delete now use households of their own
 # (ios/DinnerOSUITests/QAOwnHousehold.swift); this removes what older runs left: recipes named
-# "QA ...", recipes typed by hand other than the screenshots' own ("Sip Fudge", or the names in
-# QA_KEEP_RECIPES, separated by "|"), second copies of a recipe (same name), a recipe planned twice
-# in one week, and "QA Companion" companions. The meal-kit recipes the household was seeded with
-# stay. Only things over 30 minutes old go, so a test running now keeps its own. Re-running it
-# removes nothing new.
+# "QA ...", recipes typed by hand other than the screenshots' own ("Pesto Bow Tie Pasta", or the
+# names in QA_KEEP_RECIPES, separated by "|"), second copies of a recipe (same name), a recipe
+# planned twice in one week, and "QA Companion" companions. The meal-kit recipes the household was
+# seeded with stay. Only things over 30 minutes old go, so a test running now keeps its own. It also
+# makes the screenshots' typed-by-hand recipe, with its photo, when it's missing, and moves the old
+# one's ("Sip Fudge", or QA_RETIRED_RECIPES) planned meals to it. Re-running it changes nothing.
 #   scripts/qa-starter-library.sh http://localhost:8082 tidy
 set -euo pipefail
 BASE=${1:-http://localhost:8082}
@@ -32,11 +33,13 @@ import datetime, json, os, urllib.request
 
 base, token = os.environ["BASE"] + "/api/v1", os.environ["TOKEN"]
 
-def call(method, path):
-    req = urllib.request.Request(base + path, method=method, headers={"Authorization": "Bearer " + token})
+def call(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    req = urllib.request.Request(base + path, data=data, method=method, headers=headers)
     with urllib.request.urlopen(req) as r:
-        body = r.read()
-    return json.loads(body) if body else {}
+        raw = r.read()
+    return json.loads(raw) if raw else {}
 
 def age_minutes(object_id):
     made = datetime.datetime.fromtimestamp(int(object_id[:8], 16), datetime.timezone.utc)
@@ -48,6 +51,47 @@ if not items:
 household = items[0]["household"]
 hid = household["id"]
 
+def all_recipes():
+    out, cursor = [], ""
+    while True:
+        page = call("GET", f"/households/{hid}/recipes?limit=100" + (f"&cursor={cursor}" if cursor else ""))
+        out += page.get("items") or []
+        cursor = page.get("nextCursor") or ""
+        if not cursor:
+            return out
+
+# The screenshots' typed-by-hand recipe (QA_MANUAL_NAME in the matrix): a real dinner with a real
+# photo, made here when it's missing. It replaced "Sip Fudge", two lines and no photo (build 122
+# review items 3 and 16), wherever that was planned.
+TYPED = {
+    "name": "Pesto Bow Tie Pasta",
+    "imageUrl": "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=1080",
+    "servings": 2, "prepMinutes": 5, "totalMinutes": 20, "cuisines": ["italian"], "cuisinesChosen": True,
+    "tags": [], "warnings": [], "fromUrl": False,
+    "ingredients": [
+        {"name": "bow tie pasta", "quantity": "8", "unit": "oz", "pantryStaple": False},
+        {"name": "basil pesto", "quantity": "1/3", "unit": "cup", "pantryStaple": False},
+        {"name": "grape tomatoes", "quantity": "1", "unit": "cup", "pantryStaple": False, "note": "halved"},
+        {"name": "baby spinach", "quantity": "2", "unit": "cup", "pantryStaple": False},
+        {"name": "parmesan cheese", "quantity": "1/4", "unit": "cup", "pantryStaple": False, "note": "grated"},
+        {"name": "lemon", "quantity": "1/2", "unit": "count", "pantryStaple": False},
+        {"name": "olive oil", "quantity": "1", "unit": "tbsp", "pantryStaple": True},
+    ],
+    "steps": [
+        "Boil the pasta in salted water until tender, about 11 minutes. Save a splash of the water, then drain.",
+        "Toss the hot pasta with the pesto and the saved water until glossy.",
+        "Fold in the tomatoes, spinach and a squeeze of lemon. Drizzle with the oil and top with the parmesan.",
+    ],
+}
+retired = set(filter(None, os.environ.get("QA_RETIRED_RECIPES", "Sip Fudge").split("|")))
+keep = set(filter(None, os.environ.get("QA_KEEP_RECIPES", TYPED["name"]).split("|")))
+recipes = all_recipes()
+typed_id = next((r["id"] for r in recipes if r["name"] == TYPED["name"]), "")
+made_typed = not typed_id
+if made_typed:
+    typed_id = call("POST", f"/households/{hid}/recipes", TYPED)["id"]
+retired_ids = {r["id"] for r in recipes if r["name"] in retired}
+
 # Weeks a run could have planned in: four back to four ahead, by the household's first day.
 order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 index = order.index(household.get("weekStartsOn") or "mon")
@@ -55,13 +99,23 @@ offset = index - 7 if index > 3 else index
 today = datetime.date.today()
 weeks = sorted({"%04d-W%02d" % (today + datetime.timedelta(days=d - offset)).isocalendar()[:2] for d in range(-28, 36)})
 
-planned, removed_entries = set(), 0
+planned, removed_entries, swapped = set(), 0, 0
 for week in weeks:
     plan = call("GET", f"/households/{hid}/plans/{week}")
     seen = set()
     for e in sorted(plan.get("entries") or [], key=lambda e: e.get("addedAt") or ""):
         recipe = e.get("recipe") or {}
         rid, name = recipe.get("id", ""), recipe.get("name", "")
+        if rid in retired_ids:
+            # The retired screenshot recipe's place goes to the new one, same day and servings.
+            call("DELETE", f"/households/{hid}/plans/{week}/entries/{e['id']}")
+            if typed_id not in seen:
+                call("POST", f"/households/{hid}/plans/{week}/entries",
+                     {"recipeId": typed_id, "day": e.get("day"), "servings": e.get("servings") or 2})
+                seen.add(typed_id)
+                planned.add(typed_id)
+                swapped += 1
+            continue
         old = age_minutes(e["id"]) > 30
         if old and (rid in seen or name.startswith("QA ")):
             call("DELETE", f"/households/{hid}/plans/{week}/entries/{e['id']}")
@@ -70,22 +124,20 @@ for week in weeks:
         seen.add(rid)
         planned.add(rid)
 
-recipes, cursor = [], ""
-while True:
-    page = call("GET", f"/households/{hid}/recipes?limit=100" + (f"&cursor={cursor}" if cursor else ""))
-    recipes += page.get("items") or []
-    cursor = page.get("nextCursor") or ""
-    if not cursor:
-        break
-keep = set(filter(None, os.environ.get("QA_KEEP_RECIPES", "Sip Fudge").split("|")))
 removed_recipes, names = 0, {}
-for r in sorted(recipes, key=lambda r: r["id"]):
+for r in sorted(all_recipes(), key=lambda r: r["id"]):
     first = names.setdefault(r["name"], r["id"])
+    if r["name"] in keep and first == r["id"]:
+        continue
+    if r["id"] in retired_ids:
+        call("DELETE", f"/households/{hid}/recipes/{r['id']}")
+        removed_recipes += 1
+        continue
     if r["id"] in planned or age_minutes(r["id"]) <= 30:
         continue
     extra = first != r["id"] or r["name"].startswith("QA ")
     # Typed by hand, pasted or read from a page: left by a person or a test, not the seed.
-    if not extra and r["name"] not in keep:
+    if not extra:
         extra = call("GET", f"/households/{hid}/recipes/{r['id']}").get("source") in ("manual", "user")
     if extra:
         call("DELETE", f"/households/{hid}/recipes/{r['id']}")
@@ -96,7 +148,9 @@ for c in call("GET", f"/households/{hid}/companions").get("items") or []:
     if c.get("name", "").startswith("QA Companion ") and age_minutes(c["id"]) > 30:
         call("DELETE", f"/households/{hid}/companions/{c['id']}")
         removed_companions += 1
-print(f"tidied {hid}: {removed_recipes} recipes, {removed_entries} planned meals, {removed_companions} companions removed")
+made = f"; made {TYPED['name']}" if made_typed else ""
+print(f"tidied {hid}: {removed_recipes} recipes, {removed_entries} planned meals, {removed_companions} companions "
+      f"removed, {swapped} planned meals moved to {TYPED['name']}{made}")
 TIDY
     exit 0
 fi

@@ -51,7 +51,7 @@ struct PlanEntryEditor: View {
                     DayPicker(week: week, selection: $day)
                     Picker("Servings", selection: $servings) {
                         ForEach(servingOptions, id: \.self) { size in
-                            Text("\(size) servings").tag(size)
+                            Text(MenuFormat.servings(size)).tag(size)
                         }
                     }
                 } footer: {

@@ -35,36 +35,60 @@ struct PlusPurchaseView: View {
         .presentationSizing(.page)
     }
 
-    /// On an iPad everything fits in the sheet, so the purchase controls follow the plans
-    /// instead of sitting in a pinned footer over them (build 121, review 2).
+    /// How much of the screen the offer can take before the purchase controls.
+    private enum Density {
+        /// The big title, the benefits and a row per plan.
+        case full
+        /// A smaller title, the benefits in smaller type, and the plans side by side.
+        case medium
+        /// Only what deciding needs: the title, the plans side by side and the invite link.
+        case small
+    }
+
+    /// Every plan and price, "Have an Invite Code?", the button, the renewal terms, and the
+    /// Restore, Terms and Privacy links all show at once on every screen, an iPhone Duo's cover
+    /// screen and an iPad on its side included: the roomiest layout that fits is used (build
+    /// 122, Hark's review item 1: a pinned footer covered the plans, and on an iPad in landscape
+    /// the terms ran off the sheet). Only at large text sizes, where nothing fits, does the page
+    /// scroll, with the purchase controls pinned on a phone.
+    private func content(_ offer: PlusOffer) -> some View {
+        ViewThatFits(in: .vertical) {
+            page(offer, density: .full)
+            page(offer, density: .medium)
+            page(offer, density: .small)
+            ScrollView {
+                offerContent(offer, density: .full, includesPurchase: !pinsPurchaseBar)
+            }
+            .dsBottomBar(isShown: pinsPurchaseBar) { purchaseBar(offer) }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// A phone pins the purchase controls when the page has to scroll; an iPad keeps them under
+    /// the plans.
     private var pinsPurchaseBar: Bool { horizontalSizeClass != .regular }
 
-    private func content(_ offer: PlusOffer) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DS.Space.xxl) {
-                // A household that entered an invite code sees what's left before its free month.
-                if let progress = plus.status?.referralProgress, progress.isPending {
-                    ReferralProgressContent(progress: progress)
-                        .padding(DS.Space.ml)
-                        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
-                } else if let month = plus.openFreeMonth, !(plus.status?.active ?? false) {
-                    // An earned free month: redeeming it is how it starts (decision 755).
-                    FreeMonthCard(month: month)
-                        .padding(DS.Space.ml)
-                        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
-                }
-                VStack(alignment: .leading, spacing: DS.Space.s) {
-                    Image(systemName: "sparkles")
-                        .font(DS.Typography.largeTitle)
-                        .foregroundStyle(DS.Colors.accent)
-                        .accessibilityHidden(true)
-                    Text(offer.title)
-                        .font(DS.Typography.largeTitle)
-                    Text(offer.subtitle)
-                        .font(DS.Typography.subtitle)
-                        .foregroundStyle(DS.Colors.secondaryText)
-                }
-                VStack(alignment: .leading, spacing: DS.Space.m) {
+    /// The whole offer, purchase controls included, with no scrolling.
+    private func page(_ offer: PlusOffer, density: Density) -> some View {
+        offerContent(offer, density: density, includesPurchase: true)
+    }
+
+    private func offerContent(_ offer: PlusOffer, density: Density, includesPurchase: Bool) -> some View {
+        VStack(alignment: .leading, spacing: density == .full ? DS.Space.xxl : DS.Space.l) {
+            // A household that entered an invite code sees what's left before its free month.
+            if let progress = plus.status?.referralProgress, progress.isPending {
+                ReferralProgressContent(progress: progress)
+                    .padding(DS.Space.ml)
+                    .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
+            } else if let month = plus.openFreeMonth, !(plus.status?.active ?? false) {
+                // An earned free month: redeeming it is how it starts (decision 755).
+                FreeMonthCard(month: month)
+                    .padding(DS.Space.ml)
+                    .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
+            }
+            header(offer, density: density)
+            if density != .small {
+                VStack(alignment: .leading, spacing: density == .full ? DS.Space.m : DS.Space.xs) {
                     ForEach(offer.benefits, id: \.self) { benefit in
                         Label {
                             Text(benefit)
@@ -74,37 +98,84 @@ struct PlusPurchaseView: View {
                         }
                     }
                 }
-                VStack(spacing: DS.Space.m) {
-                    ForEach(offer.plans) { plan in
-                        PlanRow(
-                            plan: plan, price: PlusText.price(plan, product: plus.products[plan.productID]),
-                            isSelected: plan.productID == selectedID(offer)
-                        ) {
-                            selectedPlanID = plan.productID
-                        }
-                    }
+                .font(density == .full ? DS.Typography.body : DS.Typography.subheadline)
+            }
+            plans(offer, density: density)
+            VStack(spacing: density == .full ? DS.Space.xxl : DS.Space.s) {
+                if density == .full {
+                    Text(offer.freeText)
+                        .font(DS.Typography.callout)
+                        .foregroundStyle(DS.Colors.secondaryText)
+                        .multilineTextAlignment(.center)
                 }
-                Text(offer.freeText)
-                    .font(DS.Typography.callout)
-                    .foregroundStyle(DS.Colors.secondaryText)
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
                 Button("Have an Invite Code?") { showsInvite = true }
                     .buttonStyle(.dsTextLink)
-                    .frame(maxWidth: .infinity)
-                if !pinsPurchaseBar {
-                    VStack(spacing: DS.Space.sm) { purchaseBar(offer) }
-                        .frame(maxWidth: .infinity)
-                }
             }
-            .padding(DS.Space.l)
-            .dsReadableWidth()
+            .frame(maxWidth: .infinity)
+            if includesPurchase {
+                VStack(spacing: DS.Space.sm) { purchaseBar(offer) }
+                    .frame(maxWidth: .infinity)
+            }
         }
-        // On a phone the button, the price, the renewal terms, Restore, and the Terms and
-        // Privacy links stay on screen however small it is (Apple wants them by the button).
-        // The inset keeps the last lines scrollable above the bar, and the bar's fade softens
-        // whatever passes under it.
-        .dsBottomBar(isShown: pinsPurchaseBar) { purchaseBar(offer) }
+        .padding(DS.Space.l)
+        .dsReadableWidth()
+    }
+
+    @ViewBuilder
+    private func header(_ offer: PlusOffer, density: Density) -> some View {
+        if density == .full {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
+                Image(systemName: "sparkles")
+                    .font(DS.Typography.largeTitle)
+                    .foregroundStyle(DS.Colors.accent)
+                    .accessibilityHidden(true)
+                Text(offer.title)
+                    .font(DS.Typography.largeTitle)
+                Text(offer.subtitle)
+                    .font(DS.Typography.subtitle)
+                    .foregroundStyle(DS.Colors.secondaryText)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                Label {
+                    Text(offer.title)
+                } icon: {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(DS.Colors.accent)
+                        .accessibilityHidden(true)
+                }
+                .font(DS.Typography.title)
+                Text(offer.subtitle)
+                    .font(DS.Typography.subheadline)
+                    .foregroundStyle(DS.Colors.secondaryText)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func plans(_ offer: PlusOffer, density: Density) -> some View {
+        if density == .full {
+            VStack(spacing: DS.Space.m) { planRows(offer, compact: false) }
+        } else {
+            // Side by side when both fit, so a short screen keeps room for the terms.
+            ViewThatFits(in: .horizontal) {
+                // Both tiles as tall as the taller one.
+                HStack(alignment: .top, spacing: DS.Space.s) { planRows(offer, compact: true) }
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: DS.Space.s) { planRows(offer, compact: false) }
+            }
+        }
+    }
+
+    private func planRows(_ offer: PlusOffer, compact: Bool) -> some View {
+        ForEach(offer.plans) { plan in
+            PlanRow(
+                plan: plan, price: PlusText.price(plan, product: plus.products[plan.productID]),
+                isSelected: plan.productID == selectedID(offer), compact: compact
+            ) {
+                selectedPlanID = plan.productID
+            }
+        }
     }
 
     @ViewBuilder
@@ -112,9 +183,7 @@ struct PlusPurchaseView: View {
         if let status = plus.status, status.active {
             // Plus came on while this screen was open: an invite code, or a purchase.
             Label(
-                PlusText.status(
-                    status,
-                    testerThanks: BuildChannel.showsTesterThanks(BuildChannelStore.shared.channel, comp: status.comp)),
+                PlusText.status(status, channel: BuildChannelStore.shared.channel),
                 systemImage: "checkmark.seal.fill"
             )
             .font(DS.Typography.headline)
@@ -160,6 +229,11 @@ struct PlusPurchaseView: View {
         // Restore and the two links on one line: Restore Purchases, Terms of Use, Privacy Policy.
         ViewThatFits(in: .horizontal) {
             HStack(spacing: DS.Space.l) { legalLinks(offer) }
+            // Narrow (the Duo's cover screen): Restore, then Terms and Privacy on one line.
+            VStack(spacing: DS.Space.xxs) {
+                restoreButton(offer)
+                HStack(spacing: DS.Space.l) { documentLinks(offer) }
+            }
             VStack(spacing: DS.Space.xxs) { legalLinks(offer) }
         }
         .font(DS.Typography.footnote)
@@ -167,8 +241,16 @@ struct PlusPurchaseView: View {
 
     @ViewBuilder
     private func legalLinks(_ offer: PlusOffer) -> some View {
+        restoreButton(offer)
+        documentLinks(offer)
+    }
+
+    private func restoreButton(_ offer: PlusOffer) -> some View {
         Button(offer.restoreText) { restore() }
             .disabled(!plus.canPurchase || plus.isPurchasing)
+    }
+
+    private func documentLinks(_ offer: PlusOffer) -> some View {
         ForEach(offer.shownLinks, id: \.self) { link in
             Link(link.title, destination: link.url)
         }
@@ -232,41 +314,71 @@ private struct PlanRow: View {
     let plan: PlusPlan
     let price: String
     let isSelected: Bool
+    /// A tile for side-by-side plans: name, price and note stacked, the check in the corner.
+    var compact = false
     let select: () -> Void
 
     var body: some View {
         Button(action: select) {
-            HStack {
-                VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                    Text(plan.name)
-                        .font(DS.Typography.headline)
-                    Text(price)
-                        .foregroundStyle(DS.Colors.secondaryText)
+            Group {
+                if compact {
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(plan.name)
+                                .font(DS.Typography.headline)
+                            Spacer(minLength: DS.Space.xxs)
+                            check
+                        }
+                        Text(price)
+                            .font(DS.Typography.subheadline)
+                            .foregroundStyle(DS.Colors.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let note = plan.note { badge(note) }
+                    }
+                    .padding(DS.Space.m)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    HStack {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                            Text(plan.name)
+                                .font(DS.Typography.headline)
+                            Text(price)
+                                .foregroundStyle(DS.Colors.secondaryText)
+                        }
+                        Spacer()
+                        if let note = plan.note { badge(note) }
+                        check
+                    }
+                    .padding(DS.Space.l)
                 }
-                Spacer()
-                if let note = plan.note {
-                    Text(note)
-                        .font(DS.Typography.caption.bold())
-                        .padding(.horizontal, DS.Space.s)
-                        .padding(.vertical, DS.Space.xxs)
-                        .background(DS.Colors.badge.opacity(0.15), in: .capsule)
-                }
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(DS.Typography.title)
-                    .foregroundStyle(isSelected ? DS.Colors.accent : DS.Colors.secondaryText)
-                    .accessibilityHidden(true)
             }
-            .padding(DS.Space.l)
             .contentShape(.rect)
             .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.medium))
             .overlay {
+                // An outline on the plan not picked too: on a sheet its fill alone all but
+                // vanished (an iPad in light mode, build 122).
                 RoundedRectangle(cornerRadius: DS.Radius.medium)
-                    .strokeBorder(isSelected ? DS.Colors.accent : .clear, lineWidth: 2)
+                    .strokeBorder(isSelected ? DS.Colors.accent : DS.Colors.cardStroke, lineWidth: isSelected ? 2 : 1)
             }
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    private var check: some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .font(compact ? DS.Typography.sectionTitle : DS.Typography.title)
+            .foregroundStyle(isSelected ? DS.Colors.accent : DS.Colors.secondaryText)
+            .accessibilityHidden(true)
+    }
+
+    private func badge(_ note: String) -> some View {
+        Text(note)
+            .font(DS.Typography.caption.bold())
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, DS.Space.xxs)
+            .background(DS.Colors.badge.opacity(0.15), in: .capsule)
     }
 }
 

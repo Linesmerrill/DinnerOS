@@ -478,6 +478,12 @@ Nothing goes to TestFlight until Hark has reviewed that build's screenshots.
    without Face ID, each tab, the Plus paywall, Start Cooking) is missing. The sign-in shots
    hide the Debug build's developer sign-in (`QA_HIDE_DEVELOPER_SIGN_IN`), so they show the
    Release screen.
+   Since build 122 (Hark's item 13): two shots in one config that show the same screen (status
+   bar and home indicator left out, under 1% of 8-point cells changed) fail the UI test that
+   took them and stop the script before it publishes (`scripts/qa_shot_compare.py`, tested by
+   `python3 scripts/test_qa_shot_compare.py`; needs Pillow and NumPy). A "scrolled" shot of a
+   page that doesn't scroll is left out (QA-SKIP in the log), not published as a copy. Menu ›
+   By Day and Pantry › Add an Item are required screens.
 3. The script attaches the zip to a temporary draft release and runs the `QA screenshots`
    workflow (`.github/workflows/qa-screenshots.yml`), which publishes the GitHub Actions artifact
    **`qa-screenshots-<build>`** on Linesmerrill/DinnerOS (kept 30 days) and deletes the draft. The

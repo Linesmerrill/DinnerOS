@@ -287,49 +287,57 @@ struct WeekAutopilotSection: View {
     }
 }
 
-/// Menu items for the Week tab's toolbar menu.
-struct WeekAutopilotMenuItems: View {
-    let flow: WeekAutopilotFlow
-    let canEdit: Bool
-
-    @Environment(AutopilotStore.self) private var autopilot
-    @Environment(PlanStore.self) private var plans
-
-    private var isSkipping: Bool {
-        autopilot.week == plans.week && autopilot.context?.skip == true
-    }
-
-    var body: some View {
-        Section("Autopilot") {
-            if canEdit {
-                if autopilot.pendingProposal?.week == plans.week.description,
-                    autopilot.pendingProposal?.slots.isEmpty == false
-                {
-                    Button("Review Suggestions", systemImage: "sparkles") { flow.sheet = .review }
-                    Button("Shuffle the Week", systemImage: "shuffle") { flow.shuffleWeek(autopilot: autopilot) }
-                        .disabled(autopilot.isGenerating)
-                } else {
-                    Button("Plan with Autopilot", systemImage: "sparkles") {
-                        flow.plan(autopilot: autopilot, plans: plans)
-                    }
-                    // Nothing to plan on a week the household is away for.
-                    .disabled(!plans.isDraft || autopilot.isGenerating || isSkipping)
-                }
-                Button("This Week’s Plans…", systemImage: "calendar.badge.clock") { flow.sheet = .context }
-                if autopilot.phase == .loaded {
-                    Button(
-                        autopilot.isConfigured
+/// The Autopilot rows of the Menu tab's week menu (a `DSMenuPopover` card, build 122).
+@MainActor
+enum WeekAutopilotMenuItems {
+    static func items(
+        flow: WeekAutopilotFlow, canEdit: Bool, autopilot: AutopilotStore, plans: PlanStore
+    ) -> [DSMenuItem] {
+        let group = String(localized: "Autopilot")
+        var items: [DSMenuItem] = []
+        if canEdit {
+            if autopilot.pendingProposal?.week == plans.week.description,
+                autopilot.pendingProposal?.slots.isEmpty == false
+            {
+                items.append(
+                    DSMenuItem(title: String(localized: "Review Suggestions"), systemImage: "sparkles") {
+                        flow.sheet = .review
+                    })
+                items.append(
+                    DSMenuItem(
+                        title: String(localized: "Shuffle the Week"), systemImage: "shuffle",
+                        isDisabled: autopilot.isGenerating
+                    ) { flow.shuffleWeek(autopilot: autopilot) })
+            } else {
+                let isSkipping = autopilot.week == plans.week && autopilot.context?.skip == true
+                // Nothing to plan on a week the household is away for.
+                items.append(
+                    DSMenuItem(
+                        title: String(localized: "Plan with Autopilot"), systemImage: "sparkles",
+                        isDisabled: !plans.isDraft || autopilot.isGenerating || isSkipping
+                    ) { flow.plan(autopilot: autopilot, plans: plans) })
+            }
+            items.append(
+                DSMenuItem(title: String(localized: "This Week’s Plans…"), systemImage: "calendar.badge.clock") {
+                    flow.sheet = .context
+                })
+            if autopilot.phase == .loaded {
+                items.append(
+                    DSMenuItem(
+                        title: autopilot.isConfigured
                             ? String(localized: "Run Setup Again") : String(localized: "Set Up Autopilot"),
                         systemImage: "wand.and.stars"
-                    ) {
-                        flow.sheet = .onboarding
-                    }
-                }
+                    ) { flow.sheet = .onboarding })
             }
-            // The cook-time mix, equipment, weekday rules, and pairings setup no longer asks
-            // about all live here (#330).
-            Button("Fine-Tune Autopilot", systemImage: "slider.horizontal.3") { flow.isShowingPreferences = true }
         }
+        // The cook-time mix, equipment, weekday rules, and pairings setup no longer asks
+        // about all live here (#330).
+        items.append(
+            DSMenuItem(title: String(localized: "Fine-Tune Autopilot"), systemImage: "slider.horizontal.3") {
+                flow.isShowingPreferences = true
+            })
+        items[0].group = group
+        return items
     }
 }
 

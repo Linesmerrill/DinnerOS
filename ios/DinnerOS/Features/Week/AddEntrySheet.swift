@@ -118,7 +118,7 @@ struct AddEntrySheet: View {
         } else {
             Picker("Servings", selection: $servings) {
                 ForEach(servingOptions, id: \.self) { size in
-                    Text("\(size) servings").tag(Int?.some(size))
+                    Text(MenuFormat.servings(size)).tag(Int?.some(size))
                 }
             }
         }

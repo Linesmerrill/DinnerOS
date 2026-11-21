@@ -55,7 +55,9 @@ func (s *Service) WithComps(c CompStore) *Service {
 const (
 	CompThanksTitle = "Thanks for testing DinnerOS"
 	CompThanksText  = "You helped shape DinnerOS before anyone else had it. Plus is on the house for your household, for good."
-	CompStateText   = "On the house"
+	// CompStateText heads Your Plus for a comp. It reads like any active plan, so an
+	// App Store build never says "on the house" (build 122, review 2).
+	CompStateText = "Active"
 	// CompBenefitsTitle heads the list of what Plus includes.
 	CompBenefitsTitle = "What you get"
 )

@@ -13,6 +13,9 @@ struct ShopView: View {
     @State private var isShowingUsuals = false
     @State private var isAddingItem = false
     @State private var isMatchingProducts = false
+    /// The options card, and where its button is (`DSMenuPopover`).
+    @State private var showsOptions = false
+    @State private var optionsAnchor: CGRect = .zero
     /// The cost card's sheet is held and presented here, not on the card: the card is a list
     /// section that comes and goes with the week's cost (decision 510).
     @State private var weekCostSheet: WeekCostSheet?
@@ -53,6 +56,7 @@ struct ShopView: View {
                     .background(.bar)
                 }
             }
+            .dsMenuPopover(isPresented: $showsOptions, anchor: optionsAnchor, items: optionItems)
             // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.
             .toolbar { toolbar }
             .notificationsToolbar()
@@ -156,6 +160,33 @@ struct ShopView: View {
         }
     }
 
+    private var optionItems: [DSMenuItem] {
+        var items: [DSMenuItem] = []
+        if usuals != nil {
+            items.append(
+                DSMenuItem(title: String(localized: "Your Usuals"), systemImage: "arrow.clockwise.heart") {
+                    isShowingUsuals = true
+                })
+        }
+        items.append(
+            DSMenuItem(title: String(localized: "Saved Products"), systemImage: "bookmark") {
+                isShowingSavedProducts = true
+            })
+        if shopping.canMatchFromWalmart {
+            items.append(
+                DSMenuItem(
+                    title: String(localized: "Match Walmart Products"), systemImage: "arrow.triangle.2.circlepath"
+                ) { isMatchingProducts = true })
+        }
+        if shopping.canEdit {
+            items.append(
+                DSMenuItem(title: String(localized: "Store Settings"), systemImage: "storefront") {
+                    isEditingStore = true
+                })
+        }
+        return items
+    }
+
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         if isReady {
@@ -167,27 +198,9 @@ struct ShopView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if usuals != nil {
-                        Button("Your Usuals", systemImage: "arrow.clockwise.heart") {
-                            isShowingUsuals = true
-                        }
-                    }
-                    Button("Saved Products", systemImage: "bookmark") {
-                        isShowingSavedProducts = true
-                    }
-                    if shopping.canMatchFromWalmart {
-                        Button("Match Walmart Products", systemImage: "arrow.triangle.2.circlepath") {
-                            isMatchingProducts = true
-                        }
-                    }
-                    if shopping.canEdit {
-                        Button("Store Settings", systemImage: "storefront") {
-                            isEditingStore = true
-                        }
-                    }
-                } label: {
-                    Label("Shop Options", systemImage: TabHeader.moreSystemImage)
+                // An opaque card, like the recipe page's (`DSMenuPopover`, Hark's review item 11).
+                DSMenuButton(isPresented: $showsOptions, anchor: $optionsAnchor, accessibilityLabel: "Shop Options") {
+                    Image(systemName: TabHeader.moreSystemImage)
                 }
             }
         }

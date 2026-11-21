@@ -33,6 +33,9 @@ nonisolated struct CustomizationKind: RawRepresentable, Codable, Hashable, Senda
     static let double = CustomizationKind(rawValue: "double")
     static let swap = CustomizationKind(rawValue: "swap")
     static let swapDouble = CustomizationKind(rawValue: "swap_double")
+
+    /// A choice that puts another protein in the line's place.
+    var isSwap: Bool { self == .swap || self == .swapDouble }
 }
 
 /// One customizable ingredient and its choices.
@@ -87,10 +90,17 @@ nonisolated struct CustomizationChoice: Decodable, Hashable, Sendable, Identifia
     let amountText: String
     var imageURLString: String?
     let kind: CustomizationKind
-    /// For example "Double portion"; `nil` for none.
+    /// For example "Double Portion"; `nil` for none.
     var badge: String?
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
+
+    /// The choice's thumbnail in `group`: a swap shows its own food or none (the neutral
+    /// fallback), never the protein it replaces, so tofu doesn't sit beside a chicken photo
+    /// (build 122). The others show the line's photo when they carry none of their own.
+    func thumbnailURL(in group: CustomizationGroup) -> URL? {
+        kind.isSwap ? imageURL : imageURL ?? group.imageURL
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id, label, ingredientName, amountText

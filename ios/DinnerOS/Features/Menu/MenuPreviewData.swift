@@ -112,7 +112,7 @@ enum MenuPreviewData {
                     kind: .original),
                 CustomizationChoice(
                     id: "double", label: "2x Ground Pork", ingredientName: "Ground Pork", amountText: "20 ounce",
-                    kind: .double, badge: "Double portion"),
+                    kind: .double, badge: "Double Portion"),
                 CustomizationChoice(
                     id: "chicken", label: "Chopped Chicken Breast", ingredientName: "Chicken Breast",
                     amountText: "10 ounce", kind: .swap),

@@ -128,7 +128,7 @@ struct WeekContextSheet: View {
                     OptionalNumberRow(
                         title: String(localized: "Servings This Week"), value: $draft.servings,
                         range: 1...limits.maxServings, defaultValue: guestServings,
-                        format: { String(localized: "\($0) servings") })
+                        format: { MenuFormat.servings($0) })
                     OptionalNumberRow(
                         title: String(localized: "Meals This Week"), value: $draft.mealsPerWeek, range: 1...7,
                         defaultValue: autopilot.profile?.schedule.mealsPerWeek ?? 4,
@@ -345,7 +345,7 @@ private struct DayOverrideForm: View {
                         format: { String(localized: "Up to \(RecipeFormat.minutes($0))") })
                     OptionalNumberRow(
                         title: String(localized: "Servings"), value: $override.servings, range: 1...limits.maxServings,
-                        defaultValue: 6, format: { String(localized: "\($0) servings") })
+                        defaultValue: 6, format: { MenuFormat.servings($0) })
                 } footer: {
                     Text("Having guests? Set the servings for just this day.")
                 }

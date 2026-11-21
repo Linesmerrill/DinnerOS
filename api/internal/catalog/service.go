@@ -126,7 +126,7 @@ func (s *Service) Discover(ctx context.Context, householdID string, q Query) (Pa
 	if err != nil {
 		return Page{}, fmt.Errorf("scan catalog: %w", err)
 	}
-	entries = withoutHidden(shown(entries), s.hidden(ctx, householdID))
+	entries = withoutHidden(withoutTestRecipes(shown(entries)), s.hidden(ctx, householdID))
 	entries, err = s.withoutLibrary(ctx, householdID, entries)
 	if err != nil {
 		return Page{}, err
@@ -149,6 +149,7 @@ func (s *Service) Search(ctx context.Context, householdID string, q Query) (Page
 	// The store drops hidden groups before paging, so the count and the
 	// cursor are right.
 	f.HiddenGroups = hiddenList(s.hidden(ctx, householdID))
+	f.HideTestRecipes = !NamesTestRecipe(f.Text)
 	if f.Cuisine != "" {
 		spellings, err := s.cuisineSpellings(ctx, f.Cuisine)
 		if err != nil {
@@ -229,6 +230,35 @@ func shown(entries []Recipe) []Recipe {
 	out := entries[:0:0]
 	for _, e := range entries {
 		if servable(e) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// TestRecipePrefix starts the name of every recipe the local QA runs make
+// (build 122 review). Those runs share recipes from households of their own,
+// and Shared Recipes is one list for everyone, so "QA Hide Pilaf 12341" filled
+// Chef’s Picks in the screenshots. Rows, Discover and browsing leave them out;
+// a search that names one ("QA Report Pilaf 12345") still finds it, as the
+// tests that report and hide a recipe need, and opening or adding one works.
+const TestRecipePrefix = "QA "
+
+// IsTestRecipeName reports whether name is a QA run's recipe.
+func IsTestRecipeName(name string) bool {
+	return strings.HasPrefix(strings.TrimSpace(name), TestRecipePrefix)
+}
+
+// NamesTestRecipe reports whether search text asks for a QA run's recipe.
+func NamesTestRecipe(text string) bool {
+	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(text)), TestRecipePrefix)
+}
+
+// withoutTestRecipes drops QA runs' recipes from a list.
+func withoutTestRecipes(entries []Recipe) []Recipe {
+	out := entries[:0:0]
+	for _, e := range entries {
+		if !IsTestRecipeName(e.Content.Name) {
 			out = append(out, e)
 		}
 	}
@@ -329,7 +359,7 @@ func narrow(entries []Recipe, f Filter) []Recipe {
 // Discovery ranks a scanned set in memory, so it matches in memory too;
 // search leaves the same work to the text index.
 func matches(e Recipe, f Filter) bool {
-	if e.Content.IsAddon {
+	if e.Content.IsAddon || (f.HideTestRecipes && IsTestRecipeName(e.Content.Name)) {
 		return false
 	}
 	if f.Cuisine != "" && !hasCuisine(e.Content, f.Cuisine) {

@@ -110,6 +110,9 @@ struct MainTabView: View {
         .environment(tabs)
     }
 
+    /// Each tab's stack gets a solid band under the tab bar (`TabBarBacking`): on the stack for
+    /// an iPhone's bottom bar, so every page pushed in it has one, and on each page for an iPad's
+    /// top bar, so the navigation bar's buttons stay over it.
     @ViewBuilder
     private func tabContent(_ tab: AppTab) -> some View {
         switch tab {
@@ -117,7 +120,9 @@ struct MainTabView: View {
             NavigationStack(path: $tabs.menuPath) {
                 MenuView()
                     .newsBannerInset()
+                    .tabBarBacking(.top)
             }
+            .tabBarBacking(.bottom)
             // Another household starts at its own menu, not at a recipe
             // (or search) from the previous one.
             .id(households.current?.household.id)
@@ -125,21 +130,28 @@ struct MainTabView: View {
             NavigationStack {
                 ShopView()
                     .newsBannerInset()
+                    .tabBarBacking(.top)
             }
+            .tabBarBacking(.bottom)
             .id(households.current?.household.id)
         case .pantry:
             NavigationStack(path: $tabs.pantryPath) {
                 PantryView()
                     .newsBannerInset()
+                    .tabBarBacking(.top)
             }
+            .tabBarBacking(.bottom)
         case .household:
             NavigationStack(path: $tabs.householdPath) {
                 HouseholdView()
                     .newsBannerInset()
+                    .tabBarBacking(.top)
                     .navigationDestination(for: PlusInvitesRoute.self) { _ in
                         PlusInviteView()
+                            .tabBarBacking(.top)
                     }
             }
+            .tabBarBacking(.bottom)
         }
     }
 

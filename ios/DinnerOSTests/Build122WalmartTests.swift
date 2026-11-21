@@ -27,8 +27,10 @@ struct Build122WalmartTests {
     }
 
     /// A disabled Use This was all but invisible on the white bar in light mode.
-    @Test func disabledButtonsUseTheSecondaryPair() {
-        #expect(DS.Colors.disabledText == Color(.secondaryLabel))
+    /// The fill stays the secondary system fill; the text is DisabledText, an opaque gray at
+    /// 4.5:1 or better on it (build 122 review 2; SetupGridAndDisabledLookTests measures it).
+    @Test func disabledButtonsUseTheReadablePair() {
+        #expect(DS.Colors.disabledText == Color("DisabledText"))
         #expect(DS.Colors.disabledFill == Color(.secondarySystemFill))
     }
 }

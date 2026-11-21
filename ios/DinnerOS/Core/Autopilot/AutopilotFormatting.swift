@@ -37,9 +37,9 @@ nonisolated enum AutopilotFormat {
 
     // MARK: Minutes
 
-    /// "18 min", or "Time unknown".
+    /// "18 min", or "Time Unknown".
     static func cookTime(_ minutes: Int?) -> String {
-        guard let minutes, minutes > 0 else { return String(localized: "Time unknown") }
+        guard let minutes, minutes > 0 else { return String(localized: "Time Unknown") }
         return RecipeFormat.minutes(minutes)
     }
 

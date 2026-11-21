@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 )
 
 // A proposal keeps the reasons it was made with, so one saved before
@@ -33,6 +35,9 @@ const openEveningMinutes = 210
 // currentReason returns a saved reason in today's words, and false when
 // today's model wouldn't give it at all (a "limit" that was an open evening).
 func currentReason(r Reason) (Reason, bool) {
+	// Saved before the wording went curly: "Haven't had it" reads "Haven’t"
+	// (build 122 review).
+	r.Text = copytext.Curly(r.Text)
 	if m := oldFavorRe.FindStringSubmatch(r.Text); m != nil {
 		// Proteins and cuisines were capitalized; meal categories and time
 		// bands ("pasta", "quick meals") weren't.

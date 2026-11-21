@@ -103,8 +103,8 @@ struct Build121MenuLayoutTests {
         #expect(pill >= WeekStripMetrics.widePillWidth * 0.8)
     }
 
-    @Test func aPhoneStripKeepsItsTwoFifths() {
-        #expect(WeekStripMetrics.pillWidth(stripWidth: 402, typeSize: .large) == 148)
+    @Test func aPhoneStripFitsTwoWholeWeeks() {
+        #expect(WeekStripMetrics.pillWidth(stripWidth: 402, typeSize: .large) == 181)
     }
 
     @Test func aWidePillIsLabeledWithItsDatesNotTheMonth() throws {

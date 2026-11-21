@@ -114,6 +114,22 @@ struct RecipeRatingSection: View {
     }
 }
 
+/// When a recipe page asks for a rating (build 122, Hark's review item 12): only once the meal
+/// has been cooked, the same rule as the cards in Your Meals (`MealRating`). A recipe nobody has
+/// made yet has nothing to rate, so its stars and tags stay hidden.
+nonisolated enum RecipeRatingVisibility {
+    /// Cooked when someone has rated it, when a week it was planned in is over (a planned meal
+    /// counts as made unless someone says otherwise, decision 662), or when it's planned in a
+    /// week that has started and its night has passed.
+    static func hasBeenCooked(
+        myRating: RecipeRating?, householdRating: HouseholdRating, orderWeeks: [String], currentWeek: ISOWeek,
+        nightHasPassed: Bool
+    ) -> Bool {
+        if myRating != nil || householdRating.count > 0 || nightHasPassed { return true }
+        return orderWeeks.contains { week in ISOWeek(week).map { $0 < currentWeek } ?? false }
+    }
+}
+
 /// "4.5 ★ from 2" with a link to every member's rating, or "No Ratings Yet".
 struct HouseholdRatingSummary: View {
     let recipe: Recipe

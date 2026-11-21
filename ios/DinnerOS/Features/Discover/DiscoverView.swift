@@ -35,6 +35,8 @@ struct DiscoverView: View {
                 }
                 .padding(.vertical, DS.Space.l)
             }
+            // The fade into the solid band under the tab bar, as on the tab roots.
+            .tabBarEdge()
             .onChange(of: searchFocused) { _, focused in
                 guard focused else { return }
                 withAnimation { proxy.scrollTo(Self.browseAnchor, anchor: .top) }
@@ -45,6 +47,7 @@ struct DiscoverView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: DiscoverSectionRoute.self) { route in
             DiscoverSectionView(route: route)
+                .tabBarBacking(.top)
         }
         .refreshable { await discover.refresh() }
         .alert(
@@ -264,6 +267,26 @@ enum DiscoverLayout {
     static func margin(isWide: Bool) -> CGFloat { isWide ? DS.Space.xxl : DS.Space.l }
     /// One card width for every row, so no row's cards look smaller than another's.
     static func cardWidth(isWide: Bool) -> CGFloat { isWide ? 240 : 180 }
+    /// The gap between cards in a row.
+    static let rowSpacing: CGFloat = DS.Space.ml
+
+    /// A row's card width once the row's width is known: about `cardWidth(isWide:)`, adjusted
+    /// so a whole number of cards fills the space between the margins. At rest a row never
+    /// shows a card cut mid-title at the content's edge (Hark's review item 16: the Duo's cover
+    /// screen, whose content stops short of the screen's edge). Never narrower than
+    /// `gridMinimum`. `rowWidth` of zero (not measured yet) gives the plain width.
+    static func fittedCardWidth(rowWidth: CGFloat, isWide: Bool) -> CGFloat {
+        let base = cardWidth(isWide: isWide)
+        let available = rowWidth - margin(isWide: isWide) * 2
+        guard available > 0 else { return base }
+        var count = max(1, ((available + rowSpacing) / (base + rowSpacing)).rounded())
+        func width(_ count: CGFloat) -> CGFloat {
+            ((available - rowSpacing * (count - 1)) / count).rounded(.down)
+        }
+        while count > 1, width(count) < gridMinimum { count -= 1 }
+        return width(count)
+    }
+
     /// The grid's card widths (Browse All, See All).
     static let gridMinimum: CGFloat = 150
     static let gridMaximum: CGFloat = 260
@@ -290,10 +313,14 @@ struct DiscoverSectionRow: View {
     let report: (CatalogSummary) -> Void
 
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The row's width, measured on its scroll view (which doesn't depend on the cards in it).
+    @State private var rowWidth: CGFloat = 0
 
     /// Every row's cards are the same size: a bigger first row made Top Rated look smaller than
-    /// Chef's Picks.
-    private var cardWidth: CGFloat { DiscoverLayout.cardWidth(isWide: sizeClass == .regular) }
+    /// Chef's Picks. Whole cards fill the row (`DiscoverLayout.fittedCardWidth`).
+    private var cardWidth: CGFloat {
+        DiscoverLayout.fittedCardWidth(rowWidth: rowWidth, isWide: sizeClass == .regular)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
@@ -330,17 +357,28 @@ struct DiscoverSectionRow: View {
             .padding(.horizontal, margin)
 
             ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: DS.Space.ml) {
+                LazyHStack(alignment: .top, spacing: DiscoverLayout.rowSpacing) {
                     ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                         DiscoverCard(summary: item, width: cardWidth, canAdd: canAdd, report: report)
                     }
                 }
                 .scrollTargetLayout()
             }
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                rowWidth = $0
+            }
             .contentMargins(.horizontal, margin, for: .scrollContent)
             .scrollTargetBehavior(.viewAligned)
             .scrollIndicators(.hidden)
-            .carouselInSafeArea()
+            // Inside the safe area with both margins empty: whole cards fill the row between
+            // them, so no sliver of the next card shows at the edge (Hark's review item 16).
+            .mask {
+                Rectangle()
+                    .padding(.horizontal, margin)
+                    .padding(.vertical, -DS.Space.huge)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("DiscoverSection-\(section.id)")

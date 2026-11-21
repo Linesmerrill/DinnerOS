@@ -205,7 +205,7 @@ func (s *Service) pool(ctx context.Context, householdID string) ([]Result, error
 	if err != nil {
 		return nil, fmt.Errorf("scan catalog: %w", err)
 	}
-	entries = withoutHidden(shown(entries), s.hidden(ctx, householdID))
+	entries = withoutHidden(withoutTestRecipes(shown(entries)), s.hidden(ctx, householdID))
 	profile, bands := s.tasteOf(ctx, householdID)
 	ranked := rank(entries, profile, bands)
 	if err := s.mark(ctx, householdID, ranked); err != nil {

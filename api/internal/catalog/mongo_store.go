@@ -672,6 +672,9 @@ func narrowing(f Filter) bson.D {
 	if key := ingredients.NormalizeName(f.Ingredient); key != "" {
 		out = append(out, bson.E{Key: "ingredientKeys", Value: key})
 	}
+	if f.HideTestRecipes {
+		out = append(out, bson.E{Key: "name", Value: bson.D{{Key: "$not", Value: bson.Regex{Pattern: "^" + TestRecipePrefix}}}})
+	}
 	return out
 }
 

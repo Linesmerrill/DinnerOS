@@ -29,6 +29,23 @@ enum BuildChannel: Equatable, Sendable {
         return channel.showsBetaFeedback(testedTheBeta: comp.isBeta)
     }
 
+    /// Whether the Plus line may call a comp "on the house". Only a Debug build running as
+    /// `.development`: in a Release build (TestFlight or the App Store) it's compiled to false,
+    /// whatever the channel lookup says (build 122, review 2).
+    nonisolated static func showsCompWording(_ channel: BuildChannel?) -> Bool {
+        #if DEBUG
+            compWording(channel, debugBuild: true)
+        #else
+            compWording(channel, debugBuild: false)
+        #endif
+    }
+
+    /// `showsCompWording` with the build configuration passed in, so both are testable.
+    nonisolated static func compWording(_ channel: BuildChannel?, debugBuild: Bool) -> Bool {
+        guard debugBuild, case .development? = channel else { return false }
+        return true
+    }
+
     /// The channel from what StoreKit says, falling back to the receipt's file name when
     /// StoreKit can't answer (offline on first launch). Unknown counts as the App Store, so a
     /// reviewer never sees beta wording.

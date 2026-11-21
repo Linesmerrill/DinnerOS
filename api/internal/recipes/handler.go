@@ -325,6 +325,8 @@ func NewAmountResponse(a Amount) AmountResponse {
 // AmountText is an exact amount as the app shows it: "1 ½ cups" (never
 // "1 1/2"), "10 oz", "2 Tbsp", or the bare number for a count.
 func AmountText(q ingredients.Quantity, unit string) string {
+	// "18 ml" reads as the "1 Tbsp" a US kitchen measures (build 122 review).
+	q, unit, _ = ingredients.KitchenVolume(q, unit)
 	text := q.Format()
 	if u, err := ingredients.LookupUnit(unit); err == nil {
 		if label := u.Label(q); label != "" {

@@ -15,6 +15,9 @@ func TestSavedReasonsReadInTodaysWords(t *testing.T) {
 		// Today's words and other reasons are left as they are.
 		{"calendar", "Fits the 1 hr you have free Monday evening", "Fits the 1 hr you have free Monday evening"},
 		{"familiar", "A household regular (14 times)", "A household regular (14 times)"},
+		// Saved with straight apostrophes, read curly (build 122 review).
+		{"notRecently", "Haven't had it in 14 weeks", "Haven’t had it in 14 weeks"},
+		{"learnedTaste", "You've looked at it 3 times lately", "You’ve looked at it 3 times lately"},
 	}
 	for _, c := range cases {
 		got, keep := currentReason(Reason{Code: c.code, Text: c.old})

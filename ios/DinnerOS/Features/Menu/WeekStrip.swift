@@ -41,22 +41,28 @@ nonisolated enum WeekStripMetrics {
     static let margin: CGFloat = 16
     static let spacing: CGFloat = 8
 
-    /// Two-fifths of the row per week on a phone: about two and a half weeks in view, and more
-    /// of the row at the larger text sizes so the dates still fit.
+    /// Every screen shows a whole number of weeks that fills the row exactly, so lined up at
+    /// the leading edge no pill is cut off at either end: a phone's third week, two-fifths of
+    /// the screen wide, ran off the edge mid-date (Hark's review item 9, build 122), and an iPad
+    /// showed half a week at the left edge (build 121).
     ///
-    /// On a wide screen, about `widePillWidth`, so the extra room shows more weeks rather than
-    /// bigger pills, and sized so a whole number of pills fills the row exactly: lined up at
-    /// the leading edge, no pill is cut off at either end (an iPad showed half a week at the
-    /// left edge).
+    /// On a phone, two weeks (the selected one and the next), or one at the larger text sizes
+    /// so the dates still fit. On a wide screen, about `widePillWidth` each, so the extra room
+    /// shows more weeks rather than bigger pills.
     static func pillWidth(stripWidth: CGFloat, typeSize: DynamicTypeSize) -> CGFloat {
-        let share: CGFloat = typeSize >= .xxxLarge ? 0.62 : 0.4
-        let phone = max(140, ((stripWidth - margin * 2) * share).rounded())
-        guard isWide(stripWidth) else { return phone }
-        let target = widePillWidth + (typeSize >= .xxxLarge ? 80 : 0)
         let row = stripWidth - margin * 2
-        let count = max(1, ((row + spacing) / (target + spacing)).rounded(.down))
-        return ((row - spacing * (count - 1)) / count).rounded(.down)
+        let count: CGFloat
+        if isWide(stripWidth) {
+            let target = widePillWidth + (typeSize >= .xxxLarge ? 80 : 0)
+            count = max(1, ((row + spacing) / (target + spacing)).rounded(.down))
+        } else {
+            count = typeSize >= .xxxLarge ? 1 : 2
+        }
+        return max(minimumPillWidth, ((row - spacing * (count - 1)) / count).rounded(.down))
     }
+
+    /// The narrowest a pill gets, whatever the screen: room for "Nov 29 – Dec 5".
+    static let minimumPillWidth: CGFloat = 140
 
     /// The pill's small name line: "This Week", "Next Week", or "Last Week". Other weeks: on a
     /// phone, the month and year over the dates; on a wide screen, where the name sits beside
@@ -88,9 +94,6 @@ nonisolated enum WeekStripMetrics {
     static func fitsThreeWeeks(stripWidth: CGFloat, pillWidth: CGFloat) -> Bool {
         margin * 2 + pillWidth * 3 + spacing * 2 <= stripWidth
     }
-
-    /// How far the strip fades out at its trailing edge, where the next week runs off.
-    static let trailingFade: CGFloat = 32
 
     /// The height to reserve for the pills at `size`: what the three lines actually measure at
     /// the clamped text size, plus the pill's own spacing and padding.
@@ -343,17 +346,13 @@ struct WeekStrip: View {
                 stripWidth = $0
             }
             .scrollIndicators(.hidden)
-            // Inside the safe area, an empty leading margin, and a fade where the next week runs
-            // off the trailing edge, so no pill shows cut-off text (Hark's review item 21).
+            // Inside the safe area, with both margins empty: whole pills fill the row between
+            // them (`pillWidth`), so at rest no sliver of a week shows at either edge and no pill
+            // is cut mid-date (Hark's review items 21 and 9).
             .mask {
-                HStack(spacing: 0) {
-                    // The leading margin stays empty: no sliver of an earlier week in it.
-                    Color.clear.frame(width: WeekStripMetrics.margin)
-                    Rectangle()
-                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: WeekStripMetrics.trailingFade)
-                }
-                .padding(.vertical, -DS.Space.huge)
+                Rectangle()
+                    .padding(.horizontal, WeekStripMetrics.margin)
+                    .padding(.vertical, -DS.Space.huge)
             }
             .scrollPosition(id: $scrolledWeek, anchor: .leading)
             // The strip comes to rest on a pill's edge, so a drag never leaves half a week at

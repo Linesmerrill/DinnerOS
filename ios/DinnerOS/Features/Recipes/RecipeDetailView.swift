@@ -35,11 +35,21 @@ struct RecipeDetailView: View {
     @State private var instructions: RecipeInstructions?
     /// Opens the specialty ingredient setup, from a step that names something unchosen.
     @State private var showsSpecialtySetup = false
-    @State private var heroHeight: CGFloat = 320
+    @State private var heroWidth: CGFloat = 0
+    /// The scroll view's height: the photo never takes more than about 45% of it, so the name
+    /// shows whole above the bottom bar when the page opens (the Duo's short cover screen).
+    @State private var pageHeight: CGFloat = 0
     @State private var showsNavigationBar = false
-    /// The large title's bottom edge in the scroll view, so the bar's title shows only once the
-    /// large one has gone under the bar: one title at a time.
-    @State private var titleBottom: CGFloat = .infinity
+    /// Whether the large title has reached the bar's edge, so the bar shows the name on one line
+    /// instead: never a sliver of the large title with no name in the bar.
+    @State private var showsCompactTitle = false
+    /// The large title's and the tab picker's tops in the page's content, for the scroll's snap
+    /// points (`RecipeHeaderSnap`).
+    @State private var titleContentTop: CGFloat = 0
+    @State private var pickerContentTop: CGFloat = 0
+    /// The fade under the bar: full while the picker is far below it, none once the picker pins
+    /// flush under the bar (it has its own).
+    @State private var barFade: CGFloat = DS.Size.edgeFade
     /// The scroll view's own top safe area: where the bar ends.
     @State private var scrollTop: CGFloat = 0
     /// The one-line title's row under the bar's buttons.
@@ -124,6 +134,13 @@ struct RecipeDetailView: View {
                 VStack(alignment: .leading, spacing: DS.Space.xl) {
                     titleBlock
                         .recipeColumn()
+                        .onGeometryChange(for: RecipeDetailHeader.Anchor.self) { proxy in
+                            RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
+                        } action: { anchor in
+                            if titleContentTop != anchor.content { titleContentTop = anchor.content }
+                            let shows = anchor.visible < titleLine
+                            if shows != showsCompactTitle { showsCompactTitle = shows }
+                        }
                         .padding(.top, DS.Space.l)
                     if recipe?.editedAt != nil {
                         Label("You edited this recipe", systemImage: "pencil")
@@ -148,11 +165,21 @@ struct RecipeDetailView: View {
                             .recipeColumn()
                     }
                     RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
+                        // Where it would sit unpinned: the picker only moves its drawing.
+                        .onGeometryChange(for: RecipeDetailHeader.Anchor.self) { proxy in
+                            RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
+                        } action: { anchor in
+                            if pickerContentTop != anchor.content { pickerContentTop = anchor.content }
+                            let fade = RecipeDetailHeader.barFade(pickerTop: anchor.visible, pinLine: pinLine)
+                            if fade != barFade { barFade = fade }
+                        }
                         .stickyBelowTop(pinLine)
                         .zIndex(1)
+                    // Clear of the picker's fade, so the section's first row is whole once the
+                    // picker pins.
                     sectionContent
                         .recipeColumn()
-                        .padding(.top, -DS.Space.s)
+                        .padding(.top, DS.Size.edgeFade - DS.Space.xl)
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
@@ -169,9 +196,12 @@ struct RecipeDetailView: View {
                             .recipeColumn()
                     }
                 }
-                .padding(.bottom, DS.Space.xxl)
+                // Clear of the bottom bar's fade, so the last row comes out of it whole.
+                .padding(.bottom, DS.Size.edgeFade + DS.Space.s)
             }
+            .coordinateSpace(.named(RecipeDetailHeader.contentSpace))
         }
+        .scrollTargetBehavior(RecipeHeaderSnap(zone: snapZone))
         .ignoresSafeArea(edges: .top)
         // Where the bar ends, measured on the scroll view itself so the solid bar and the pinned
         // picker use the same line (on iPad the page's own inset left a 100 pt gap).
@@ -180,11 +210,16 @@ struct RecipeDetailView: View {
         } action: { top in
             scrollTop = top
         }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            pageHeight = height
+        }
         // Once the photo has scrolled away, a solid bar and, under the buttons, the recipe's
         // name on one line. Nothing that scrolls under it shows through or gets cut mid-line;
         // the pinned picker sits flush below it.
         .overlay(alignment: .top) {
-            if showsNavigationBar {
+            if showsBar {
                 VStack(spacing: 0) {
                     Color.clear.frame(height: barBottom)
                     Text(name)
@@ -199,6 +234,8 @@ struct RecipeDetailView: View {
                         .accessibilityHidden(!showsCompactTitle)
                 }
                 .background(DS.Colors.barBackground)
+                // The large title and the rows under it fade out at the bar's edge, never cut.
+                .dsEdgeFade(.bottom, height: barFade)
                 .ignoresSafeArea(edges: .top)
                 .allowsHitTesting(false)
             }
@@ -350,15 +387,13 @@ struct RecipeDetailView: View {
             .frame(width: geometry.size.width, height: geometry.size.height + stretch)
             .clipped()
             .overlay(alignment: .top) {
-                // A wash of the page's own background behind the status bar and the buttons, so
-                // the clock and the bar's glyphs (dark in light mode, light in dark) read over any
-                // photo.
-                LinearGradient(
-                    colors: [DS.Colors.background.opacity(RecipeDetailHeader.scrimOpacity), .clear],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: max(RecipeDetailHeader.scrimHeight, barBottom + DS.Space.huge))
-                .allowsHitTesting(false)
+                // A wash of the page's own background behind the status bar, the buttons and
+                // (on iPad) the tab bar, solid down to the bar's edge, so their glyphs reach
+                // 4.5:1 and the status bar takes one style over any photo. The Duo's cover screen
+                // has its buttons and clock in a column beside the page, so it needs none.
+                if !hasSideColumn {
+                    RecipeHeroScrim(barBottom: barBottom)
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 if let badge {
@@ -373,9 +408,13 @@ struct RecipeDetailView: View {
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { width in
-            // About 45% of the screen's height, from the width the screen gives us.
-            heroHeight = RecipeDetailHeader.heroHeight(width: width, isWide: isWideScreen)
+            heroWidth = width
         }
+    }
+
+    /// About 45% of the screen's height, from the width the screen gives us.
+    private var heroHeight: CGFloat {
+        RecipeDetailHeader.heroHeight(width: heroWidth, isWide: isWideScreen, pageHeight: pageHeight)
     }
 
     /// An iPad, or a phone on its side: the photo stops at `DS.Size.heroMaxHeight`.
@@ -393,9 +432,28 @@ struct RecipeDetailView: View {
         barBottom + compactTitleHeight
     }
 
-    /// The one-line title, once the large one has gone under the bar: one title at a time.
-    private var showsCompactTitle: Bool {
-        showsNavigationBar && titleBottom < pinLine
+    /// Where the large title starts to go under the bar: the bar's edge and its fade.
+    private var titleLine: CGFloat {
+        pinLine + DS.Size.edgeFade
+    }
+
+    /// iPhone Duo's cover screen: the bar's buttons and the clock sit in a column beside the
+    /// page, so nothing is drawn at the top until the name moves there.
+    private var hasSideColumn: Bool {
+        startCookingPlacement == .bottomRow
+    }
+
+    /// The solid bar over the page's top: once the photo has scrolled away from under the
+    /// buttons, and on the Duo only once it holds the name, so it's never an empty band.
+    private var showsBar: Bool {
+        showsNavigationBar && (!hasSideColumn || showsCompactTitle)
+    }
+
+    /// Where a scroll may come to rest between the large title and the pinned picker
+    /// (`RecipeHeaderSnap`).
+    private var snapZone: ClosedRange<CGFloat>? {
+        RecipeDetailHeader.snapZone(
+            titleTop: titleContentTop, pickerTop: pickerContentTop, pinLine: pinLine, fade: DS.Size.edgeFade)
     }
 
     /// "Autopilot pick" or "Make Again" from the card this recipe was opened from.
@@ -452,11 +510,6 @@ struct RecipeDetailView: View {
                 .font(DS.Typography.largeTitle)
                 .foregroundStyle(Color.primary)
                 .accessibilityAddTraits(.isHeader)
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.frame(in: .scrollView).maxY
-                } action: { bottom in
-                    titleBottom = bottom
-                }
             if let headline = recipe?.headline ?? summary.headline, !headline.isEmpty {
                 Text(headline)
                     .font(DS.Typography.subtitle)
@@ -478,10 +531,21 @@ struct RecipeDetailView: View {
                     }
                 }
             }
-            if let recipe {
+            // Ratings only for a meal that's been cooked (Hark's review item 12).
+            if let recipe, hasBeenCooked {
                 HouseholdRatingSummary(recipe: recipe)
             }
         }
+    }
+
+    /// Whether this recipe has been cooked, so the page asks how it was.
+    private var hasBeenCooked: Bool {
+        guard let recipe else { return false }
+        let weekHasStarted = plans.week <= plans.currentWeek
+        return RecipeRatingVisibility.hasBeenCooked(
+            myRating: recipe.myRating, householdRating: recipe.householdRating, orderWeeks: recipe.orderWeeks,
+            currentWeek: plans.currentWeek,
+            nightHasPassed: weekHasStarted && plannedEntries.contains { MealNight.hasPassed(date: $0.date) })
     }
 
     private var stats: [MenuFormat.Stat] {
@@ -539,7 +603,7 @@ struct RecipeDetailView: View {
                     customizations: customizations, selections: $selections, choose: choose(group:choice:),
                     pairings: pairings, summary: summary, reloadPairings: { await loadPairings() })
             case .description:
-                RecipeDescriptionSection(recipe: recipe)
+                RecipeDescriptionSection(recipe: recipe, hasBeenCooked: hasBeenCooked)
             case .ingredients:
                 RecipeIngredientsSection(
                     recipe: recipe, servings: $servings, instructions: instructions, canEdit: canLeaveOut,
@@ -806,16 +870,8 @@ struct RecipeDetailTabPicker: View {
         .padding(.vertical, DS.Space.sm)
         .frame(maxWidth: .infinity)
         .background(DS.Colors.barBackground)
-        .overlay(alignment: .bottom) { Divider() }
-        .overlay(alignment: .bottom) {
-            LinearGradient(
-                colors: [DS.Colors.barBackground, DS.Colors.barBackground.opacity(0)], startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: DS.Space.m)
-            .offset(y: DS.Space.m)
-            .allowsHitTesting(false)
-        }
+        // Rows fade out under the pinned picker instead of being cut by a hard line.
+        .dsEdgeFade(.bottom)
     }
 }
 
@@ -1009,16 +1065,66 @@ enum RecipeDetailHeader {
         max(0, top - minY)
     }
 
-    /// The background wash at the top of the photo, behind the status bar and the buttons.
-    static let scrimHeight: CGFloat = 140
-    static let scrimOpacity: Double = 0.8
+    /// The page's content, for the title's and the picker's places in it.
+    static let contentSpace = "RecipeDetailContent"
+
+    /// Where a view sits: in the scroll view as it's scrolled now, and in the page's content.
+    nonisolated struct Anchor: Equatable, Sendable {
+        var visible: CGFloat
+        var content: CGFloat
+
+        init(visible: CGFloat, content: CGFloat) {
+            self.visible = visible
+            self.content = content
+        }
+
+        init(_ proxy: GeometryProxy, in space: String) {
+            visible = proxy.frame(in: .scrollView).minY
+            content = proxy.frame(in: .named(space)).minY
+        }
+    }
+
+    /// The fade under the bar: the room between the bar's edge and the picker, up to
+    /// `DS.Size.edgeFade`, so it never draws over the picker as the picker comes up to pin.
+    static func barFade(pickerTop: CGFloat, pinLine: CGFloat) -> CGFloat {
+        min(max(pickerTop - pinLine, 0), DS.Size.edgeFade)
+    }
+
+    /// The scroll offsets between "the large title sits whole just under the bar" and "the
+    /// picker has pinned": a scroll that ends in there settles at one end, so the page never
+    /// rests on a sliver of the large title (Hark's review item 6). `nil` when there's no room.
+    static func snapZone(titleTop: CGFloat, pickerTop: CGFloat, pinLine: CGFloat, fade: CGFloat)
+        -> ClosedRange<CGFloat>?
+    {
+        let start = titleTop - pinLine - fade
+        let end = pickerTop - pinLine
+        guard start > 0, end > start else { return nil }
+        return start...end
+    }
+
+    /// Where a scroll ending at `target` settles: unchanged outside `zone`; inside it, at the end
+    /// it was heading for (`velocity` is positive scrolling down the page), or the nearer end
+    /// when it was let go without a flick.
+    nonisolated static func snapped(_ target: CGFloat, zone: ClosedRange<CGFloat>, velocity: CGFloat) -> CGFloat {
+        guard target > zone.lowerBound, target < zone.upperBound else { return target }
+        if velocity > 0 { return zone.upperBound }
+        if velocity < 0 { return zone.lowerBound }
+        return target - zone.lowerBound < zone.upperBound - target ? zone.lowerBound : zone.upperBound
+    }
 
     /// The photo's height for a screen `width` wide: about 45% of a phone's height, and never
     /// taller than `DS.Size.heroMaxHeight` on an iPad or a phone on its side.
-    static func heroHeight(width: CGFloat, isWide: Bool) -> CGFloat {
-        let natural = max(240, min(width * 1.1, 420))
+    ///
+    /// On a short screen it also stays within `heroPageShare` of the page's `pageHeight`, so the
+    /// recipe's name isn't left under the bottom bar when the page opens (build 122).
+    static func heroHeight(width: CGFloat, isWide: Bool, pageHeight: CGFloat = 0) -> CGFloat {
+        var natural = max(240, min(width * 1.1, 420))
+        if pageHeight > 0 { natural = max(240, min(natural, pageHeight * heroPageShare)) }
         return isWide ? min(natural, DS.Size.heroMaxHeight) : natural
     }
+
+    /// The most of the page's height the photo takes on a phone.
+    static let heroPageShare: CGFloat = 0.45
 
     /// Shows once the page is scrolled close to the end of the header, and hides again only
     /// after scrolling 40 points back, so it can't flicker at the line.
@@ -1036,5 +1142,41 @@ extension View {
             let minY = proxy.frame(in: .scrollView).minY
             return content.offset(y: RecipeDetailHeader.stickyOffset(minY: minY, top: top))
         }
+    }
+}
+
+/// Settles a scroll that ends between the large title and the pinned picker at one or the other
+/// (`RecipeDetailHeader.snapped`).
+nonisolated struct RecipeHeaderSnap: ScrollTargetBehavior {
+    let zone: ClosedRange<CGFloat>?
+
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        guard let zone else { return }
+        let reachable = context.contentSize.height - context.containerSize.height
+        // A page too short to pin the picker settles at its own end.
+        let clamped = zone.lowerBound...max(zone.lowerBound, min(zone.upperBound, reachable))
+        target.rect.origin.y = RecipeDetailHeader.snapped(
+            target.rect.origin.y, zone: clamped, velocity: context.velocity.dy)
+    }
+}
+
+/// The wash at the top of the recipe's photo: `DS.Colors.heroScrim`, solid to the bar's edge,
+/// then fading out over `DS.Space.huge`.
+private struct RecipeHeroScrim: View {
+    let barBottom: CGFloat
+
+    var body: some View {
+        let height = barBottom + DS.Space.huge
+        LinearGradient(
+            stops: [
+                .init(color: DS.Colors.heroScrim, location: 0),
+                .init(color: DS.Colors.heroScrim, location: height > 0 ? barBottom / height : 0),
+                .init(color: DS.Colors.heroScrim.opacity(0), location: 1),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .frame(height: height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

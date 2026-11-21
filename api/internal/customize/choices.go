@@ -29,7 +29,7 @@ const (
 	swapPrefix     = "swap:"
 	doubleSuffix   = ":double"
 	// BadgeDouble is the badge on doubled choices.
-	BadgeDouble = "Double portion"
+	BadgeDouble = "Double Portion"
 )
 
 // unnamedKeyPrefix keys lines without a catalog ID, as the planner does.

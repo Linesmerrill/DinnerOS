@@ -9622,7 +9622,7 @@ components:
           enum: [original, double, swap, swap_double]
         badge:
           type: [string, "null"]
-          description: "`Double portion` on doubled choices, otherwise null."
+          description: "`Double Portion` on doubled choices, otherwise null."
     SetMealCustomizationRequest:
       type: object
       required: [selections]

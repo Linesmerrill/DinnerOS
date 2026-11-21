@@ -36,7 +36,7 @@ struct ReviewReadinessTests {
     }
 
     /// "Plus is on the house. Thank you for testing." is tester copy: an App Store build, or a
-    /// build whose channel isn't known yet, says only "Plus is on the house." (build 121).
+    /// build whose channel isn't known yet, says only "You have DinnerOS Plus." (build 122).
     @Test func theTesterThanksNeverShowsInAnAppStoreBuild() throws {
         let beta = PlusComp(reason: "beta", since: .now, thanksTitle: "", thanksText: "")
         let qa = PlusComp(reason: "qa", since: .now, thanksTitle: "", thanksText: "")
@@ -54,11 +54,25 @@ struct ReviewReadinessTests {
             from: Data(
                 #"{"enabled":true,"active":true,"trial":false,"willRenew":false,"billingIssue":false,"comp":{"reason":"beta","since":"2026-11-13T23:00:00Z","thanksTitle":"t","thanksText":"t"}}"#
                     .utf8))
-        let thanks = BuildChannel.showsTesterThanks(.appStore, comp: status.comp)
-        let appStore = PlusText.status(status, testerThanks: thanks)
-        #expect(appStore == "Plus is on the house.")
-        #expect(PlusText.status(status) == "Plus is on the house.")
-        #expect(PlusText.status(status, testerThanks: true) == "Plus is on the house. Thank you for testing.")
+        // Debug builds (these tests) say it only on the development channel.
+        for channel in [BuildChannel.appStore, .testFlight, nil] {
+            #expect(PlusText.status(status, channel: channel) == "You have DinnerOS Plus.")
+        }
+        #expect(PlusText.status(status, channel: .development) == "Plus is on the house. Thank you for testing.")
+    }
+
+    /// "Plus is on the house." never reaches a Release build (TestFlight or the App Store),
+    /// whatever channel StoreKit reports, and in a Debug build only on the development channel
+    /// (build 122, review 2). The QA screenshots run as `.appStore`, so they never show it.
+    @Test func compWordingIsDebugAndDevelopmentOnly() {
+        for channel in [BuildChannel.appStore, .testFlight, .development, nil] {
+            #expect(!BuildChannel.compWording(channel, debugBuild: false))
+        }
+        #expect(BuildChannel.compWording(.development, debugBuild: true))
+        for channel in [BuildChannel.appStore, .testFlight, nil] {
+            #expect(!BuildChannel.compWording(channel, debugBuild: true))
+            #expect(!BuildChannel.showsCompWording(channel))
+        }
     }
 
     @Test func withoutStoreKitTheReceiptDecidesAndUnknownMeansTheAppStore() {

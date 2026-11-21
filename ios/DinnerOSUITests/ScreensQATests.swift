@@ -47,7 +47,7 @@ final class ScreensQATests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         shot(app, "First run › New Household")
         name.tap()
-        name.typeText("QA Kitchen")
+        name.typeText("Rivera Kitchen")
         app.buttons["Create"].tap()
 
         XCTAssertTrue(app.staticTexts["Welcome to DinnerOS"].waitForExistence(timeout: 15))
@@ -81,7 +81,8 @@ final class ScreensQATests: XCTestCase {
         // The paywall: this household has no Plus.
         app.buttons["Household"].firstMatch.tap()
         sleep(2)
-        shot(app, "Household › new household")
+        // No shot: it's the Household tab the sweep keeps, with another name on it (Hark's
+        // review, build 122 item 13a: under 1% of the screen differs).
         let plus = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plus'")).firstMatch
         if plus.waitForExistence(timeout: 5) {
             plus.tap()
@@ -160,7 +161,7 @@ final class ScreensQATests: XCTestCase {
                 }
             }
             guard let card else {
-                snap(app, "Recipe page › \(kind): search result missing (\(mode))")
+                snap(app, "Recipe page › \(kind): search result missing (\(mode))", unique: false)
                 problems.append("Recipe page › \(kind): \(recipe) isn’t in All Meals")
                 continue
             }
@@ -169,8 +170,7 @@ final class ScreensQATests: XCTestCase {
             shot(app, "Recipe page › \(kind)")
             // Each tab, picked by its accessibility identifier and checked selected (build 121: a
             // tap by label landed on Customize, Description or a rating tag), then scrolled so its
-            // content is on screen. A shot that's the same as the one before it didn't scroll.
-            var lastShot = Data()
+            // content is on screen. A copy of a screen already kept fails in `keep`.
             for (tab, id) in [("Ingredients", "recipeTab.ingredients"), ("Nutrition", "recipeTab.nutrition")] {
                 let byID = app.descendants(matching: .any)[id].firstMatch
                 let picker = byID.exists ? byID : app.buttons[tab].firstMatch
@@ -186,7 +186,7 @@ final class ScreensQATests: XCTestCase {
                     picker.isSelected || (picker.value as? String)?.contains("elected") == true,
                     "Recipe page › \(kind): the \(tab) tab isn’t selected")
                 scrollContent(app)
-                lastShot = shot(app, "Recipe page › \(kind) › \(tab)")
+                shot(app, "Recipe page › \(kind) › \(tab)")
                 scrollToTop(app)
             }
             let more = app.buttons["More"].firstMatch
@@ -210,29 +210,49 @@ final class ScreensQATests: XCTestCase {
                 .firstMatch
             if firstTab.exists {
                 reveal(firstTab, in: app)
-                firstTab.tap()
-                sleep(1)
+                // Checked selected, as the tabs above: a tap that missed left the Nutrition tab
+                // up, and its scrolled shot was the Nutrition shot again (build 122, large-dark).
+                for _ in 0..<3 where !Self.isSelected(firstTab) {
+                    firstTab.tap()
+                    sleep(1)
+                }
+                if !Self.isSelected(firstTab) {
+                    problems.append("Recipe page › \(kind): its first tab isn’t selected")
+                }
             }
             scrollToTop(app)
-            let top = snap(app, "debug top before scrolling", settle: false)
+            let top = capture(app)
             scrollContent(app)
-            var scrolled = shot(app, "Recipe page › \(kind) › scrolled")
-            // The same as the page's top: it fits on the screen (a short recipe on an iPad), so
-            // there's nothing to scroll. The same as the last tab's shot: a copy, not a scroll.
-            if scrolled == top || scrolled == lastShot {
+            var scrolled = capture(app)
+            if scrolled.isSameScreen(as: top) {
                 scrollContent(app)
-                scrolled = shot(app, "Recipe page › \(kind) › scrolled")
-                if scrolled == lastShot {
-                    problems.append("Recipe page › \(kind) › scrolled: the page didn’t scroll")
-                }
+                scrolled = capture(app)
+            }
+            // A page that fits on the screen (a short recipe on an iPad) has nothing to scroll: no
+            // shot, rather than a copy of the top (Hark's review, build 122 item 13c).
+            if keepIfScrolled(scrolled, "Recipe page › \(kind) › scrolled (\(mode))", before: top) {
+                checkToolbar(app, "Recipe page › \(kind) › scrolled")
             }
             // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
             // to the top in case it ever scrolls away again.
             let startCooking = app.buttons["Start Cooking"].firstMatch
             for _ in 0..<3 where !startCooking.exists { pullDown(app) }
             startCooking.tap()
-            sleep(2)
-            shot(app, "Cooking › \(kind)")
+            // The walkthrough shows the first time cooking opens: a screen of its own, then Skip,
+            // so the cooking shot is this recipe's cooking screen (Hark's review, build 122 13b).
+            if app.staticTexts["Welcome to Cooking with DinnerOS"].waitForExistence(timeout: 4) {
+                waitStill(app)
+                shot(app, "Cooking › Welcome")
+                app.buttons["Skip"].firstMatch.tap()
+                _ = waitGone(app.staticTexts["Welcome to Cooking with DinnerOS"], timeout: 5)
+            }
+            if openedCooking(recipe, in: app) {
+                waitStill(app)
+                shot(app, "Cooking › \(kind)")
+            } else {
+                snap(app, "Cooking › \(kind): not the cooking screen (\(mode))", unique: false)
+                problems.append("Cooking › \(kind): Start Cooking didn’t open \(recipe)’s cooking screen")
+            }
             if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) { app.buttons["Done"].firstMatch.tap() }
             sleep(1)
             back(app)
@@ -254,6 +274,7 @@ final class ScreensQATests: XCTestCase {
         app = launchSignedIn()
         app.buttons["Menu"].firstMatch.tap()
         sleep(1)
+        menuByDay(app)
         let bell = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'notification'")).firstMatch
         if bell.exists {
             bell.tap()
@@ -268,9 +289,20 @@ final class ScreensQATests: XCTestCase {
         waitStill(app)
         shot(app, "Menu › ⋯ menu")
         if app.buttons["Run Setup Again"].exists {
+            // The sheet is up only once its way out shows: a tap the menu swallowed left the menu
+            // on screen, and the shot was the ⋯ menu again (build 122, ipadL-dark).
+            let later = app.buttons["Set Up Later"].firstMatch
             app.buttons["Run Setup Again"].tap()
-            sleep(2)
-            shot(app, "Autopilot setup")
+            if !later.waitForExistence(timeout: 6), app.buttons["Run Setup Again"].exists {
+                app.buttons["Run Setup Again"].tap()
+            }
+            if later.waitForExistence(timeout: 6) {
+                waitStill(app)
+                shot(app, "Autopilot setup")
+            } else {
+                snap(app, "Autopilot setup: didn’t open (\(mode))", unique: false)
+                problems.append("Menu: Run Setup Again didn’t open Autopilot setup")
+            }
             back(app)
         } else {
             pullDown(app)
@@ -288,24 +320,7 @@ final class ScreensQATests: XCTestCase {
             back(app)
         }
 
-        // Pantry: add an item.
-        app.buttons["Pantry"].firstMatch.tap()
-        sleep(1)
-        let add = app.buttons["Add an Item"].exists ? app.buttons["Add an Item"] : app.buttons["Add"].firstMatch
-        if add.exists {
-            add.tap()
-            sleep(1)
-            // With the keyboard up on Amount, so the shot shows the form with a keyboard (Hark's
-            // review: it must not cover the field).
-            let amount = app.descendants(matching: .any)["pantry.amount"].firstMatch
-            let field = amount.exists ? amount : app.textFields.element(boundBy: 1)
-            if field.waitForExistence(timeout: 3) {
-                field.tap()
-                _ = app.keyboards.firstMatch.waitForExistence(timeout: 3)
-            }
-            shot(app, "Pantry › Add an Item")
-            back(app)
-        }
+        pantryAddAnItem(app)
 
         // Household: inviting someone.
         app.buttons["Household"].firstMatch.tap()
@@ -328,14 +343,88 @@ final class ScreensQATests: XCTestCase {
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
     }
 
+    /// The Menu switched to By Day, kept only when it isn't the Menu again (Hark's review, build
+    /// 122 item 13d), then switched back.
+    @MainActor
+    private func menuByDay(_ app: XCUIApplication) {
+        let segment = app.segmentedControls.buttons["By Day"].firstMatch
+        let byDay = segment.waitForExistence(timeout: 5) ? segment : app.buttons["By Day"].firstMatch
+        guard byDay.exists else {
+            problems.append("Menu: no By Day switch")
+            return
+        }
+        let menu = capture(app)
+        byDay.tap()
+        sleep(2)
+        let shown = capture(app)
+        if shown.isSameScreen(as: menu) {
+            snap(app, "Menu › By Day: still the Menu (\(mode))", unique: false)
+            problems.append("Menu › By Day: switching to By Day left the Menu on screen")
+        } else {
+            keep(shown, "Menu › By Day (\(mode))")
+            checkToolbar(app, "Menu › By Day")
+        }
+        let back = app.segmentedControls.buttons["Menu"].firstMatch
+        if back.exists { back.tap() }
+        sleep(1)
+    }
+
+    /// Pantry › Add Item, with the keyboard up and the Amount field focused (Hark's review, build
+    /// 121 item 3: the keyboard mustn't cover it). The + button is "Add Item"; "Add an Item" is
+    /// the empty pantry's button (build 122 looked only for that, and the shot went missing).
+    @MainActor
+    private func pantryAddAnItem(_ app: XCUIApplication) {
+        app.buttons["Pantry"].firstMatch.tap()
+        let add = app.buttons["Add Item"].firstMatch
+        let addEmpty = app.buttons["Add an Item"].firstMatch
+        _ = add.waitForExistence(timeout: 8)
+        let button = add.exists ? add : addEmpty
+        guard button.exists else {
+            snap(app, "Pantry: no Add Item button (\(mode))", unique: false)
+            problems.append("Pantry: no Add Item button")
+            return
+        }
+        button.tap()
+        let amount = app.textFields["pantry.amount"].firstMatch
+        guard amount.waitForExistence(timeout: 5) else {
+            problems.append("Pantry › Add an Item: no Amount field")
+            back(app)
+            return
+        }
+        // The sheet starts on the name field: move to Amount.
+        amount.tap()
+        let keyboard = app.keyboards.firstMatch
+        let focused = { (amount.value(forKey: "hasKeyboardFocus") as? Bool) == true }
+        for _ in 0..<3 where !(keyboard.exists && focused()) {
+            sleep(1)
+            if !focused() { amount.tap() }
+        }
+        guard keyboard.waitForExistence(timeout: 3), focused() else {
+            snap(app, "Pantry › Add an Item: Amount not focused (\(mode))", unique: false)
+            problems.append("Pantry › Add an Item: the keyboard isn’t up on Amount")
+            back(app)
+            return
+        }
+        waitStill(app)
+        if amount.frame.maxY > keyboard.frame.minY {
+            problems.append("Pantry › Add an Item: the keyboard covers the Amount field")
+        }
+        shot(app, "Pantry › Add an Item")
+        back(app)
+    }
+
     // MARK: Helpers
 
+    /// A segment or tab that says it's the selected one.
     @MainActor
-    @discardableResult
-    private func shot(_ app: XCUIApplication, _ name: String) -> Data {
-        let data = snap(app, "\(name) (\(mode))")
-        defer { checkToolbar(app, name) }
-        return data
+    private static func isSelected(_ element: XCUIElement) -> Bool {
+        element.isSelected || (element.value as? String)?.contains("elected") == true
+    }
+
+    @MainActor
+    private func shot(_ app: XCUIApplication, _ name: String) {
+        snap(app, "\(name) (\(mode))")
+        checkToolbar(app, name)
     }
 
     @MainActor

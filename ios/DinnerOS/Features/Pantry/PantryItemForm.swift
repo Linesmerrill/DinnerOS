@@ -410,6 +410,12 @@ struct PantryAddSheet: View {
             }
             .keyboardDismissal()
             .dsReadableForm()
+            // Rows fade out under the sheet's bar instead of being cut by it, and the keyboard's
+            // Done sits on a strip of its own, never on the field being typed in (build 122).
+            // With the form's own top margin, this clears the fade so Ingredient starts whole.
+            .contentMargins(.top, DS.Space.l, for: .scrollContent)
+            .dsTopBarEdge(color: DS.Colors.groupedBackground)
+            .dsKeyboardBar(color: DS.Colors.groupedBackground)
             .navigationTitle("Add to Pantry")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

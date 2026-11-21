@@ -19,6 +19,9 @@ struct PantryView: View {
     @State private var editMode: EditMode = .inactive
     @State private var selection: Set<String> = []
     @State private var sheet: Sheet?
+    /// The More card, and where its button is (`DSMenuPopover`).
+    @State private var showsMore = false
+    @State private var moreAnchor: CGRect = .zero
     @State private var isWorking = false
     @State private var actionError: String?
     @State private var bulkOutcome: PantryBulkOutcome?
@@ -61,6 +64,7 @@ struct PantryView: View {
         content
             .tabBarEdge()
             .tabHeader(String(localized: "Pantry"))
+            .dsMenuPopover(isPresented: $showsMore, anchor: moreAnchor, items: moreItems)
             // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.
             .toolbar { toolbar }
             .notificationsToolbar(isHidden: isSelecting)
@@ -168,6 +172,8 @@ struct PantryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // A centered column on an iPad, like the Shop list (Hark's review item 16).
+        .dsReadableForm()
         .searchable(text: $searchText, prompt: "Search pantry")
         .overlay {
             if visibleSections.isEmpty {
@@ -304,16 +310,21 @@ struct PantryView: View {
         }
         if !isSelecting && pantry.phase == .loaded {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu("More", systemImage: TabHeader.moreSystemImage) {
-                    Button("Low-Stock Alerts…", systemImage: "gauge.with.dots.needle.33percent") {
-                        sheet = .lowStockSettings
-                    }
-                    Button("Specialty Ingredients…", systemImage: "takeoutbag.and.cup.and.straw") {
-                        sheet = .specialties
-                    }
-                }
+                // An opaque card, like the recipe page's (`DSMenuPopover`, Hark's review item 11).
+                DSMenuButton(isPresented: $showsMore, anchor: $moreAnchor)
             }
         }
+    }
+
+    private var moreItems: [DSMenuItem] {
+        [
+            DSMenuItem(
+                title: String(localized: "Low-Stock Alerts…"), systemImage: "gauge.with.dots.needle.33percent"
+            ) { sheet = .lowStockSettings },
+            DSMenuItem(
+                title: String(localized: "Specialty Ingredients…"), systemImage: "takeoutbag.and.cup.and.straw"
+            ) { sheet = .specialties },
+        ]
     }
 
     private func bulkButton(_ status: PantryStatus) -> some View {

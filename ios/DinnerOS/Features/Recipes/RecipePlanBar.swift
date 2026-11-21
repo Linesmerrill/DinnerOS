@@ -64,7 +64,7 @@ struct RecipePlanBar: View {
 
     var body: some View {
         if let layout {
-            DSBottomBar {
+            DSBottomBar(showsDivider: false) {
                 if layout.cookRowOnTop, let startCooking {
                     cookButton(startCooking)
                 }
@@ -78,17 +78,9 @@ struct RecipePlanBar: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            // Rows fade into the bar instead of being cut mid-line at its edge.
-            .overlay(alignment: .top) {
-                LinearGradient(
-                    colors: [DS.Colors.barBackground.opacity(0), DS.Colors.barBackground],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: DS.Space.l)
-                .offset(y: -DS.Space.l)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
+            // Rows fade into the bar instead of being cut mid-line at its edge; the page keeps
+            // the same height clear at its end, so its last row comes fully out of the fade.
+            .dsEdgeFade(.top)
             .dsSheet(isPresented: $isChoosingWeek) {
                 AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
             }

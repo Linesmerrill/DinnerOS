@@ -32,20 +32,19 @@ struct ShopSetupView: View {
                     "Instacart finds each item for you. Pick a store and check out there, then tell \(configuration.displayName) what you ordered so the pantry stays current."
             )
         }
+        // Short, so the store fields fit above the tab bar on an iPhone SE (Hark's review item 8).
         return String(
             localized:
-                "Choose a \(storeName) product for each ingredient once. Then send the week’s list to your \(storeName) cart, check out there, and tell \(configuration.displayName) what you ordered so the pantry stays current."
+                "Pick a \(storeName) product for each ingredient once. Then send each week’s list to your \(storeName) cart and check out there."
         )
     }
 
     var body: some View {
         Form {
             Section {
+                // No icon above the title: the store's fields come first on a small iPhone, with
+                // their help text in full (Hark's review item 8).
                 VStack(spacing: DS.Space.m) {
-                    Image(systemName: "cart.badge.plus")
-                        .font(DS.Typography.largeTitle)
-                        .foregroundStyle(DS.Colors.accent)
-                        .accessibilityHidden(true)
                     Text("Send This Week’s List to \(storeName)")
                         .font(DS.Typography.title)
                     Text(introText)
@@ -63,6 +62,16 @@ struct ShopSetupView: View {
                 }
             }
             ShopStoreFields(storeNumber: $storeNumber, choice: $choice, isEditable: shopping.canEdit)
+            // Right under the store's fields, in the form rather than pinned over it: a pinned
+            // bar sat on the Store Number field or its help text on every screen size (Hark's
+            // review item 8, build 122), and a form scrolled to its end still opened that way.
+            if shopping.canEdit {
+                Section {
+                    useStoreButton
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
             if !shopping.canEdit {
                 Section {
                     Text("Ask a household admin or member to set up shopping.")
@@ -79,23 +88,6 @@ struct ShopSetupView: View {
             }
         }
         .dsReadableForm()
-        // Use Walmart stays above the tab bar, and the last field scrolls clear of both bars
-        // (build 121).
-        // The bar's inset is its own height, so the Store Number field and its helper text
-        // scroll fully above it.
-        .dsBottomBar(isShown: shopping.canEdit, background: DS.Colors.groupedBackground) {
-            Button(action: save) {
-                Group {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text("Use \(storeName)")
-                    }
-                }
-            }
-            .buttonStyle(.dsPrimary(fullWidth: true))
-            .disabled(!canSave)
-        }
         .dsSheet(isPresented: $isRequestingStore) {
             // Already on the setup screen, so an available store just closes the sheet.
             RequestStoreSheet(openStoreSetup: {})
@@ -103,6 +95,20 @@ struct ShopSetupView: View {
         .task {
             await shopping.loadCatalog()
         }
+    }
+
+    private var useStoreButton: some View {
+        Button(action: save) {
+            Group {
+                if isSaving {
+                    ProgressView()
+                } else {
+                    Text("Use \(storeName)")
+                }
+            }
+        }
+        .buttonStyle(.dsPrimary(fullWidth: true))
+        .disabled(!canSave)
     }
 
     private func save() {

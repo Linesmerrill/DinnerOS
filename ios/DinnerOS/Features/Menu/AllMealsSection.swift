@@ -9,6 +9,11 @@ struct AllMealsSection: View {
     /// The width of the scroll view the section sits in, from a parent that lives as long as the
     /// screen (the Menu). `nil` where the section isn't inside a lazy stack and can measure itself.
     var containerWidth: CGFloat?
+    /// Whether the keyboard is up, from the screen that owns the scroll view. With the search
+    /// open, results then show as short rows that fit above it (`MenuRecipeCard.Size.searchRow`).
+    var isKeyboardUp = false
+    /// Told when the search field opens or closes.
+    var onSearchChange: (Bool) -> Void = { _ in }
 
     @Environment(MenuStore.self) private var menu
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -70,6 +75,9 @@ struct AllMealsSection: View {
         .task(id: list.week) {
             await list.load()
         }
+        .onChange(of: isSearching) { _, searching in
+            onSearchChange(searching)
+        }
     }
 
     @ViewBuilder
@@ -110,7 +118,16 @@ struct AllMealsSection: View {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
-                    if sizeClass == .regular {
+                    if AllMealsLayout.showsSearchRows(isSearching: isSearching, isKeyboardUp: isKeyboardUp) {
+                        // Typing a search: a whole card is taller than the room between the
+                        // chips and the keyboard on most screens, so each result is one short
+                        // row with its name, time and Add in view (Hark's review item 7).
+                        ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
+                            MenuCardRow(
+                                index: index, card: card, size: .searchRow, canAdd: canAdd, photoURLs: urls,
+                                photoWidth: DS.Size.searchThumbnail)
+                        }
+                    } else if sizeClass == .regular {
                         let cardsWidth = AllMealsLayout.cardsWidth(
                             containerWidth: containerWidth, measured: measuredWidth)
                         let columns = AllMealsLayout.columnCount(width: cardsWidth)
@@ -205,6 +222,11 @@ nonisolated enum AllMealsLayout {
     static func cardsWidth(containerWidth: CGFloat?, measured: CGFloat) -> CGFloat {
         guard let containerWidth, containerWidth > 0 else { return measured }
         return max(0, containerWidth - horizontalMargin * 2)
+    }
+
+    /// Whether results show as short rows: only while the search is open and the keyboard up.
+    static func showsSearchRows(isSearching: Bool, isKeyboardUp: Bool) -> Bool {
+        isSearching && isKeyboardUp
     }
 
     /// Whether the section shows its title: not while the search field is open.

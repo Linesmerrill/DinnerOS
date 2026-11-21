@@ -105,7 +105,7 @@ struct AutopilotFormattingTests {
     @Test func slotDatesAndCookTimes() {
         #expect(AutopilotFormat.dayTitle(date: "2026-09-20", day: .sun, locale: locale) == "Sunday, Sep 20")
         #expect(AutopilotFormat.dayTitle(date: "not a date", day: .sun, locale: locale) == "Sunday")
-        #expect(AutopilotFormat.cookTime(nil) == "Time unknown")
-        #expect(AutopilotFormat.cookTime(0) == "Time unknown")
+        #expect(AutopilotFormat.cookTime(nil) == "Time Unknown")
+        #expect(AutopilotFormat.cookTime(0) == "Time Unknown")
     }
 }

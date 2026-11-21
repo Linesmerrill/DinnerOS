@@ -94,9 +94,9 @@ func TestChoices(t *testing.T) {
 		protein      string
 	}{
 		{KindOriginal, "Ground Pork", "", 1, "ground-pork"},
-		{KindDouble, "2x Ground Pork", "Double portion", 2, "ground-pork"},
+		{KindDouble, "2x Ground Pork", "Double Portion", 2, "ground-pork"},
 		{KindSwap, "Ground Beef", "", 1, "ground-beef"},
-		{KindSwapDouble, "2x Ground Beef", "Double portion", 2, "ground-beef"},
+		{KindSwapDouble, "2x Ground Beef", "Double Portion", 2, "ground-beef"},
 	} {
 		c := choices[i]
 		if c.Kind != want.kind || c.Label != want.label || c.Badge != want.badge || c.Factor.Cmp(big.NewRat(want.factor, 1)) != 0 || c.Protein.ID != want.protein {
