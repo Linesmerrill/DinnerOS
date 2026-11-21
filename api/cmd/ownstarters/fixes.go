@@ -29,6 +29,8 @@ type Fix struct {
 	// one the recipe has, with no amounts, keeps that line as it is.
 	Ingredients []FixIngredient `json:"ingredients,omitempty"`
 	Steps       []string        `json:"steps"`
+	// Cuisines, when given, replace the recipe's cuisine tags.
+	Cuisines []string `json:"cuisines,omitempty"`
 }
 
 // FixIngredient is one line of a fix.
@@ -69,7 +71,25 @@ type fixTarget struct {
 	HouseholdID bson.ObjectID `bson:"householdId"`
 	Name        string        `bson:"name"`
 	Steps       []step        `bson:"steps"`
+	Cuisines    []string      `bson:"cuisines"`
 	EditedAt    any           `bson:"editedAt"`
+}
+
+// sameCuisines reports whether the recipe already has the fix's cuisines (or
+// the fix leaves them alone).
+func sameCuisines(have, want []string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	if len(have) != len(want) {
+		return false
+	}
+	for i := range want {
+		if have[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // editIngredients is the fix's list in the shape recipes.Service.Edit takes.
@@ -143,7 +163,7 @@ func applyFixes(ctx context.Context, db *mongo.Database, starter bson.ObjectID, 
 		}
 		for _, t := range all {
 			isStarter := t.ID == orig.ID
-			if sameText(t.Steps, f.Steps) && (f.Name == "" || t.Name == f.Name) {
+			if sameText(t.Steps, f.Steps) && (f.Name == "" || t.Name == f.Name) && sameCuisines(t.Cuisines, f.Cuisines) {
 				continue // already fixed
 			}
 			if !isStarter && !sameSteps(t.Steps, orig.Steps) {
@@ -217,6 +237,9 @@ func fixOne(ctx context.Context, coll *mongo.Collection, svc *recipes.Service, t
 	set := bson.D{{Key: "headline", Value: f.Headline}, {Key: "description", Value: f.Description}, {Key: "steps", Value: fixedSteps(f.Steps)}}
 	if f.Name != "" {
 		set = append(set, bson.E{Key: "name", Value: f.Name})
+	}
+	if len(f.Cuisines) > 0 {
+		set = append(set, bson.E{Key: "cuisines", Value: f.Cuisines})
 	}
 	unset := bson.D{{Key: "sourceUrl", Value: ""}}
 	// A starter fix isn't the household's own edit.

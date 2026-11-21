@@ -40,6 +40,7 @@
   {
     "catalogKey": "hellofresh:6772ce50d8e11bf886853877",
     "name": "One-Pan Cheesy Chicken Enchiladas",
+    "cuisines": ["Mexican"],
     "headline": "with Salsa Verde, Mexican Cheese Blend & Hot Sauce Crema",
     "description": "Chicken thighs and blistered green pepper simmered with salsa verde, rolled in warm tortillas, covered in Mexican cheese, broiled until bubbly and drizzled with a spicy sour cream crema.",
     "steps": [

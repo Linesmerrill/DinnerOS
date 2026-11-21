@@ -80,7 +80,7 @@ func TestIntegrationFixes(t *testing.T) {
 	}
 	fixes := []Fix{{CatalogKey: key, Name: "Snap Pea Bowls", Headline: "new", Description: "With snap peas.",
 		Ingredients: []FixIngredient{{Name: "Snap Peas", Amounts: []FixAmount{{Servings: 2, Quantity: "4", Unit: "oz"}}}},
-		Steps:       []string{"Cook the snap peas."}}}
+		Steps:       []string{"Cook the snap peas."}, Cuisines: []string{"Mexican"}}}
 	raw, _ := json.Marshal(fixes)
 	path := filepath.Join(t.TempDir(), "fixes.json")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
@@ -102,8 +102,9 @@ func TestIntegrationFixes(t *testing.T) {
 		Ingredients []struct {
 			Name string `bson:"name"`
 		} `bson:"ingredients"`
-		Steps    []step `bson:"steps"`
-		EditedAt any    `bson:"editedAt"`
+		Steps    []step   `bson:"steps"`
+		Cuisines []string `bson:"cuisines"`
+		EditedAt any      `bson:"editedAt"`
 	}
 	for _, hh := range []bson.ObjectID{starter, home} {
 		var r rec
@@ -111,13 +112,14 @@ func TestIntegrationFixes(t *testing.T) {
 			t.Fatal(err)
 		}
 		if r.Name != "Snap Pea Bowls" || r.Headline != "new" || r.SourceURL != "" || len(r.Ingredients) != 1 ||
-			r.Ingredients[0].Name != "Snap Peas" || r.Steps[0].Text != "Cook the snap peas." || r.EditedAt != nil {
+			r.Ingredients[0].Name != "Snap Peas" || r.Steps[0].Text != "Cook the snap peas." || r.EditedAt != nil ||
+			len(r.Cuisines) != 1 || r.Cuisines[0] != "Mexican" {
 			t.Errorf("fixed recipe = %+v", r)
 		}
 	}
 	var e rec
 	_ = db.Collection("recipes").FindOne(ctx, bson.D{{Key: "householdId", Value: edited}}).Decode(&e)
-	if e.Steps[0].Text != "My way." || e.Name != "Bowls" {
+	if e.Steps[0].Text != "My way." || e.Name != "Bowls" || len(e.Cuisines) != 0 {
 		t.Errorf("an edited copy changed: %+v", e)
 	}
 	// Running it again changes nothing.
@@ -127,5 +129,22 @@ func TestIntegrationFixes(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "would update text of 0 starters and 0 copies") {
 		t.Errorf("second run = %q", out.String())
+	}
+}
+
+func TestSameCuisines(t *testing.T) {
+	cases := []struct {
+		have, want []string
+		same       bool
+	}{
+		{[]string{"North American"}, nil, true},
+		{[]string{"Mexican"}, []string{"Mexican"}, true},
+		{[]string{"North American"}, []string{"Mexican"}, false},
+		{nil, []string{"Mexican"}, false},
+	}
+	for _, c := range cases {
+		if got := sameCuisines(c.have, c.want); got != c.same {
+			t.Errorf("sameCuisines(%v, %v) = %v", c.have, c.want, got)
+		}
 	}
 }
