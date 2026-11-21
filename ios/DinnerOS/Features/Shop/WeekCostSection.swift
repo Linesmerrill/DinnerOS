@@ -96,6 +96,7 @@ struct WeekCostSheetView: View {
     let sheet: WeekCostSheet
 
     @Environment(ShoppingStore.self) private var shopping
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         switch sheet {
@@ -105,6 +106,13 @@ struct WeekCostSheetView: View {
         case .mealKit:
             NavigationStack {
                 HouseholdSettingsForm()
+                    // Its own way out: on the Duo's cover screen it fills the screen, with no
+                    // sheet to swipe down (build 122).
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { dismiss() }
+                        }
+                    }
             }
         }
     }

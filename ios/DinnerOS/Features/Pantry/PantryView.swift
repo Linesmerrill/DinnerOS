@@ -80,7 +80,7 @@ struct PantryView: View {
                     sheet = nil
                 }
             }
-            .sheet(item: $sheet) { sheet in
+            .dsSheet(item: $sheet) { sheet in
                 switch sheet {
                 case .add: PantryAddSheet()
                 case .edit(let item): PantryEditSheet(item: item)

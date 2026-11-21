@@ -26,7 +26,7 @@ struct PlusInviteView: View {
                     withAnimation { proxy.scrollTo(Self.progressID, anchor: .top) }
                 }
         }
-        .sheet(isPresented: $isChangingCode) {
+        .dsSheet(isPresented: $isChangingCode) {
             NavigationStack { ChangeCodeView() }
         }
         .navigationTitle("Give a Free Month")

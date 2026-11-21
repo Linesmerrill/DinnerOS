@@ -206,7 +206,7 @@ struct HouseholdView: View {
             }
         }
         .refreshable { await households.load() }
-        .sheet(item: $sheet, content: sheetContent)
+        .dsSheet(item: $sheet, content: sheetContent)
         .modifier(confirmations)
         .alert(
             "Couldn’t Complete That",

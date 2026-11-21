@@ -20,6 +20,14 @@
         /// The subject the screen starts on, and the one every earlier build used.
         static let defaultSubject = "dev-simulator"
 
+        /// The subject the screen starts on: `QA_DEV_SUBJECT` when a UI test gives its own person
+        /// (build 122: tests that change recipes use a household of their own), else the default.
+        static var startingSubject: String {
+            let given = ProcessInfo.processInfo.environment["QA_DEV_SUBJECT"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return given.flatMap { $0.isEmpty ? nil : $0 } ?? defaultSubject
+        }
+
         /// Offered in the picker. Free text covers everything else.
         static let suggestedSubjects = [defaultSubject, "rachel-sim", "charlie-sim"]
 

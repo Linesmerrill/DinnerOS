@@ -9,9 +9,97 @@
 # screenshot tests use) with a realistic 14 items across the pantry, fridge and freezer, when that
 # pantry is empty. Re-running it adds nothing.
 #   scripts/qa-starter-library.sh http://localhost:8082 pantry
+#
+# With "tidy" it clears what earlier UI test runs left in that same household, so the screenshot
+# tests photograph one steady household (build 122: three Chicken Bowls on the Menu, 41 meals in
+# one shot and 42 in the next). Tests that add, plan or delete now use households of their own
+# (ios/DinnerOSUITests/QAOwnHousehold.swift); this removes what older runs left: recipes named
+# "QA ...", recipes typed by hand other than the screenshots' own ("Sip Fudge", or the names in
+# QA_KEEP_RECIPES, separated by "|"), second copies of a recipe (same name), a recipe planned twice
+# in one week, and "QA Companion" companions. The meal-kit recipes the household was seeded with
+# stay. Only things over 30 minutes old go, so a test running now keeps its own. Re-running it
+# removes nothing new.
+#   scripts/qa-starter-library.sh http://localhost:8082 tidy
 set -euo pipefail
 BASE=${1:-http://localhost:8082}
 case $BASE in http://localhost:* | http://127.0.0.1:*) ;; *) echo "local APIs only" >&2; exit 1 ;; esac
+
+if [ "${2:-}" = tidy ]; then
+    token=$(curl -sf -X POST "$BASE/api/v1/auth/dev" -H 'Content-Type: application/json' \
+        -d '{"subject":"dev-simulator"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+    BASE=$BASE TOKEN=$token python3 - <<'TIDY'
+import datetime, json, os, urllib.request
+
+base, token = os.environ["BASE"] + "/api/v1", os.environ["TOKEN"]
+
+def call(method, path):
+    req = urllib.request.Request(base + path, method=method, headers={"Authorization": "Bearer " + token})
+    with urllib.request.urlopen(req) as r:
+        body = r.read()
+    return json.loads(body) if body else {}
+
+def age_minutes(object_id):
+    made = datetime.datetime.fromtimestamp(int(object_id[:8], 16), datetime.timezone.utc)
+    return (datetime.datetime.now(datetime.timezone.utc) - made).total_seconds() / 60
+
+items = call("GET", "/households").get("items") or []
+if not items:
+    raise SystemExit("dev-simulator has no household yet: sign in once in the app")
+household = items[0]["household"]
+hid = household["id"]
+
+# Weeks a run could have planned in: four back to four ahead, by the household's first day.
+order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+index = order.index(household.get("weekStartsOn") or "mon")
+offset = index - 7 if index > 3 else index
+today = datetime.date.today()
+weeks = sorted({"%04d-W%02d" % (today + datetime.timedelta(days=d - offset)).isocalendar()[:2] for d in range(-28, 36)})
+
+planned, removed_entries = set(), 0
+for week in weeks:
+    plan = call("GET", f"/households/{hid}/plans/{week}")
+    seen = set()
+    for e in sorted(plan.get("entries") or [], key=lambda e: e.get("addedAt") or ""):
+        recipe = e.get("recipe") or {}
+        rid, name = recipe.get("id", ""), recipe.get("name", "")
+        old = age_minutes(e["id"]) > 30
+        if old and (rid in seen or name.startswith("QA ")):
+            call("DELETE", f"/households/{hid}/plans/{week}/entries/{e['id']}")
+            removed_entries += 1
+            continue
+        seen.add(rid)
+        planned.add(rid)
+
+recipes, cursor = [], ""
+while True:
+    page = call("GET", f"/households/{hid}/recipes?limit=100" + (f"&cursor={cursor}" if cursor else ""))
+    recipes += page.get("items") or []
+    cursor = page.get("nextCursor") or ""
+    if not cursor:
+        break
+keep = set(filter(None, os.environ.get("QA_KEEP_RECIPES", "Sip Fudge").split("|")))
+removed_recipes, names = 0, {}
+for r in sorted(recipes, key=lambda r: r["id"]):
+    first = names.setdefault(r["name"], r["id"])
+    if r["id"] in planned or age_minutes(r["id"]) <= 30:
+        continue
+    extra = first != r["id"] or r["name"].startswith("QA ")
+    # Typed by hand, pasted or read from a page: left by a person or a test, not the seed.
+    if not extra and r["name"] not in keep:
+        extra = call("GET", f"/households/{hid}/recipes/{r['id']}").get("source") in ("manual", "user")
+    if extra:
+        call("DELETE", f"/households/{hid}/recipes/{r['id']}")
+        removed_recipes += 1
+
+removed_companions = 0
+for c in call("GET", f"/households/{hid}/companions").get("items") or []:
+    if c.get("name", "").startswith("QA Companion ") and age_minutes(c["id"]) > 30:
+        call("DELETE", f"/households/{hid}/companions/{c['id']}")
+        removed_companions += 1
+print(f"tidied {hid}: {removed_recipes} recipes, {removed_entries} planned meals, {removed_companions} companions removed")
+TIDY
+    exit 0
+fi
 
 if [ "${2:-}" = pantry ]; then
     token=$(curl -sf -X POST "$BASE/api/v1/auth/dev" -H 'Content-Type: application/json' \

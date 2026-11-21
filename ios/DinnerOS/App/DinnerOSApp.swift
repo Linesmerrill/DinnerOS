@@ -142,6 +142,8 @@ struct DinnerOSApp: App {
                         dependencies.households.handleOpenURL(url)
                     }
                 }
+                // Last, so every `.dsSheet` above knows whether this is the Duo's cover screen.
+                .dsSheetStyleReader()
         }
     }
 }

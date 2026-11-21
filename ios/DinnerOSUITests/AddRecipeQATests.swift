@@ -9,7 +9,8 @@ final class AddRecipeQATests: XCTestCase {
 
     @MainActor
     func testAddARecipeByHandEndToEnd() throws {
-        let app = launchSignedIn()
+        // A household of its own: this test adds and deletes recipes (QAOwnHousehold).
+        let app = launchSignedIn(as: try ownHousehold("addrecipe"))
         let name = "QA No Bake Cookies \(Int.random(in: 100...999))"
 
         // Open Add a Recipe and write it myself.

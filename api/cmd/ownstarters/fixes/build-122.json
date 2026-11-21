@@ -1,0 +1,54 @@
+[
+  {
+    "catalogKey": "hellofresh:67cfde97ceae9743fd559e2a",
+    "headline": "Sticky ginger chicken with snap peas and peppers over rice",
+    "description": "Chicken, snap peas and red pepper in a sticky, sweet, gently spicy ginger sauce over rice, topped with scallions, sesame seeds and chili flakes.",
+    "ingredients": [
+      {"name": "Ponzu Sauce"},
+      {"name": "Chopped Chicken Breast"},
+      {"name": "Sweet Thai Chili Sauce"},
+      {"name": "Jasmine Rice"},
+      {"name": "Korean Chili Flakes"},
+      {"name": "Umami Ginger Sauce"},
+      {"name": "Sesame Oil"},
+      {"name": "Garlic"},
+      {"name": "Snap Peas", "amounts": [
+        {"servings": 2, "quantity": "4", "unit": "oz"}, {"servings": 3, "quantity": "6", "unit": "oz"},
+        {"servings": 4, "quantity": "8", "unit": "oz"}, {"servings": 6, "quantity": "12", "unit": "oz"}]},
+      {"name": "Red Bell Pepper", "amounts": [
+        {"servings": 2, "quantity": "1", "unit": "count"}, {"servings": 3, "quantity": "3/2", "unit": "count"},
+        {"servings": 4, "quantity": "2", "unit": "count"}, {"servings": 6, "quantity": "3", "unit": "count"}]},
+      {"name": "Scallions", "amounts": [
+        {"servings": 2, "quantity": "2", "unit": "count"}, {"servings": 3, "quantity": "3", "unit": "count"},
+        {"servings": 4, "quantity": "4", "unit": "count"}, {"servings": 6, "quantity": "6", "unit": "count"}]},
+      {"name": "Sesame Seeds", "amounts": [
+        {"servings": 2, "quantity": "1", "unit": "tsp"}, {"servings": 3, "quantity": "3/2", "unit": "tsp"},
+        {"servings": 4, "quantity": "2", "unit": "tsp"}, {"servings": 6, "quantity": "3", "unit": "tsp"}]},
+      {"name": "Salt"},
+      {"name": "Cooking Oil"},
+      {"name": "Black Pepper"}
+    ],
+    "steps": [
+      "Rinse and pat dry the produce. Put the rice, 1¼ cups water (2 cups for 4 servings) and a pinch of salt in a small pot on medium-high. Once it boils, turn the heat to low, cover and cook until the rice is tender, 15-18 minutes. Keep it covered off the heat until serving.",
+      "Trim the snap peas. Core the bell pepper and cut it into thin strips. Trim and thinly slice the scallions, keeping the dark green tops apart. Peel and mince the garlic.",
+      "Dry the chicken with paper towels and cut it into bite-size pieces if needed. Season with salt and pepper. Brown it in a large pan with a drizzle of oil on medium-high, stirring now and then, until cooked through, 5-7 minutes. Move it to a plate.",
+      "Add another drizzle of oil to the pan with the snap peas, bell pepper and scallion whites. Cook, stirring, until crisp-tender, 3-4 minutes. Add the garlic and cook 30 seconds more.",
+      "Put the chicken back in the pan and turn the heat to medium. Add the ginger sauce, chili sauce and ponzu and stir until thick and sticky, 1-2 minutes. Stir in the sesame oil. Add salt and pepper as needed.",
+      "Fluff the rice with a fork. Spoon it into bowls and top with the chicken and vegetables. Sprinkle with the scallion greens, sesame seeds and chili flakes to taste."
+    ]
+  },
+  {
+    "catalogKey": "hellofresh:6772ce50d8e11bf886853877",
+    "name": "One-Pan Cheesy Chicken Enchiladas",
+    "headline": "with Salsa Verde, Mexican Cheese Blend & Hot Sauce Crema",
+    "description": "Chicken thighs and blistered green pepper simmered with salsa verde, rolled in warm tortillas, covered in Mexican cheese, broiled until bubbly and drizzled with a spicy sour cream crema.",
+    "steps": [
+      "Move a rack to the top of the oven and heat the broiler to high. Rinse and dry the produce. Halve and core the green pepper, then slice it crosswise into thin strips.",
+      "In a small bowl, stir the sour cream with hot sauce to taste. Stir in water 1 tsp at a time until it drizzles. Add salt and pepper.",
+      "Heat a drizzle of oil in a large, ovenproof pan on medium-high. Add the green pepper with a pinch of salt and pepper and cook, stirring, until soft and lightly blistered, 5-7 minutes.",
+      "Add another drizzle of oil and the chicken. Season with the Southwest spice, salt and pepper. Cook, stirring now and then, until browned and cooked through, 5-7 minutes. Stir in a quarter of the salsa verde, then move the filling to a bowl and wipe out the pan.",
+      "Spoon some filling onto one half of each tortilla and roll them up. Set them seam side down in the pan (for 4 servings, or if the pan isn’t ovenproof, use a 9-by-13-inch baking dish). Spoon the rest of the salsa verde over them and cover with the cheese.",
+      "Broil until the cheese is browned and bubbly, 3-4 minutes, watching closely so it doesn’t burn. Drizzle with the crema and serve."
+    ]
+  }
+]

@@ -56,7 +56,7 @@ struct ShopView: View {
             // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.
             .toolbar { toolbar }
             .notificationsToolbar()
-            .sheet(isPresented: $isMatchingProducts) {
+            .dsSheet(isPresented: $isMatchingProducts) {
                 MatchProductsSheet()
             }
             .navigationDestination(isPresented: $isShowingSavedProducts) {
@@ -67,7 +67,7 @@ struct ShopView: View {
                     YourUsualsView(week: shopping.week, householdID: household.id, canEdit: canEditPlan)
                 }
             }
-            .sheet(isPresented: $isAddingItem) {
+            .dsSheet(isPresented: $isAddingItem) {
                 if let household {
                     AddItemSheet(week: shopping.week, householdID: household.id)
                 }
@@ -85,20 +85,20 @@ struct ShopView: View {
             .onChange(of: usuals?.revision) {
                 Task { await shopping.groceryDidChange() }
             }
-            .sheet(item: $choice) { choice in
+            .dsSheet(item: $choice) { choice in
                 ChooseProductSheet(choice: choice)
             }
-            .sheet(isPresented: $isEditingStore) {
+            .dsSheet(isPresented: $isEditingStore) {
                 ShopStoreSettingsSheet()
             }
-            .sheet(item: $weekCostSheet) { sheet in
+            .dsSheet(item: $weekCostSheet) { sheet in
                 WeekCostSheetView(sheet: sheet)
             }
-            .sheet(isPresented: $isShowingPrep) {
+            .dsSheet(isPresented: $isShowingPrep) {
                 PrepSessionSheet()
             }
             // Held at the screen root like the others: the bar that opens it comes and goes.
-            .sheet(
+            .dsSheet(
                 isPresented: Binding(
                     get: { shopping.isReviewingProducts },
                     set: { if !$0 { shopping.dismissProductReview() } })
@@ -301,13 +301,13 @@ private struct ShopWeekList: View {
         .task(id: "\(shopping.householdID ?? "")|\(shopping.week)") {
             await shopping.loadWeekCost()
         }
-        .sheet(isPresented: $isRequestingStore) {
+        .dsSheet(isPresented: $isRequestingStore) {
             RequestStoreSheet(openStoreSetup: openStoreSetup)
         }
-        .sheet(isPresented: $showsLeftOut) {
+        .dsSheet(isPresented: $showsLeftOut) {
             SkippedIngredientsSheet(week: shopping.week)
         }
-        .sheet(item: $sameItemTarget) { target in
+        .dsSheet(item: $sameItemTarget) { target in
             SameItemSheet(target: target, choices: sameItemChoices(for: target)) { choice in
                 link(target, to: choice)
             }
@@ -379,7 +379,7 @@ private struct ShopWeekList: View {
                     } label: {
                         Label("Use Your Walmart Products", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .sheet(isPresented: $isMatchingFromWalmart) {
+                    .dsSheet(isPresented: $isMatchingFromWalmart) {
                         MatchProductsSheet()
                     }
                 }

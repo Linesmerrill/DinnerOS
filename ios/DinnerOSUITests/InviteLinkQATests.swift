@@ -29,11 +29,9 @@ final class InviteLinkQATests: XCTestCase {
 
     @MainActor
     func testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist() throws {
-        // 1. The sharer's code.
-        let app = launchSignedIn()
-        signOut(app)
-        signIn(app, subject: "dev-simulator")
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn’t get to the Menu")
+        // 1. The sharer's code. The sharer has a household of its own (QAOwnHousehold), so the
+        // invite doesn't land in the shared test household the screenshots show (build 122).
+        let app = launchSignedIn(as: try ownHousehold("linksharer"))
         openGiveAFreeMonth(app)
         let code = readCode(app)
         XCTAssertFalse(code.isEmpty, "Couldn’t read the sharer’s code")
@@ -138,19 +136,12 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(progress.waitForExistence(timeout: 10), "Give a Free Month lost the checklist")
         XCTAssertFalse(app.staticTexts["Got a Code?"].exists, "Got a Code still shows after using a code")
         snap(app, "Give a Free Month, checklist (\(mode))")
-
-        // Leave the sharer signed in for the next test.
-        signOut(app)
-        signIn(app, subject: "dev-simulator")
     }
 
     @MainActor
     func testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds() throws {
-        // Your own code.
-        let app = launchSignedIn()
-        signOut(app)
-        signIn(app, subject: "dev-simulator")
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30))
+        // Your own code, in a household of its own (QAOwnHousehold).
+        let app = launchSignedIn(as: try ownHousehold("owncode"))
         openGiveAFreeMonth(app)
         let code = readCode(app)
         app.buttons["Menu"].firstMatch.tap()

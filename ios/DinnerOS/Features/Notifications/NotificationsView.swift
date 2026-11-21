@@ -320,7 +320,7 @@ private struct NotificationsToolbarModifier: ViewModifier {
                     }
                 }
             }
-            .sheet(
+            .dsSheet(
                 isPresented: $isPresented,
                 onDismiss: {
                     Task { await notifications.refreshUnreadCount() }

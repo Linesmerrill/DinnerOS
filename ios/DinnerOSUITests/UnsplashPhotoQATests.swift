@@ -13,8 +13,9 @@ final class UnsplashPhotoQATests: XCTestCase {
     }
 
     @MainActor
-    func testSearchPickAndCreditAPhoto() {
-        let app = launchSignedIn()
+    func testSearchPickAndCreditAPhoto() throws {
+        // A household of its own: this test adds and deletes recipes (QAOwnHousehold).
+        let app = launchSignedIn(as: try ownHousehold("unsplash"))
         let name = "QA Garden Salad \(Int.random(in: 100...999))"
         let credit = "Photo by QA Photographer on Unsplash"
 

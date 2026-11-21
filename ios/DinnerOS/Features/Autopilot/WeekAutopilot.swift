@@ -404,7 +404,7 @@ struct WeekAutopilotModifier: ViewModifier {
             .navigationDestination(isPresented: $flow.isShowingPreferences) {
                 AutopilotPreferencesView()
             }
-            .sheet(item: $flow.sheet) { sheet in
+            .dsSheet(item: $flow.sheet) { sheet in
                 switch sheet {
                 case .onboarding:
                     AutopilotOnboardingView(onPlanWeek: { flow.planCurrentWeek(autopilot: autopilot, plans: plans) })

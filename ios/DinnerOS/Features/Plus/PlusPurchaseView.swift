@@ -277,17 +277,17 @@ struct PlusPurchasePresenter: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var plus = plus
         content
-            .sheet(isPresented: $plus.showsPurchase, onDismiss: plus.showPendingCelebration) {
+            .dsSheet(isPresented: $plus.showsPurchase, onDismiss: plus.showPendingCelebration) {
                 PlusPurchaseView()
             }
             .fullScreenCover(item: $plus.celebration) { celebration in
                 PlusThanksView(celebration: celebration)
             }
-            .sheet(item: $plus.compThanks) { comp in
+            .dsSheet(item: $plus.compThanks) { comp in
                 PlusCompThanksView(comp: comp)
             }
             // A new household's code is in: what's left for the free month.
-            .sheet(isPresented: $plus.showsChecklist) {
+            .dsSheet(isPresented: $plus.showsChecklist) {
                 ReferralChecklistSheet()
             }
             // "Step 2 done" and "Your free month is unlocked": over everything, sheets

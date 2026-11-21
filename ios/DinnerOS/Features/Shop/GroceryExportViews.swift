@@ -310,7 +310,7 @@ struct GroceryExportPrompts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(
+            .dsSheet(
                 item: Binding(
                     get: { controller.explainer },
                     set: { controller.explainer = $0 })
@@ -319,7 +319,7 @@ struct GroceryExportPrompts: ViewModifier {
                     Task { await controller.confirmExplainer(pending) }
                 }
             }
-            .sheet(
+            .dsSheet(
                 item: Binding(
                     get: { controller.listAppGuide },
                     set: { controller.listAppGuide = $0 })

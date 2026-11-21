@@ -89,7 +89,7 @@ struct RecipePlanBar: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
-            .sheet(isPresented: $isChoosingWeek) {
+            .dsSheet(isPresented: $isChoosingWeek) {
                 AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
             }
         }

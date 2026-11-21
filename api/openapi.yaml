@@ -13032,6 +13032,10 @@ components:
           minimum: 0
           description: Only on cuisines, tags, and proteins. Main-meal recipes that carry the value; a cuisine counts for its regions too, so a region's count is how many recipes a like of it matches. 0 for starter values.
           example: 12
+        imageUrl:
+          type: string
+          format: uri
+          description: Only on cuisines with recipes. The photo of one of the household's recipes of that cuisine, never one an earlier cuisine in the list shows, for the onboarding grid. Omitted when none of its recipes has a photo.
     AutopilotLimits:
       type: object
       description: Validation bounds, for input limits in the app.

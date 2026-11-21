@@ -96,7 +96,7 @@ private struct RecipePhotoPickers: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(isPresented: $model.showsChooser) {
+            .dsSheet(isPresented: $model.showsChooser) {
                 RecipePhotoChooser(
                     initialQuery: searchText, searchAvailable: source.searchAvailable, search: source.search,
                     onPicked: { image in

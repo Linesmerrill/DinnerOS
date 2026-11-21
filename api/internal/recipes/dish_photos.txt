@@ -1,0 +1,5 @@
+# Ingredient photos from a meal kit's own catalog that show a cooked dish
+# rather than the ingredient (build 122, Hark's review items 12 and 15). One
+# photo ID per line, the start of the photo's file name; # starts a comment.
+# A line here makes the ingredient show the app's one fallback instead.
+63e2899e70f16f525809c3b0 # diced chicken thighs, cooked in a skillet

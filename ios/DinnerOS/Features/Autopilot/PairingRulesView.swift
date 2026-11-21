@@ -101,7 +101,7 @@ struct PairingRulesView: View {
                 rules = saved
             }
         }
-        .sheet(item: $editing) { rule in
+        .dsSheet(item: $editing) { rule in
             PairingRuleEditor(rule: rule, vocabulary: autopilot.vocabulary, limits: limits) { edited in
                 apply(edited)
             }

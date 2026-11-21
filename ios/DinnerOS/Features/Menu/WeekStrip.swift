@@ -68,12 +68,25 @@ nonisolated enum WeekStripMetrics {
         return week.year == current.year ? nil : String(week.year)
     }
 
-    /// The week the strip lines up at its leading edge to show `selected`: the week before it,
-    /// so the selected week is second, whole, with last week beside it. One start position on
-    /// every screen and in every mode (Hark's review, build 121); the household's first week has
+    /// The week the strip lines up at its leading edge to show `selected`, so the selected week
+    /// and the week after it are both whole and tappable (Hark's review item 21, and a small
+    /// iPhone whose Next Week started past the screen's edge, build 122).
+    ///
+    /// Where three weeks fit (an iPad), the week before leads, so last week shows too. Where they
+    /// don't (a phone, the Duo's cover screen), the selected week leads: with last week first,
+    /// next week started a pill too far right and was cut off. The household's first week has
     /// nothing before it and leads itself.
-    static func scrollTarget(selected: ISOWeek, available: [ISOWeek]) -> ISOWeek {
-        available.contains(selected.previous) ? selected.previous : selected
+    static func scrollTarget(
+        selected: ISOWeek, available: [ISOWeek], stripWidth: CGFloat, pillWidth: CGFloat
+    ) -> ISOWeek {
+        guard available.contains(selected.previous), fitsThreeWeeks(stripWidth: stripWidth, pillWidth: pillWidth)
+        else { return selected }
+        return selected.previous
+    }
+
+    /// Whether three whole pills fit between the strip's margins.
+    static func fitsThreeWeeks(stripWidth: CGFloat, pillWidth: CGFloat) -> Bool {
+        margin * 2 + pillWidth * 3 + spacing * 2 <= stripWidth
     }
 
     /// How far the strip fades out at its trailing edge, where the next week runs off.
@@ -190,6 +203,8 @@ struct WeekStrip: View {
     /// lazy row never reached, so this is what says a scroll landed.
     @State private var isSelectedVisible = false
     @State private var stripWidth: CGFloat = 402
+    /// Bumped by the This Week button to bring the strip back to its start position.
+    @State private var lineUpRequests = 0
     /// Scrolls the selected week into view after the strip appears; cancelled when it goes.
     @State private var settleTask: Task<Void, Never>?
 
@@ -211,16 +226,11 @@ struct WeekStrip: View {
         .padding(.vertical, isWide ? DS.Space.xs : DS.Space.s)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
-        .onChange(of: plans.week, initial: true) { _, week in
-            scrollTo(week)
-        }
         .onChange(of: isExpanded) { _, expanded in
-            if expanded {
-                scrollTo(plans.week)
-            } else {
+            if !expanded {
                 // There is no horizontal ScrollView while collapsed, and so nothing holding the
                 // position. Forget it, so the next strip to appear asks for the selected week
-                // instead of starting at its first pill.
+                // instead of starting at its first pill. The pills line up when they appear.
                 scrolledWeek = nil
             }
         }
@@ -284,16 +294,24 @@ struct WeekStrip: View {
                 // reported the week as on screen. A strip is a few dozen small pills.
                 HStack(spacing: WeekStripMetrics.spacing) {
                     pastButton
-                    if menu.canLoadEarlierWeeks {
+                        // Every pill is laid out now, so the start of the row on screen is what
+                        // asks for earlier weeks, the way appearing in the lazy row did.
+                        .onScrollVisibilityChange(threshold: 0.1) { isEarlierVisible = $0 }
+                        .task(
+                            id:
+                                "\(menu.oldestWeek)-\(canLoadEarlier)-\(hasDragged)-\(isEarlierVisible)-\(menu.canLoadEarlierWeeks)"
+                        ) {
+                            guard canLoadEarlier, hasDragged, isEarlierVisible, menu.canLoadEarlierWeeks else { return }
+                            await menu.loadEarlierWeeks()
+                        }
+                    // Only while loading, which only starts once the person has dragged to the
+                    // start. A spinner that was always there arrived with the week list, after
+                    // the strip had lined up, and pushed every pill 52 points right: a small
+                    // iPhone and the Duo opened with next week cut off, and an iPad on the week
+                    // two before (build 122).
+                    if menu.isLoadingEarlierWeeks {
                         ProgressView()
                             .frame(width: DS.Size.tapTarget)
-                            // Every pill is laid out now, so "on screen" is what asks for more,
-                            // the way appearing in the lazy row did.
-                            .onScrollVisibilityChange(threshold: 0.1) { isEarlierVisible = $0 }
-                            .task(id: "\(menu.oldestWeek)-\(canLoadEarlier)-\(hasDragged)-\(isEarlierVisible)") {
-                                guard canLoadEarlier, hasDragged, isEarlierVisible else { return }
-                                await menu.loadEarlierWeeks()
-                            }
                             .accessibilityLabel("Loading earlier weeks")
                     }
                     ForEach(menu.stripItems) { item in
@@ -383,6 +401,14 @@ struct WeekStrip: View {
             .onChange(of: menu.stripItems.map(\.week)) { _, _ in
                 if !hasDragged { lineUp(proxy) }
             }
+            // Another week picked (a pill, This Week, or another screen): back to the start
+            // position, through the reader like every other line-up.
+            .onChange(of: plans.week) { _, _ in
+                lineUp(proxy, animated: true)
+            }
+            .onChange(of: lineUpRequests) { _, _ in
+                lineUp(proxy, animated: true)
+            }
             // Scrolling a strip that has gone (collapsed, or the menu changed view) crashed in
             // SwiftUI's scrollTo: stop trying once it leaves the screen.
             .onDisappear {
@@ -428,7 +454,8 @@ struct WeekStrip: View {
     private var thisWeekButton: some View {
         Button {
             select(menu.currentWeek)
-            scrollTo(menu.currentWeek)
+            // Also when this week is already the selected one and the strip was dragged away.
+            lineUpRequests += 1
         } label: {
             HStack(spacing: DS.Space.xxs) {
                 if isThisWeekBehind { Image(systemName: "chevron.backward") }
@@ -462,29 +489,24 @@ struct WeekStrip: View {
         Task { await plans.show(week: week) }
     }
 
-    /// Puts the strip at its one start position: the week before the selected one at the leading
-    /// edge (`WeekStripMetrics.scrollTarget`).
-    private func lineUp(_ proxy: ScrollViewProxy) {
-        let target = scrollTarget(for: plans.week)
-        scrolledWeek = target.description
-        proxy.scrollTo(target.description, anchor: .leading)
+    /// Puts the strip at its one start position (`WeekStripMetrics.scrollTarget`).
+    private func lineUp(_ proxy: ScrollViewProxy, animated: Bool = false) {
+        let target = scrollTarget(for: plans.week).description
+        let move = {
+            scrolledWeek = target
+            proxy.scrollTo(target, anchor: .leading)
+        }
+        if animated && !reduceMotion {
+            withAnimation(.easeInOut(duration: 0.25), move)
+        } else {
+            move()
+        }
     }
 
     /// The pill the strip lines up on to show `week` (`WeekStripMetrics.scrollTarget`).
     private func scrollTarget(for week: ISOWeek) -> ISOWeek {
-        WeekStripMetrics.scrollTarget(selected: week, available: menu.stripItems.map(\.week))
-    }
-
-    private func scrollTo(_ week: ISOWeek) {
-        let target = scrollTarget(for: week).description
-        guard scrolledWeek != target else { return }
-        if reduceMotion {
-            scrolledWeek = target
-        } else {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                scrolledWeek = target
-            }
-        }
+        WeekStripMetrics.scrollTarget(
+            selected: week, available: menu.stripItems.map(\.week), stripWidth: stripWidth, pillWidth: pillWidth)
     }
 }
 

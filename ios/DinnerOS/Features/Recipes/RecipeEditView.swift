@@ -111,8 +111,8 @@ struct RecipeEditView: View {
                     useFound: { try await library.useFoundPhoto($0) },
                     searchAvailable: library.photoSearchAvailable)
             )
-            .sheet(item: $ingredientSheet) { target in ingredientEditor(target) }
-            .sheet(item: $reorder) { target in reorderSheet(target) }
+            .dsSheet(item: $ingredientSheet) { target in ingredientEditor(target) }
+            .dsSheet(item: $reorder) { target in reorderSheet(target) }
             .task { await library.loadIngredientNames() }
             .task { await library.loadPhotoSearchStatus() }
             .task { await library.loadCuisineOptions() }

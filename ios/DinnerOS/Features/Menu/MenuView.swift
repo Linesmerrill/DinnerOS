@@ -180,7 +180,7 @@ struct MenuView: View {
                 await menuLoad
                 await recipes
             }
-            .sheet(isPresented: $isAddingRecipes) {
+            .dsSheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
             }
             // The free month checklist's Plan a Dinner.
@@ -201,7 +201,7 @@ struct MenuView: View {
             }
             // "Try Something Similar" is offered from a meal's long-press menu in both Your
             // Meals and By Day, so the sheet belongs to the screen that holds both.
-            .sheet(item: swapTarget) { target in
+            .dsSheet(item: swapTarget) { target in
                 MealSwapSheet(target: target)
             }
             .alert("Couldn’t Swap That Meal", isPresented: swapError) {
@@ -218,7 +218,7 @@ struct MenuView: View {
                 showWaitingChecklist()
             }
             .modifier(MenuAutoRefresh())
-            .sheet(isPresented: $showsWelcome, onDismiss: finishWelcome) {
+            .dsSheet(isPresented: $showsWelcome, onDismiss: finishWelcome) {
                 WelcomeView(
                     hasRecipes: !library.items.isEmpty,
                     canAddRecipe: households.access?.can(.recipesEdit) == true
@@ -262,6 +262,7 @@ struct MenuView: View {
             menuContent
         case .byDay:
             WeekView(flow: autopilotFlow)
+                .tabBarEdge()
         }
     }
 
@@ -447,18 +448,14 @@ struct MenuView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        // On an iPad the principal item gets a row of its own under the tab bar; leading puts the
-        // switch in the tab bar's row instead, a whole row back for the meals.
-        ToolbarItem(placement: horizontalSizeClass == .regular ? .topBarLeading : .principal) {
-            // The system's segmented control. A custom SwiftUI capsule control here (build 121,
-            // Hark's review item 7) froze the Menu on an iPad in landscape (QA, build 122).
-            Picker("View", selection: $mode) {
-                ForEach(MenuMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .fixedSize()
+        if #available(iOS 26.0, *) {
+            modeItem
+                // The segmented control draws its own capsule. The bar's glass around it drew a
+                // second, offset outline and clipped the thumb flat on an iPad (Hark's review
+                // item 7, builds 121 and 122).
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            modeItem
         }
         // Every tab's toolbar reads bell, +, more (`TabHeader`): the bell comes from
         // `.notificationsToolbar()`, outside this one.
@@ -473,6 +470,22 @@ struct MenuView: View {
                 .disabled(!canAddMeals)
             }
             weekMenu
+        }
+    }
+
+    /// Menu or By Day. On an iPad the principal item gets a row of its own under the tab bar;
+    /// leading puts the switch in the tab bar's row instead, a whole row back for the meals.
+    private var modeItem: some ToolbarContent {
+        ToolbarItem(placement: horizontalSizeClass == .regular ? .topBarLeading : .principal) {
+            // The system's segmented control. A custom SwiftUI capsule control here (build 121,
+            // Hark's review item 7) froze the Menu on an iPad in landscape (QA, build 122).
+            Picker("View", selection: $mode) {
+                ForEach(MenuMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
         }
     }
 

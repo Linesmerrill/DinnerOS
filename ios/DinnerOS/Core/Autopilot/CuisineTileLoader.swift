@@ -42,7 +42,8 @@ final class CuisineTileLoader {
         hasLoaded = true
         base = CuisineTiles.top(cuisines)
         tiles = base
-        guard !base.isEmpty else { return }
+        // The server sent a photo for every tile (build 122): nothing to fetch.
+        guard !base.isEmpty, base.contains(where: { $0.imageURL == nil }) else { return }
 
         lists = base.map { tile in
             menu.makeList(

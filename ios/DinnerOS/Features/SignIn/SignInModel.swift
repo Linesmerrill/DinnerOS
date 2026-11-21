@@ -123,7 +123,7 @@ final class SignInModel {
         /// The subject the developer button signs in as, editable on the screen. A subject
         /// the API hasn't seen before creates a new user, which is how a second household
         /// member's first run is reachable from the app at all.
-        var developerSubject = DeveloperIdentity.defaultSubject
+        var developerSubject = DeveloperIdentity.startingSubject
 
         /// The email and display name are derived, so two test users aren't the same person.
         var developerIdentity: DeveloperIdentity { DeveloperIdentity(subject: developerSubject) }

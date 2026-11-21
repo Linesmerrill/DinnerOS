@@ -52,7 +52,7 @@ struct SpecialtyDetailView: View {
                     sheet = nil
                 }
             }
-            .sheet(item: $sheet) { sheet in
+            .dsSheet(item: $sheet) { sheet in
                 switch sheet {
                 case .customize(let ingredient, let option):
                     SpecialtyOptionEditor(specialty: ingredient, mode: .customize(option))

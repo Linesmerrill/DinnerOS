@@ -14,9 +14,15 @@
 // still showing the starter's original photo. -drop-photos removes the photo of
 // any starter without a new one.
 //
+// Fixes: -fixes names a JSON file of [Fix] (fixes.go), kept in git because the
+// words are DinnerOS's own: a starter whose photo shows a different dish than
+// its words gets new words and, when needed, new ingredients, on the starter,
+// its unedited copies and its Shared Recipes entry.
+//
 //	MONGODB_URI=... MONGODB_DATABASE=dinneros STARTER_RECIPES_HOUSEHOLD_ID=<id> \
 //	  go run ./cmd/ownstarters -rewrites 'out-*.json'                  # dry run
 //	  go run ./cmd/ownstarters -images https://dinneros.app/img/recipes -image-ids ids.txt -apply
+//	  go run ./cmd/ownstarters -fixes cmd/ownstarters/fixes/build-122.json -apply
 //
 // It never prints the URI or any recipe text.
 package main
@@ -73,7 +79,9 @@ type recipeDoc struct {
 // Result counts what a run changed, or would.
 type Result struct {
 	Starters, Copies, SkippedEdited, Images, CopyImages, Dropped int
-	Missing                                                      []string
+	// CatalogEntries is how many Shared Recipes entries a fix rewrote.
+	CatalogEntries int
+	Missing        []string
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string, out io.Writer) error {
@@ -82,6 +90,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	rewrites := flags.String("rewrites", "", "glob of rewrite JSON files")
 	images := flags.String("images", "", "base URL of the new photos, like https://dinneros.app/img/recipes")
 	imageIDs := flags.String("image-ids", "", "file listing the starter ids that have a new photo")
+	fixesFile := flags.String("fixes", "", "JSON file of starter fixes (fixes.go)")
 	dropPhotos := flags.Bool("drop-photos", false, "remove the photo of starters without a new one")
 	apply := flags.Bool("apply", false, "write the changes (default is a dry run)")
 	if err := flags.Parse(args); err != nil {
@@ -92,8 +101,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	if err != nil {
 		return errors.New("STARTER_RECIPES_HOUSEHOLD_ID must be the starter household's id")
 	}
-	if *rewrites == "" && *images == "" {
-		return errors.New("give -rewrites, -images, or both")
+	if *rewrites == "" && *images == "" && *fixesFile == "" {
+		return errors.New("give -rewrites, -images, -fixes, or more than one")
 	}
 	if (*images == "") != (*imageIDs == "") {
 		return errors.New("-images and -image-ids go together")
@@ -134,12 +143,24 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 			return err
 		}
 	}
+	if *fixesFile != "" {
+		fixes, err := loadFixes(*fixesFile)
+		if err != nil {
+			return err
+		}
+		if err := applyFixes(ctx, client.Database(), starter, fixes, *apply, &res); err != nil {
+			return err
+		}
+	}
 	verb := "would update"
 	if *apply {
 		verb = "updated"
 	}
 	fmt.Fprintf(out, "database %q: %s text of %d starters and %d copies (%d edited copies left alone); photos of %d starters and %d copies; %d photos dropped\n",
 		database, verb, res.Starters, res.Copies, res.SkippedEdited, res.Images, res.CopyImages, res.Dropped)
+	if *fixesFile != "" {
+		fmt.Fprintf(out, "  fixes: %s %d Shared Recipes entries\n", verb, res.CatalogEntries)
+	}
 	if len(res.Missing) > 0 {
 		fmt.Fprintf(out, "  %d ids not found in the starter household: %s\n", len(res.Missing), strings.Join(res.Missing, ", "))
 	}

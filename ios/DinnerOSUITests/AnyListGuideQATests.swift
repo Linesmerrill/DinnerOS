@@ -12,7 +12,7 @@ final class AnyListGuideQATests: XCTestCase {
 
     @MainActor
     func testTheGuideShowsFromEveryEntryAndCopiesTheList() throws {
-        let app = launchSignedIn()
+        let app = launchSignedIn(as: try plannedHousehold("anylist"))
 
         // 1. The Grocery List's share icon is a menu: Send to AnyList first, Share List… second.
         openGroceryList(app)
@@ -69,11 +69,23 @@ final class AnyListGuideQATests: XCTestCase {
         if app.buttons["Done"].firstMatch.waitForExistence(timeout: 5) { app.buttons["Done"].firstMatch.tap() }
     }
 
-    /// The Grocery List button sits on a coming week's Menu. If next week is empty, one recipe
-    /// is added so the list has something on it.
+    /// A household of its own with a dinner planned this week and next, so both weeks have a
+    /// grocery list. Planning in the shared test household put the same Chicken Bowls on its
+    /// next week again and again while the screenshots were taken (build 122).
+    @MainActor
+    private func plannedHousehold(_ name: String) throws -> QAOwnHousehold {
+        try ownHousehold(name) { own in
+            let dinner = try await own.addRecipe("QA Carrot Rice Bowls \(Int.random(in: 100...999))")
+            try await own.plan(dinner, weeksAhead: 0)
+            try await own.plan(dinner, weeksAhead: 1)
+            try await own.shopAtWalmart()
+        }
+    }
+
+    /// The Shop tab's Copy says Copied.
     @MainActor
     func testCopyShowsTheCopiedHUD() throws {
-        let app = launchSignedIn()
+        let app = launchSignedIn(as: try plannedHousehold("anylistcopy"))
         app.buttons["Shop"].firstMatch.tap()
         let copy = app.buttons["Copy"].firstMatch
         reveal(copy, in: app, maxSwipes: 15)
@@ -98,35 +110,8 @@ final class AnyListGuideQATests: XCTestCase {
         let next = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Next Week'")).firstMatch
         XCTAssertTrue(next.waitForExistence(timeout: 10), "No Next Week on the Menu")
         next.tap()
+        // Next week already has the household's dinner (plannedHousehold), so it has a list.
         let list = app.buttons["Grocery List"].firstMatch
-        // A meal-kit recipe with ingredients, so next week's list has things to buy.
-        let recipe = "Street Cart-Style Chicken Bowls"
-        app.buttons["Add Recipes"].tap()
-        let search = app.searchFields["Search recipes"].firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 10))
-        search.tap()
-        search.typeText(recipe)
-        let add = app.buttons["Add \(recipe)"].firstMatch
-        if add.waitForExistence(timeout: 8) {
-            add.tap()
-            sleep(2)
-        }
-        // Searching hides Done behind the search's own button: Cancel, or Close on iOS 26.
-        let sheet = app.navigationBars["Add Recipes"]
-        if !app.buttons["Done"].firstMatch.exists {
-            for name in ["Cancel", "Close"] where sheet.buttons[name].exists {
-                sheet.buttons[name].tap()
-                break
-            }
-            if !app.buttons["Done"].firstMatch.exists, app.buttons["Cancel"].firstMatch.exists {
-                app.buttons["Cancel"].firstMatch.tap()
-            }
-        }
-        if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) {
-            app.buttons["Done"].firstMatch.tap()
-        } else {
-            pullDown(app)
-        }
         XCTAssertTrue(list.waitForExistence(timeout: 10), "No Grocery List button on the Menu")
         list.tap()
         XCTAssertTrue(app.navigationBars["Grocery List"].waitForExistence(timeout: 10))

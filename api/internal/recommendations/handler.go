@@ -430,6 +430,8 @@ type OptionJSON struct {
 	Label       string `json:"label"`
 	Description string `json:"description,omitempty"`
 	RecipeCount *int   `json:"recipeCount,omitempty"`
+	// ImageURL is a cuisine's photo for the onboarding grid.
+	ImageURL string `json:"imageUrl,omitempty"`
 }
 
 // VocabularyResponse lists the choices for preference screens.
@@ -711,7 +713,7 @@ func newAttributesResponse(a RecipeAttributes) AttributesResponse {
 func optionsJSON(options []Option, counts bool) []OptionJSON {
 	out := make([]OptionJSON, 0, len(options))
 	for _, o := range options {
-		oj := OptionJSON{Value: o.Value, Label: o.Label, Description: o.Description}
+		oj := OptionJSON{Value: o.Value, Label: o.Label, Description: o.Description, ImageURL: o.ImageURL}
 		if counts {
 			n := o.RecipeCount
 			oj.RecipeCount = &n

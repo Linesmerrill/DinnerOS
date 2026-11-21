@@ -198,7 +198,10 @@ nonisolated enum CuisineTiles {
     static func top(
         _ options: [AutopilotOption], limit: Int = maxCount, minimumSpecific: Int = minimumSpecificRecipes
     ) -> [CuisineTile] {
-        let counted = options.filter { ($0.recipeCount ?? 0) > 0 }
+        // A server that picks photos (build 122) offers only cuisines it has one for, so no tile
+        // is a gray placeholder (Hark's review item 24).
+        let pictured = options.filter { $0.imageURL != nil }
+        let counted = (pictured.isEmpty ? options : pictured).filter { ($0.recipeCount ?? 0) > 0 }
         // Without any counts the vocabulary's own order stands in, rather than an empty step.
         guard !counted.isEmpty else {
             return options.prefix(max(limit, 0)).map(tile)
@@ -222,7 +225,8 @@ nonisolated enum CuisineTiles {
     }
 
     private static func tile(_ option: AutopilotOption) -> CuisineTile {
-        CuisineTile(value: option.value, label: option.label, recipeCount: option.recipeCount ?? 0)
+        CuisineTile(
+            value: option.value, label: option.label, recipeCount: option.recipeCount ?? 0, imageURL: option.imageURL)
     }
 
     /// Most recipes first; then by label and value so equal counts keep one order.

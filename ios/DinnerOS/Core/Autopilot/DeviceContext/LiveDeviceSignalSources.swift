@@ -40,6 +40,12 @@ final class EventKitCalendarSource: CalendarSignalSource {
 }
 
 /// When In Use location at reduced accuracy: only roughly where the member is, for a forecast.
+///
+/// The permission is never read from `CLLocationManager.authorizationStatus` on demand: that is a
+/// synchronous call to the location service, and on a freshly booted iPad simulator it blocked
+/// the main thread for minutes at launch, before the first frame (build 122, a black screen and
+/// "app didn't go idle" in QA). The delegate reports it instead, once on creation and again on
+/// every change, and `LocationPermission` keeps what it said.
 @MainActor
 final class CoreLocationSource: NSObject, LocationSignalSource, @preconcurrency CLLocationManagerDelegate {
     enum LocationError: Error {
@@ -47,8 +53,13 @@ final class CoreLocationSource: NSObject, LocationSignalSource, @preconcurrency 
     }
 
     private let manager: CLLocationManager
+    private var permission = LocationPermission()
+    /// Waiting for the first report, before deciding whether to ask.
+    private var reportContinuations: [CheckedContinuation<Void, Never>] = []
     private var authorizationContinuations: [CheckedContinuation<DeviceSignalAuthorization, Never>] = []
     private var locationContinuations: [CheckedContinuation<ApproximateCoordinate, any Error>] = []
+    /// Called when the permission changes, so what's shown can follow it.
+    var onAuthorizationChange: (() -> Void)?
 
     override init() {
         manager = CLLocationManager()
@@ -58,14 +69,13 @@ final class CoreLocationSource: NSObject, LocationSignalSource, @preconcurrency 
     }
 
     var authorization: DeviceSignalAuthorization {
-        switch manager.authorizationStatus {
-        case .notDetermined: .notDetermined
-        case .authorizedWhenInUse, .authorizedAlways: .granted
-        default: .denied
-        }
+        permission.authorization
     }
 
     func requestAccess() async -> DeviceSignalAuthorization {
+        if !permission.isKnown {
+            await withCheckedContinuation { reportContinuations.append($0) }
+        }
         guard authorization == .notDetermined else { return authorization }
         return await withCheckedContinuation { continuation in
             authorizationContinuations.append(continuation)
@@ -88,9 +98,15 @@ final class CoreLocationSource: NSObject, LocationSignalSource, @preconcurrency 
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        // Read here, where CoreLocation has just delivered it, never on demand.
+        let changed = permission.report(LocationPermission.authorization(for: manager.authorizationStatus))
+        let waitingForReport = reportContinuations
+        reportContinuations = []
+        waitingForReport.forEach { $0.resume() }
+        if changed { onAuthorizationChange?() }
         // The first callback arrives on creation, before any request; only a decided status
         // answers a pending request.
-        guard manager.authorizationStatus != .notDetermined else { return }
+        guard authorization != .notDetermined else { return }
         let result = authorization
         let waiting = authorizationContinuations
         authorizationContinuations = []
@@ -109,6 +125,18 @@ final class CoreLocationSource: NSObject, LocationSignalSource, @preconcurrency 
         let waiting = locationContinuations
         locationContinuations = []
         waiting.forEach { $0.resume(throwing: LocationError.unavailable) }
+    }
+}
+
+extension LocationPermission {
+    /// CoreLocation's status in the app's terms: When In Use or Always is granted, anything
+    /// decided otherwise is denied.
+    nonisolated static func authorization(for status: CLAuthorizationStatus) -> DeviceSignalAuthorization {
+        switch status {
+        case .notDetermined: .notDetermined
+        case .authorizedWhenInUse, .authorizedAlways: .granted
+        default: .denied
+        }
     }
 }
 

@@ -18,6 +18,10 @@ type Option struct {
 	// RecipeCount is how many of the household's main-meal recipes carry
 	// the value; 0 for starter values the catalog doesn't use yet.
 	RecipeCount int
+	// ImageURL, on cuisines only, is the photo of one of the household's
+	// recipes of that cuisine, never one an earlier cuisine shows; "" when
+	// none of them has a photo the onboarding grid could use.
+	ImageURL string
 }
 
 // Vocabulary is everything the onboarding and preference screens offer.
@@ -167,7 +171,7 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 			proteinCounts[p]++
 		}
 	}
-	v.Cuisines = withStandardCuisines(cuisines.options(nil, v.CatalogRecipes))
+	v.Cuisines = withCuisinePhotos(withStandardCuisines(cuisines.options(nil, v.CatalogRecipes)), catalog)
 	v.Tags = tags.options(starterTags, v.CatalogRecipes)
 	for _, o := range ProteinOptions {
 		o.RecipeCount = proteinCounts[o.Value]
@@ -291,4 +295,51 @@ func (c *counter) options(starters []string, total int) []Option {
 // trimmed, lowercase, single-spaced.
 func normalizeValue(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
+
+// withCuisinePhotos gives each cuisine, in list order, the photo of one of
+// its recipes that no earlier cuisine shows (build 122, Hark's review item
+// 24: a tile on "What do you like?" was a gray placeholder). Recipes are
+// taken by name, so the same library always gives the same photos.
+func withCuisinePhotos(options []Option, catalog []recipes.Recipe) []Option {
+	type pictured struct {
+		name, id, url string
+		cuisines      map[string]bool
+	}
+	var list []pictured
+	for _, r := range catalog {
+		url := strings.TrimSpace(r.ImageURL)
+		if r.IsAddon || url == "" {
+			continue
+		}
+		p := pictured{name: strings.ToLower(r.Name), id: r.ID, url: url, cuisines: map[string]bool{}}
+		for _, raw := range r.ShownCuisines() {
+			if value := canonicalCuisine(raw); value != "" {
+				for _, v := range withAncestors(value) {
+					p.cuisines[v] = true
+				}
+			}
+		}
+		list = append(list, p)
+	}
+	slices.SortFunc(list, func(a, b pictured) int {
+		if c := cmp.Compare(a.name, b.name); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.id, b.id)
+	})
+	used := map[string]bool{}
+	out := slices.Clone(options)
+	for i := range out {
+		if out[i].RecipeCount == 0 {
+			continue
+		}
+		for _, p := range list {
+			if p.cuisines[out[i].Value] && !used[p.url] {
+				out[i].ImageURL, used[p.url] = p.url, true
+				break
+			}
+		}
+	}
+	return out
 }

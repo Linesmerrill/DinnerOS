@@ -96,7 +96,7 @@ struct ShopSetupView: View {
             .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(!canSave)
         }
-        .sheet(isPresented: $isRequestingStore) {
+        .dsSheet(isPresented: $isRequestingStore) {
             // Already on the setup screen, so an available store just closes the sheet.
             RequestStoreSheet(openStoreSetup: {})
         }

@@ -36,26 +36,75 @@ extension View {
     }
 }
 
-extension View {
-    /// A scrim under the floating tab bar (iOS 26 and later), meant to keep a bright card from
-    /// tinting the bar's glass (Hark's review item 11). An overlay, so it never changes the
-    /// layout: a hard scroll edge here (`scrollEdgeEffectStyle(.hard, for: .bottom)`) froze the
-    /// iPad Menu in landscape. Build 122's screenshots show it doesn't reach under the bar yet.
-    @ViewBuilder
-    func tabBarEdge() -> some View {
+/// A scrim along the bottom of a tab's scrolling content (iOS 26 and later): it fades the content
+/// into the screen's background under the floating tab bar, so a bright card scrolling under the
+/// bar can't tint its glass and wash out its labels (Hark's review item 11: orange from the
+/// Suggested card on a large iPhone in dark mode). Where there's no tab bar along the bottom (an
+/// iPad, the iPhone Duo's cover screen), the same short fade keeps a sliver of the next card from
+/// showing at the screen's edge like a floating control (Hark's review item 4: the Suggested
+/// card's Add button, 2 points of it, on the Duo).
+///
+/// Build 122's scrim was a fixed 64 points that only reached full strength at the screen's edge,
+/// so under an 83-point tab bar the labels sat where it was still mostly clear. This one covers
+/// the whole bottom inset (the tab bar, the home indicator and any bottom bar of the page) at
+/// nearly full strength, plus a short fade above it.
+///
+/// Put it on the scroll view, inside the page's own bottom bars, so they draw over it. An
+/// overlay with no state and no measuring, so it can't change the layout or feed one back into
+/// it: a hard scroll edge here (`scrollEdgeEffectStyle(.hard, for: .bottom)`) froze the iPad
+/// Menu in landscape. The fade sits on the safe area's bottom edge (the top of the tab bar), and
+/// the solid part reaches from there to the screen's edge by ignoring the safe area.
+struct TabBarScrim: ViewModifier {
+    func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            overlay(alignment: .bottom) {
-                LinearGradient(
-                    colors: [DS.Colors.barBackground.opacity(0), DS.Colors.barBackground.opacity(0.9)],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: DS.Size.tabBarScrimHeight)
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
+            content
+                .overlay(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        gradient(TabBarScrimLayout.fadeStops)
+                            .frame(height: DS.Size.tabBarScrimFade)
+                        // Zero high on the safe area's edge; its background reaches down over
+                        // the bar's whole inset, however tall that is.
+                        Color.clear
+                            .frame(height: 0)
+                            .background {
+                                gradient(TabBarScrimLayout.barStops)
+                                    .ignoresSafeArea(.container, edges: .bottom)
+                            }
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
         } else {
-            self
+            content
         }
+    }
+
+    private func gradient(_ stops: [(location: CGFloat, opacity: Double)]) -> LinearGradient {
+        LinearGradient(
+            stops: stops.map {
+                Gradient.Stop(color: DS.Colors.barBackground.opacity($0.opacity), location: $0.location)
+            },
+            startPoint: .top, endPoint: .bottom)
+    }
+}
+
+/// How the tab bar scrim fades (`TabBarScrim`).
+nonisolated enum TabBarScrimLayout {
+    /// How opaque the scrim is where the bar begins: enough that the bar's glass reads the
+    /// screen's own background, not the card under it.
+    static let opacity = 0.94
+
+    /// Above the bar: clear to nearly full strength.
+    static let fadeStops: [(location: CGFloat, opacity: Double)] = [(0, 0), (1, opacity)]
+
+    /// Under the bar: from there to solid at the screen's edge, so not even a sliver of a card
+    /// shows there.
+    static let barStops: [(location: CGFloat, opacity: Double)] = [(0, opacity), (1, 1)]
+}
+
+extension View {
+    /// The scrim along the bottom of a tab's scrolling content (`TabBarScrim`).
+    func tabBarEdge() -> some View {
+        modifier(TabBarScrim())
     }
 }

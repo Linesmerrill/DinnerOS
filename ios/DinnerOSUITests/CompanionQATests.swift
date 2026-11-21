@@ -22,17 +22,10 @@ final class CompanionQATests: XCTestCase {
         let companion = "QA Companion Chips \(run)"
         let seed = try await CompanionSeed.prepare(dinner: dinner)
 
-        let app = launchSignedIn()
+        let app = launchSignedIn(as: seed.own)
         // The dinner is next week, whose Menu has the Grocery List button.
         let next = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Next Week'")).firstMatch
         XCTAssertTrue(next.waitForExistence(timeout: 10), "No Next Week on the Menu")
-        // On a small iPhone the week strip snaps to whole chips, and Next Week can start past
-        // the screen's edge: bring it in first.
-        if !next.isHittable {
-            app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'This Week'"))
-                .firstMatch.swipeLeft()
-            sleep(1)
-        }
         next.tap()
 
         // 1. Companions, from the Menu's ⋯ menu.
@@ -111,6 +104,9 @@ final class CompanionQATests: XCTestCase {
 
 /// Seeds the dinner the test plans, through the development API the app uses.
 private struct CompanionSeed {
+    /// The test's own household (QAOwnHousehold): planning in the shared test household changed
+    /// the Menu the screenshot tests were photographing (build 122).
+    let own: QAOwnHousehold
     let api: URL
     let token: String
     let householdID: String
@@ -120,20 +116,11 @@ private struct CompanionSeed {
     /// The cuisine's label, as its chip shows it.
     let cuisine: String
 
-    /// `QA_API_BASE_URL` (from `TEST_RUNNER_QA_API_BASE_URL`), else the matrix's 8082.
-    static var apiBase: URL {
-        let base = ProcessInfo.processInfo.environment["QA_API_BASE_URL"] ?? "http://localhost:8082"
-        return URL(string: base)!.appending(path: "api/v1")
-    }
-
     static func prepare(dinner: String) async throws -> CompanionSeed {
-        let api = apiBase
-        let login = try await call(api, "POST", "auth/dev", token: nil, body: ["subject": "dev-simulator"])
-        let token = try XCTUnwrap(login["accessToken"] as? String)
-        let households = try await call(api, "GET", "households", token: token)
-        let first = try XCTUnwrap((households["items"] as? [[String: Any]])?.first)
-        let household = try XCTUnwrap(first["household"] as? [String: Any])
-        let householdID = try XCTUnwrap(household["id"] as? String)
+        let api = QAOwnHousehold.apiBase
+        let own = try await QAOwnHousehold.make("companion")
+        let token = own.token
+        let householdID = own.householdID
 
         // A meal shows at most three suggestions. Companions from runs that died (older than
         // any run can be) are cleared, and the cuisine is the one other runs use least, so
@@ -168,8 +155,7 @@ private struct CompanionSeed {
                 "fromUrl": false,
             ])
         let recipeID = try XCTUnwrap(recipe["id"] as? String)
-        let week = nextWeek(
-            timeZone: household["timeZone"] as? String, weekStartsOn: household["weekStartsOn"] as? String)
+        let week = own.week(weeksAhead: 1)
         // The shared test household's next week fills up over many runs (other tests plan there
         // too) and a week holds at most 50 dinners: make room by taking off the oldest.
         if let current = try? await call(api, "GET", "households/\(householdID)/plans/\(week)", token: token) {
@@ -195,7 +181,8 @@ private struct CompanionSeed {
             body: ["recipeId": recipeID, "day": NSNull(), "servings": 2])
         let entryID = (plan["entry"] as? [String: Any])?["id"] as? String ?? plan["id"] as? String ?? ""
         return CompanionSeed(
-            api: api, token: token, householdID: householdID, recipeID: recipeID, week: week, entryID: entryID,
+            own: own, api: api, token: token, householdID: householdID, recipeID: recipeID, week: week,
+            entryID: entryID,
             cuisine: pick.1)
     }
 
@@ -223,24 +210,6 @@ private struct CompanionSeed {
             guard let id = item["id"] as? String else { continue }
             _ = try? await call(api, "DELETE", "\(base)/grocery-items/\(id)", token: token)
         }
-    }
-
-    /// The week after the one the app shows today: the ISO week of a week from today moved back
-    /// to the household's first day (`planning.WeekOfOn`).
-    static func nextWeek(timeZone: String?, weekStartsOn: String?) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone.flatMap(TimeZone.init(identifier:)) ?? .current
-        let parts = calendar.dateComponents([.year, .month, .day], from: .now.addingTimeInterval(7 * 24 * 3600))
-        var iso = Calendar(identifier: .iso8601)
-        iso.timeZone = TimeZone(identifier: "UTC")!
-        let date = iso.date(from: parts)!
-        let order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-        let index = order.firstIndex(of: weekStartsOn ?? "mon") ?? 0
-        let offset = index > 3 ? index - 7 : index
-        let shifted = iso.date(byAdding: .day, value: -offset, to: date)!
-        let year = iso.component(.yearForWeekOfYear, from: shifted)
-        let number = iso.component(.weekOfYear, from: shifted)
-        return String(format: "%04d-W%02d", year, number)
     }
 
     private static func parseDate(_ s: String) -> Date? {

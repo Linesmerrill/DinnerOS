@@ -10,7 +10,8 @@ final class CuisineQATests: XCTestCase {
 
     @MainActor
     func testCuisineFillsInChangesAndShows() throws {
-        let app = launchSignedIn()
+        // A household of its own: this test adds and deletes recipes (QAOwnHousehold).
+        let app = launchSignedIn(as: try ownHousehold("cuisine"))
         let name = "QA Carnitas Tacos \(Int.random(in: 1000...9999))"
 
         // Open Add a Recipe and write one by hand. Build 114 may put a chooser first.

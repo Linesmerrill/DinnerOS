@@ -57,6 +57,9 @@ struct RecipeDetailView: View {
     @State private var showsEditor = false
     @State private var deleting: RecipeSummary?
     @State private var showsNutrition = false
+    /// The More menu: open or not, and where its button is, so the card opens under it.
+    @State private var showsMore = false
+    @State private var moreAnchor = CGRect.zero
     @Environment(\.dismiss) private var dismiss
 
     /// Changing a recipe's ingredients and steps needs `recipes.edit`; the API enforces it.
@@ -258,11 +261,14 @@ struct RecipeDetailView: View {
             safeArea = $0
         }
         .overlay(alignment: .bottom) { toast }
+        // Over the bottom bar too, so a tap anywhere outside the menu closes it.
+        .dsMenuPopover(isPresented: $showsMore, anchor: moreAnchor, items: moreItems)
+        .onChange(of: showsCooking) { if showsCooking { showsMore = false } }
         .recipeDeletion($deleting, isPlanned: { _ in !plannedEntries.isEmpty }) { dismiss() }
         .fullScreenCover(isPresented: $showsCooking) {
             CookingView(start: cookMeal, meals: weekMeals)
         }
-        .sheet(isPresented: $showsEditor) {
+        .dsSheet(isPresented: $showsEditor) {
             if let recipe {
                 RecipeEditView(recipe: recipe, servings: servings) { saved in
                     show(saved)
@@ -270,13 +276,13 @@ struct RecipeDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showsNutrition) {
+        .dsSheet(isPresented: $showsNutrition) {
             if let recipe {
                 NutritionEditorSheet(recipe: recipe) { saved in show(saved) }
             }
         }
         // Attached to the screen's root, never inside a section (decision 510).
-        .sheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {
+        .dsSheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {
             SpecialtyIngredientsSheet()
         }
         .alert("Couldn’t Change That", isPresented: Binding(presenting: $leaveOutError)) {
@@ -407,26 +413,30 @@ struct RecipeDetailView: View {
         canEditRecipe && (recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage)
     }
 
-    /// The More menu: the system menu, Delete Recipe in red (Hark's review item 8). An opaque
-    /// popover here (build 121) didn't take taps on its rows in QA and showed nothing on the Duo.
+    /// The More menu: an opaque card under the button, Delete Recipe in red, kept inside the
+    /// page (Hark's review item 8). Not the system menu, whose glass showed Start Cooking and the
+    /// photo through it; not a popover, which a toolbar rebuild left unable to close (build 121).
     private var moreButton: some View {
-        Menu {
-            if let shareURL {
-                ShareLink(item: shareURL, subject: Text(name)) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-            if recipe != nil, canEditRecipe {
-                Button("Edit Recipe", systemImage: "pencil") { showsEditor = true }
-                Button("Delete Recipe", systemImage: "trash", role: .destructive) {
-                    deleting = summary
-                }
-            }
-        } label: {
+        DSMenuButton(isPresented: $showsMore, anchor: $moreAnchor) {
             Image(systemName: TabHeader.moreSystemImage)
                 .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
         }
-        .accessibilityLabel("More")
+    }
+
+    private var moreItems: [DSMenuItem] {
+        var items: [DSMenuItem] = []
+        if let shareURL {
+            items.append(
+                DSMenuItem(title: "Share", systemImage: "square.and.arrow.up") { [name, moreAnchor] in
+                    DSShareSheet.present(shareURL, subject: name, anchor: moreAnchor)
+                })
+        }
+        if recipe != nil, canEditRecipe {
+            items.append(DSMenuItem(title: "Edit Recipe", systemImage: "pencil") { showsEditor = true })
+            items.append(
+                DSMenuItem(title: "Delete Recipe", systemImage: "trash", role: .destructive) { deleting = summary })
+        }
+        return items
     }
 
     /// The ⋯ menu shows only when it has something in it, so there's never an empty button.

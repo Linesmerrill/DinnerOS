@@ -22,7 +22,7 @@ struct AutopilotPreferencesView: View {
                 guard let householdID = households.current?.household.id else { return }
                 await autopilot.activate(householdID: householdID)
             }
-            .sheet(isPresented: $isOnboarding) {
+            .dsSheet(isPresented: $isOnboarding) {
                 AutopilotOnboardingView()
             }
     }

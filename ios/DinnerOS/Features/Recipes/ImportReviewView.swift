@@ -400,7 +400,7 @@ struct ImportVariantDetailView: View {
         .navigationTitle(group.storedName)
         .navigationBarTitleDisplayMode(.inline)
         .disabled(reviews.isResolving)
-        .sheet(item: $addingName) { _ in
+        .dsSheet(item: $addingName) { _ in
             AddRecipeView { recipe in
                 Task { await resolve(.differentRecipe, linkedRecipeID: recipe.id) }
             }

@@ -81,7 +81,7 @@ struct AddRecipeChooser: View {
                 destination(choice)
             }
         }
-        .sheet(isPresented: $addingCompanion) {
+        .dsSheet(isPresented: $addingCompanion) {
             if let householdID = households.current?.household.id {
                 CompanionEditorView(
                     householdID: householdID,
@@ -161,7 +161,7 @@ struct AddRecipeChooserSheet: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .sheet(
+            .dsSheet(
                 isPresented: $isPresented,
                 onDismiss: {
                     if browse {

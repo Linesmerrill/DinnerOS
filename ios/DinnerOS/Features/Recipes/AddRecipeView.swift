@@ -277,10 +277,10 @@ struct RecipeDraftReviewForm: View {
                 useFound: { try await store.useFoundPhoto($0) },
                 searchAvailable: library.photoSearchAvailable)
         )
-        .sheet(item: $ingredientSheet) { target in
+        .dsSheet(item: $ingredientSheet) { target in
             ingredientEditor(target)
         }
-        .sheet(item: $reorder) { target in
+        .dsSheet(item: $reorder) { target in
             reorderSheet(target)
         }
         .task { await library.loadIngredientNames() }

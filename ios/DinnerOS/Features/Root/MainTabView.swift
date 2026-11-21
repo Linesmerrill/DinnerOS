@@ -92,7 +92,7 @@ struct MainTabView: View {
         .onChange(of: router?.autopilotReviewWeek, initial: true) { _, week in
             if week != nil { tabs.selection = .menu }
         }
-        .sheet(item: confirmationPrompt) { handoff in
+        .dsSheet(item: confirmationPrompt) { handoff in
             OrderConfirmationSheet(handoff: handoff)
         }
         // A tapped push opens once its household is the current one.
@@ -101,7 +101,7 @@ struct MainTabView: View {
         ) {
             openPendingPush()
         }
-        .sheet(isPresented: $tabs.showsNotifications) {
+        .dsSheet(isPresented: $tabs.showsNotifications) {
             NotificationsView()
         }
         .plusPurchaseSheet()

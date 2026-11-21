@@ -153,9 +153,12 @@ final class AppDependencies {
         self.plus = plus
         // Planning a week is part of Plus: a tapped Plan the Week opens the purchase screen.
         autopilot.plusRequired = { [plus] in plus.showsPurchase = true }
+        let location = CoreLocationSource()
         let deviceContext = AutopilotDeviceContext(
-            calendar: EventKitCalendarSource(), location: CoreLocationSource(), weather: WeatherKitSource(),
+            calendar: EventKitCalendarSource(), location: location, weather: WeatherKitSource(),
             settings: UserDefaultsDeviceContextSettings())
+        // Location permission arrives from CoreLocation a moment after launch, not on demand.
+        location.onAuthorizationChange = { [weak deviceContext] in deviceContext?.refreshAuthorization() }
         self.deviceContext = deviceContext
         // Generate and Plan Again send the week's calendar and weather bands, in the household's
         // time zone, from whatever the member allowed. It never prompts.

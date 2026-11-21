@@ -73,7 +73,7 @@ struct YourMealsSection: View {
                 .padding(.horizontal, DS.Space.l)
             content
         }
-        .sheet(item: $editingEntry) { entry in
+        .dsSheet(item: $editingEntry) { entry in
             PlanEntryEditor(entry: entry, week: plans.week)
         }
         .task(id: suggestionKey) { await suggestIfOpen() }

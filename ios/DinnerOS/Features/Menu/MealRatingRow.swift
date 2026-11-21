@@ -56,7 +56,7 @@ struct MealRatingRow: View {
             }
         }
         .sensoryFeedback(.success, trigger: savedCount)
-        .sheet(isPresented: $asksWhy) {
+        .dsSheet(isPresented: $asksWhy) {
             RatingFeedbackSheet(
                 recipeID: recipe.id, recipeName: recipe.name, score: score, rating: recipe.myRating)
         }

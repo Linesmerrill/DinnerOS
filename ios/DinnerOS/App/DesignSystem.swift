@@ -39,9 +39,10 @@ nonisolated enum DS {
         static let success = Color.accentColor
         /// A small label's tint, like a difficulty badge: the accent, never system blue.
         static let badge = Color.accentColor
-        /// Disabled button fill and text: one look for every disabled action.
-        static let disabledFill = Color(.tertiarySystemFill)
-        static let disabledText = Color(.tertiaryLabel)
+        /// Disabled button fill and text: one look for every disabled action. Secondary, not
+        /// tertiary: on a white bar in light mode the tertiary pair all but vanished (build 122).
+        static let disabledFill = Color(.secondarySystemFill)
+        static let disabledText = Color(.secondaryLabel)
         /// A card's outline, for a card on a sheet where its fill alone is too faint to see.
         static let cardStroke = Color(.separator)
         /// The background under a pinned footer or bottom bar: the same as the sheet or screen.
@@ -125,8 +126,8 @@ nonisolated enum DS {
         static let readableWidth: CGFloat = 640
         /// A recipe's photo is never taller than this on a wide screen.
         static let heroMaxHeight: CGFloat = 360
-        /// How far the scrim under the floating tab bar reaches above the bottom safe area.
-        static let tabBarScrimHeight: CGFloat = 64
+        /// How far the scrim under the floating tab bar fades in above the bar (`TabBarScrim`).
+        static let tabBarScrimFade: CGFloat = 24
     }
 
     /// Button heights. Each style has one fixed height per size; it scales with Dynamic Type.
@@ -324,8 +325,17 @@ struct DSPrimaryButtonStyle: PrimitiveButtonStyle {
                 .background(DS.Colors.disabledFill, in: Capsule())
                 .overlay(Capsule().strokeBorder(DS.Colors.cardStroke, lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            // Not `.plain`: it fades a disabled label a second time, which left the disabled
+            // colors far lighter than their tokens (build 122).
+            .buttonStyle(DSDisabledLookStyle())
         }
+    }
+}
+
+/// Shows a disabled button's label exactly as styled, with no extra fading of its own.
+struct DSDisabledLookStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
     }
 }
 

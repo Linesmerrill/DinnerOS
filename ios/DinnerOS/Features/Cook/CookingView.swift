@@ -103,7 +103,7 @@ struct CookingView: View {
             await load()
         }
         .onAppear { if !hasSeenWelcome { showsWelcome = true } }
-        .sheet(isPresented: $showsWelcome, onDismiss: { hasSeenWelcome = true }) {
+        .dsSheet(isPresented: $showsWelcome, onDismiss: { hasSeenWelcome = true }) {
             CookWelcome { showsWelcome = false }
         }
         // The saved products, so an ingredient can be flagged from here.

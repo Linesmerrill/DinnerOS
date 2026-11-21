@@ -18,12 +18,11 @@ final class ReferralQATests: XCTestCase {
     func testAnInviteCountsOnceTheNewHouseholdSetsUp() async throws {
         // Codes for both free months, so they're ready rather than on the way.
         try await OfferCodeSeed.seed()
-        // 1. The sharer: How it works, then the code. An earlier test may have left another
-        // person signed in, so sign in as the sharer explicitly.
-        var app = launchSignedIn()
-        signOut(app)
-        signIn(app, subject: "dev-simulator")
-        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn’t get to the Menu")
+        // 1. The sharer: How it works, then the code. The sharer has a household of its own
+        // (QAOwnHousehold): every invite that counted used to land in the shared test household,
+        // whose notifications the screenshots show (build 122, Hark's review item 12).
+        let sharer = try await QAOwnHousehold.make("sharer")
+        var app = launchSignedIn(as: sharer)
         openGiveAFreeMonth(app)
         XCTAssertTrue(app.staticTexts["How it works"].waitForExistence(timeout: 10), "No How it works")
         XCTAssertTrue(
@@ -106,11 +105,10 @@ final class ReferralQATests: XCTestCase {
         signOut(app)
 
         // 5. The sharer: their banner, and the invite marked as earned.
-        signIn(app, subject: "dev-simulator")
+        signIn(app, subject: sharer.subject)
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn’t get to the Menu")
-        // The banner names the newest invite that counted and shows once. In a parallel run
-        // another simulator signed in as the same sharer can see it first, so without it, go to
-        // Give a Free Month directly: the earned invite is what matters.
+        // The banner names the newest invite that counted and shows once. Without it, go to Give
+        // a Free Month directly: the earned invite is what matters.
         let sharerBanner = app.descendants(matching: .any)["NewsBanner"].firstMatch
         if sharerBanner.waitForExistence(timeout: 20) {
             XCTAssertTrue(
@@ -140,9 +138,8 @@ final class ReferralQATests: XCTestCase {
     /// code (decision 699). A fresh household each run keeps it under 5 changes in 30 days.
     @MainActor
     func testANewOrCustomCodeReplacesTheOldOne() throws {
-        var app = launchSignedIn()
-        signOut(app)
-        app = signInAsNewPerson(app, householdName: "QA Code Kitchen \(Int.random(in: 100...999))")
+        // A fresh household of its own each run (QAOwnHousehold).
+        let app = launchSignedIn(as: try ownHousehold("codes"))
         openGiveAFreeMonth(app)
         let oldCode = readCode(app)
         XCTAssertEqual(oldCode.count, 8, "Couldn’t read the code: \(oldCode)")
@@ -190,9 +187,6 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(waitForCheck(app, "That code is taken."), "A retired code could be claimed again")
         snap(app, "Change Your Code, retired code taken (\(mode))")
         app.buttons["Cancel"].firstMatch.tap()
-        // Leave the sharer signed in for the next test.
-        signOut(app)
-        signIn(app, subject: "dev-simulator")
     }
 
     // MARK: Steps

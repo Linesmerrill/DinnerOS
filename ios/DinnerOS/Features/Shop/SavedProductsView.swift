@@ -17,7 +17,7 @@ struct SavedProductsView: View {
             .task {
                 await shopping.loadPreferences()
             }
-            .sheet(item: $editing) { choice in
+            .dsSheet(item: $editing) { choice in
                 ChooseProductSheet(choice: choice)
             }
             .fullScreenCover(item: $rechoosing) { choices in

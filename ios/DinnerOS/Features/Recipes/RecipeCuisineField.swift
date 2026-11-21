@@ -35,7 +35,7 @@ struct RecipeCuisineField: View {
         .accessibilityValue(summary)
         .accessibilityHint("Opens the list of cuisines")
         .accessibilityIdentifier("RecipeCuisine")
-        .sheet(isPresented: $picking) {
+        .dsSheet(isPresented: $picking) {
             RecipeCuisinePicker(values: values, options: RecipeCuisines.choices(options, keeping: values)) {
                 onPick($0)
             }

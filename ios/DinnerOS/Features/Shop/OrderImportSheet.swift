@@ -221,7 +221,7 @@ private struct OrderImportReview: View {
                 }
             }
         }
-        .sheet(item: $viewing) { item in
+        .dsSheet(item: $viewing) { item in
             OrderItemSourceView(item: item, screenshot: screenshot(for: item))
         }
     }

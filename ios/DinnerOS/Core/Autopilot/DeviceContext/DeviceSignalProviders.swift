@@ -28,6 +28,28 @@ protocol CalendarSignalSource: AnyObject {
     func busyIntervals(in interval: DateInterval) async throws -> [CalendarBusyInterval]
 }
 
+/// Location permission as CoreLocation's delegate last reported it. Asking CoreLocation on
+/// demand is a synchronous call to the location service that can block the main thread (it hung
+/// launch on a freshly booted simulator, build 122), so `CoreLocationSource` keeps the report.
+nonisolated struct LocationPermission: Hashable, Sendable {
+    /// `nil` until the first report, which CoreLocation sends right after the manager is made.
+    private(set) var reported: DeviceSignalAuthorization?
+
+    /// Not asked yet, until a report says otherwise.
+    var authorization: DeviceSignalAuthorization { reported ?? .notDetermined }
+
+    /// Whether CoreLocation has reported at all.
+    var isKnown: Bool { reported != nil }
+
+    /// Keeps a report. Returns whether it changed what's known.
+    @discardableResult
+    mutating func report(_ authorization: DeviceSignalAuthorization) -> Bool {
+        guard reported != authorization else { return false }
+        reported = authorization
+        return true
+    }
+}
+
 /// Reduced-accuracy location. `CoreLocationSource` is the real one.
 @MainActor
 protocol LocationSignalSource: AnyObject {

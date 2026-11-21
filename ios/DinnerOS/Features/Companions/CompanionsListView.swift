@@ -59,12 +59,12 @@ struct CompanionsListView: View {
                 }
             }
         }
-        .sheet(isPresented: $isAdding) {
+        .dsSheet(isPresented: $isAdding) {
             if let householdID {
                 CompanionEditorView(householdID: householdID, onSaved: { (_: Companion) in })
             }
         }
-        .sheet(item: $editing) { companion in
+        .dsSheet(item: $editing) { companion in
             if let householdID {
                 CompanionEditorView(householdID: householdID, companion: companion)
             }

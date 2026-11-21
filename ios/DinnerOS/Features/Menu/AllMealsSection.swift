@@ -304,7 +304,7 @@ struct MenuChipBar: View {
                 .padding(.horizontal, DS.Space.l)
             }
         }
-        .sheet(isPresented: $isShowingFilters) {
+        .dsSheet(isPresented: $isShowingFilters) {
             MenuFilterSheet(query: list.query, options: options) { query in
                 Task { await list.setQuery(query) }
             }

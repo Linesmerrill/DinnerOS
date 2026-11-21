@@ -79,7 +79,7 @@ struct AddRecipesSheet: View {
                 }
                 await picker.setSearch(searchText)
             }
-            .sheet(item: $configuring) { summary in
+            .dsSheet(item: $configuring) { summary in
                 AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: week, initialDay: day) {
                     addedCounts[summary.id, default: 0] += 1
                 }

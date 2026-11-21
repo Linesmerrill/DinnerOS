@@ -203,12 +203,12 @@ struct GroceryListContent: View {
                 }
             }
             .groceryExportPrompts(exportController)
-            .sheet(isPresented: $isAddingItem) {
+            .dsSheet(isPresented: $isAddingItem) {
                 if let householdID = households.current?.household.id {
                     AddItemSheet(week: model.week, householdID: householdID)
                 }
             }
-            .sheet(item: $picker) { specialty in
+            .dsSheet(item: $picker) { specialty in
                 SpecialtyQuickPicker(specialty: specialty, model: model)
             }
             .alert("Couldn’t Remove That", isPresented: Binding(presenting: $removeError)) {
@@ -216,10 +216,10 @@ struct GroceryListContent: View {
             } message: {
                 Text(removeError ?? "")
             }
-            .sheet(isPresented: $showsSpecialtySetup) {
+            .dsSheet(isPresented: $showsSpecialtySetup) {
                 SpecialtyIngredientsSheet()
             }
-            .sheet(isPresented: $showsSkipped) {
+            .dsSheet(isPresented: $showsSkipped) {
                 SkippedIngredientsSheet(week: model.week)
             }
             .alert(

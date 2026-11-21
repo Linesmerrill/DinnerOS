@@ -140,7 +140,7 @@ struct PantryUsageSections: View {
                         estimate.skippedRecipes > 0 ? "Enter What the Recipe Used" : "Enter What You Used",
                         systemImage: "minus.circle"
                     ) { isRecordingUse = true }
-                    .sheet(isPresented: $isRecordingUse) {
+                    .dsSheet(isPresented: $isRecordingUse) {
                         PantryRecordUseSheet(item: item, estimate: estimate)
                     }
                 }
@@ -273,7 +273,7 @@ struct PantryItemDetailView: View {
                     await pantry.refresh()
                 }
             }
-            .sheet(item: $sheet) { sheet in
+            .dsSheet(item: $sheet) { sheet in
                 switch sheet {
                 case .edit(let item): PantryEditSheet(item: item)
                 case .restock(let item): PantryRestockSheet(item: item)

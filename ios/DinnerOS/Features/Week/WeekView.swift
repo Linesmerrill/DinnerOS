@@ -33,10 +33,10 @@ struct WeekView: View {
 
     var body: some View {
         content
-            .sheet(item: $editingEntry) { entry in
+            .dsSheet(item: $editingEntry) { entry in
                 PlanEntryEditor(entry: entry, week: plans.week)
             }
-            .sheet(isPresented: $isAddingRecipes) {
+            .dsSheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
             }
             .alert("Couldn’t Change the Week", isPresented: Binding(presenting: $actionError)) {

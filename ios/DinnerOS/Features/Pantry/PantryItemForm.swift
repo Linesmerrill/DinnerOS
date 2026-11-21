@@ -231,7 +231,7 @@ struct PantryEditSheet: View {
                     draft.lowThresholdPercent = percent
                 }
             }
-            .sheet(isPresented: $isRestocking) {
+            .dsSheet(isPresented: $isRestocking) {
                 PantryRestockSheet(item: current) { updated in
                     // Without edits in progress the form shows the restocked item. With edits,
                     // the draft keeps its base so only the member's own changes are sent.

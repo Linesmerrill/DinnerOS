@@ -117,14 +117,36 @@ struct Build121MenuLayoutTests {
         #expect(WeekStripMetrics.pillName(week: lastYear, current: current, isWide: true) == "2025")
     }
 
-    @Test func everyStripLinesUpTheWeekBeforeTheSelectedOne() throws {
+    @Test func aPhoneStripLeadsWithTheSelectedWeekSoNextWeekIsWhole() throws {
         let selected = try #require(ISOWeek("2026-W46"))
         let weeks = [selected.previous, selected, selected.next]
-        // One start position on every screen: last week at the leading edge, the selected one
-        // second and whole.
-        #expect(WeekStripMetrics.scrollTarget(selected: selected, available: weeks) == selected.previous)
+        // iPhone SE, the Duo's cover screen, and a Pro Max: three weeks don't fit, so the
+        // selected week leads and next week sits whole beside it.
+        for width: CGFloat in [375, 382, 440] {
+            let pill = WeekStripMetrics.pillWidth(stripWidth: width, typeSize: .large)
+            #expect(
+                WeekStripMetrics.scrollTarget(
+                    selected: selected, available: weeks, stripWidth: width, pillWidth: pill) == selected)
+            let nextEnd = WeekStripMetrics.margin + pill * 2 + WeekStripMetrics.spacing
+            #expect(nextEnd <= width, "Next week is cut off at \(width) points")
+        }
+    }
+
+    @Test func aWideStripShowsLastWeekToo() throws {
+        let selected = try #require(ISOWeek("2026-W46"))
+        let weeks = [selected.previous, selected, selected.next]
+        // An iPad either way up: the week before leads, the selected and next weeks follow whole.
+        for width: CGFloat in [834, 1210] {
+            let pill = WeekStripMetrics.pillWidth(stripWidth: width, typeSize: .large)
+            #expect(WeekStripMetrics.fitsThreeWeeks(stripWidth: width, pillWidth: pill))
+            #expect(
+                WeekStripMetrics.scrollTarget(
+                    selected: selected, available: weeks, stripWidth: width, pillWidth: pill) == selected.previous)
+        }
         // The household's first week has nothing before it.
-        #expect(WeekStripMetrics.scrollTarget(selected: selected, available: [selected]) == selected)
+        #expect(
+            WeekStripMetrics.scrollTarget(
+                selected: selected, available: [selected], stripWidth: 1210, pillWidth: 240) == selected)
     }
 
     // MARK: - Your Meals: stars only once it's cooked (#12)
@@ -211,5 +233,23 @@ struct Build121MenuLayoutTests {
         #expect(NotificationGrouping.moreText(0) == nil)
         #expect(NotificationGrouping.moreText(1) == "1 more like this")
         #expect(NotificationGrouping.moreText(12) == "12 more like this")
+    }
+}
+
+/// The scrim under the floating tab bar (Hark's review items 11 and 4, build 122).
+struct TabBarScrimLayoutTests {
+    @Test func itFadesInAboveTheBarAndIsSolidAtTheEdge() {
+        let fade = TabBarScrimLayout.fadeStops
+        let bar = TabBarScrimLayout.barStops
+        // Clear where it starts, so there's no hard edge on the content.
+        #expect(fade.first?.location == 0)
+        #expect(fade.first?.opacity == 0)
+        // Nearly full strength by the top of the bar, where the labels' backdrop begins.
+        #expect(fade.last?.location == 1)
+        #expect((fade.last?.opacity ?? 0) >= 0.9)
+        // The bar's part carries on from there, solid at the screen's edge.
+        #expect(bar.first?.opacity == fade.last?.opacity)
+        #expect(bar.last?.location == 1)
+        #expect(bar.last?.opacity == 1)
     }
 }

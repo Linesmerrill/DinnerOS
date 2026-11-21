@@ -306,6 +306,12 @@ seed_offer_codes() {
 }
 seed_offer_codes 8082
 [ $need8083 = yes ] && seed_offer_codes 8083
+# One steady household for the screenshots (build 122): clear what older runs left in the shared
+# test household (QA recipes, second copies, a dinner planned twice, QA companions) and stock its
+# pantry. Tests that change recipes or plans now use households of their own (QAOwnHousehold).
+"$ROOT/scripts/qa-starter-library.sh" http://localhost:8082 tidy >>"$OUT/summary.txt" ||
+    { echo "couldn't tidy the test household on 8082"; exit 1; }
+"$ROOT/scripts/qa-starter-library.sh" http://localhost:8082 pantry >/dev/null || true
 build 8082 &
 [ $need8083 = yes ] && build 8083 &
 wait

@@ -109,59 +109,80 @@ struct ChooseInWalmartView: View {
     /// The list item, with Back and Skip, and the one button that matters: Use This Product, live
     /// only on a product page.
     private func itemBar(_ item: WalmartChooser.Item) -> some View {
-        // The item and its hint get the full width on their own lines; Skip and Use This sit on
-        // a row under them, so the hint is never squeezed between the buttons (review 2).
-        VStack(alignment: .leading, spacing: DS.Space.xs) {
-            HStack(alignment: .top, spacing: DS.Space.s) {
-                Button("Back", systemImage: "chevron.left") { chooser.back() }
-                    .labelStyle(.iconOnly)
-                    .disabled(!chooser.canGoBack || isSaving)
-                    .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
-                VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                    Text(item.name)
-                        .font(DS.Typography.headline)
-                        .lineLimit(2)
-                    Text(
-                        productID == nil
-                            ? Self.subtitle(amountText: item.amountText)
-                            : (page.productName ?? addressName ?? String(localized: "This product"))
-                    )
-                    .font(DS.Typography.footnote)
-                    .foregroundStyle(DS.Colors.secondaryText)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    if !item.note.isEmpty {
-                        Text("Your note: \(item.note)")
-                            .font(DS.Typography.footnote.weight(.medium))
-                            .foregroundStyle(DS.Colors.warning)
-                            .lineLimit(2)
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: DS.Size.tapTarget, alignment: .leading)
-                .accessibilityElement(children: .combine)
+        // Skip and Use This sit beside the item when its name and hint fit on one line each
+        // (iPad, a wide phone), and on a row under it otherwise, so the hint is never squeezed
+        // between the buttons (review 2, build 122).
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: DS.Space.m) {
+                itemInfo(item, lineLimit: 1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: DS.Space.m)
+                itemButtons(item)
             }
-            HStack(spacing: DS.Space.m) {
-                Spacer(minLength: 0)
-                Button("Skip") { chooser.skip() }
-                    .buttonStyle(.dsTextLink)
-                    .disabled(isSaving)
-                Button {
-                    use(item)
-                } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Label("Use This", systemImage: "checkmark")
-                    }
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                itemInfo(item, lineLimit: 2)
+                HStack(spacing: DS.Space.m) {
+                    Spacer(minLength: 0)
+                    itemButtons(item)
                 }
-                .buttonStyle(.dsPrimary(.small))
-                .disabled(productID == nil || isSaving)
-                .accessibilityLabel("Use This Product for \(item.name)")
             }
         }
         .padding(.horizontal, DS.Space.m)
         .padding(.vertical, DS.Space.s)
         .background(DS.Colors.barBackground)
+    }
+
+    /// Back, then the item's name, what to do, and any note.
+    private func itemInfo(_ item: WalmartChooser.Item, lineLimit: Int) -> some View {
+        HStack(alignment: .top, spacing: DS.Space.s) {
+            Button("Back", systemImage: "chevron.left") { chooser.back() }
+                .labelStyle(.iconOnly)
+                .disabled(!chooser.canGoBack || isSaving)
+                .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                Text(item.name)
+                    .font(DS.Typography.headline)
+                    .lineLimit(lineLimit)
+                Text(
+                    productID == nil
+                        ? Self.subtitle(amountText: item.amountText)
+                        : (page.productName ?? addressName ?? String(localized: "This product"))
+                )
+                .font(DS.Typography.footnote)
+                .foregroundStyle(DS.Colors.secondaryText)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+                if !item.note.isEmpty {
+                    Text("Your note: \(item.note)")
+                        .font(DS.Typography.footnote.weight(.medium))
+                        .foregroundStyle(DS.Colors.warning)
+                        .lineLimit(lineLimit)
+                }
+            }
+            .frame(maxWidth: lineLimit == 1 ? nil : .infinity, minHeight: DS.Size.tapTarget, alignment: .leading)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func itemButtons(_ item: WalmartChooser.Item) -> some View {
+        HStack(spacing: DS.Space.m) {
+            Button("Skip") { chooser.skip() }
+                .buttonStyle(.dsTextLink)
+                .disabled(isSaving)
+            Button {
+                use(item)
+            } label: {
+                if isSaving {
+                    ProgressView()
+                } else {
+                    Label("Use This", systemImage: "checkmark")
+                }
+            }
+            .buttonStyle(.dsPrimary(.small))
+            .disabled(productID == nil || isSaving)
+            .accessibilityLabel("Use This Product for \(item.name)")
+        }
+        .fixedSize()
     }
 
     /// "Need 6 · Tap a product to pick it.": the amount says what it is, not a bare number
@@ -338,24 +359,28 @@ private enum WalmartOnScreen {
 }
 
 /// Hides the parts of Walmart's mobile site that cover the products: the "Get the app" banner,
-/// the "Ship to another country" popover, and the chat button. CSS catches the known selectors;
+/// the "Ship to another country", "Switch countries" and "Spanish / Español" popovers, the chat button, and the
+/// banner ad over the results. CSS catches the known selectors;
 /// a watcher also hides, by their words, the fixed or floating boxes they live in, in case
 /// Walmart renames its classes. Anything missing is skipped, and an error never reaches the
 /// page.
 enum WalmartPageTidy {
-    /// Known selectors, hidden by CSS before a mutation watcher runs.
+    /// Known selectors, hidden by CSS before a mutation watcher runs. The banner ad over the
+    /// results ("skyline") often loads blank in the app's web view, leaving an empty band of up
+    /// to 230 px above the products, so it goes too (build 122).
     static let css = """
         [data-testid*="app-banner" i], [data-testid*="smart-banner" i], [data-testid*="get-the-app" i],
         [data-testid*="download-app" i], [class*="smart-banner" i], [id*="smart-banner" i],
         [data-testid*="chat" i], [aria-label*="chat with" i], [id*="chatbot" i], [class*="chatbot" i],
-        [data-testid*="international" i][role="dialog"], [data-testid*="intl-popover" i]
+        [data-testid*="international" i][role="dialog"], [data-testid*="intl-popover" i],
+        [data-testid="skyline-ad"], [id^="SEARCH-SkylineDisplayAd"]
         { display: none !important; }
         """
 
     /// Words on the boxes to hide, lowercased.
     static let phrases = [
         "get the app", "ship to another country", "chat with us", "need help? chat", "chat now", "ask sparky",
-        "sparky",
+        "sparky", "spanish / español", "switch countries",
     ]
 
     static let script = """
@@ -381,6 +406,7 @@ enum WalmartPageTidy {
             const hide = (box) => {
               const height = box.getBoundingClientRect().height;
               const fixed = getComputedStyle(box).position === 'fixed';
+              box.setAttribute('data-dinneros-hidden', '1');
               box.style.setProperty('display', 'none', 'important');
               let parent = box.parentElement;
               for (let depth = 0; parent && parent !== document.body && depth < 4; depth++) {

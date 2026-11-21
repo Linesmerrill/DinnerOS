@@ -444,8 +444,16 @@ nonisolated struct AutopilotOption: Decodable, Hashable, Sendable, Identifiable 
     let description: String?
     /// Only on cuisines, tags, and proteins; `0` for starter values.
     let recipeCount: Int?
+    /// Only on cuisines with recipes: a photo for the onboarding grid that no earlier cuisine
+    /// shows. Servers before build 122 don't send it.
+    var imageURL: URL? = nil
 
     var id: String { value }
+
+    private enum CodingKeys: String, CodingKey {
+        case value, label, description, recipeCount
+        case imageURL = "imageUrl"
+    }
 }
 
 /// The API's validation bounds (`AutopilotLimits`), enforced in the forms.
