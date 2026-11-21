@@ -275,16 +275,10 @@ if [ "${ERASE:-}" = 1 ]; then
     done
 fi
 free_gb=$(df -g "$OUT" | awk 'NR==2 {print $4}')
-# About 3 GB per simulator plus the builds: 34 GB for the full matrix, less for a rerun. A
-# simulator that already holds its data needs less (build 121: erasing them all before a run
-# cost the iPads about 10 minutes of first boot), so what they hold counts toward it.
-held_gb=0
-for config in $CONFIGS; do
-    sid=$(xcrun simctl list devices | grep "QA matrix $config (" | grep -oE "[0-9A-F-]{36}" | head -1)
-    [ -n "$sid" ] && held_gb=$((held_gb + $(du -sg "$HOME/Library/Developer/CoreSimulator/Devices/$sid" 2>/dev/null | cut -f1)))
-done
-need_gb=$((3 * $(echo $CONFIGS | wc -w) + 4 - held_gb))
-[ "$need_gb" -lt 8 ] && need_gb=8
+# About 3 GB per simulator plus the builds: 34 GB for the full matrix, less for a rerun. Warm
+# simulators still grow during a run (build 121: starting with 13 GB free filled the disk), so
+# this counts every simulator, warm or not.
+need_gb=$((3 * $(echo $CONFIGS | wc -w) + 4))
 if [ "$free_gb" -lt "$need_gb" ]; then
     echo "Only ${free_gb} GB free; this run needs ${need_gb}. Clear old result bundles, or run with ERASE=1."
     exit 1
