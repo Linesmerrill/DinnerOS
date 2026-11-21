@@ -217,10 +217,12 @@ final class ScreensQATests: XCTestCase {
             let top = snap(app, "debug top before scrolling", settle: false)
             scrollContent(app)
             var scrolled = shot(app, "Recipe page › \(kind) › scrolled")
+            // The same as the page's top: it fits on the screen (a short recipe on an iPad), so
+            // there's nothing to scroll. The same as the last tab's shot: a copy, not a scroll.
             if scrolled == top || scrolled == lastShot {
                 scrollContent(app)
                 scrolled = shot(app, "Recipe page › \(kind) › scrolled")
-                if scrolled == top || scrolled == lastShot {
+                if scrolled == lastShot {
                     problems.append("Recipe page › \(kind) › scrolled: the page didn’t scroll")
                 }
             }

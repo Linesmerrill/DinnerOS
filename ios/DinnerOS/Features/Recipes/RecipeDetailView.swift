@@ -44,11 +44,6 @@ struct RecipeDetailView: View {
     @State private var scrollTop: CGFloat = 0
     /// The one-line title's row under the bar's buttons.
     @ScaledMetric(relativeTo: .headline) private var compactTitleHeight: CGFloat = 36
-    @State private var showsMore = false
-    /// The More menu's rows' height, so its sheet on the Duo fits them with no empty space.
-    @State private var moreMenuHeight: CGFloat = 3 * DS.Size.tapTarget
-    /// What the More menu asked for, run once its popover has closed.
-    @State private var moreAction: RecipeMoreAction?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// The page's safe area, which shows iPhone Duo's cover-screen button column.
@@ -412,38 +407,26 @@ struct RecipeDetailView: View {
         canEditRecipe && (recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage)
     }
 
-    /// The More menu: an opaque popover rather than a system menu, whose glass showed Start
-    /// Cooking and the photo through it. It stays beside its button, inside the page.
+    /// The More menu: the system menu, Delete Recipe in red (Hark's review item 8). An opaque
+    /// popover here (build 121) didn't take taps on its rows in QA and showed nothing on the Duo.
     private var moreButton: some View {
-        Button {
-            showsMore = true
+        Menu {
+            if let shareURL {
+                ShareLink(item: shareURL, subject: Text(name)) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+            if recipe != nil, canEditRecipe {
+                Button("Edit Recipe", systemImage: "pencil") { showsEditor = true }
+                Button("Delete Recipe", systemImage: "trash", role: .destructive) {
+                    deleting = summary
+                }
+            }
         } label: {
             Image(systemName: TabHeader.moreSystemImage)
                 .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
         }
         .accessibilityLabel("More")
-        .popover(isPresented: $showsMore) {
-            RecipeMoreMenu(
-                shareURL: shareURL, name: name, canEdit: recipe != nil && canEditRecipe,
-                measured: { moreMenuHeight = $0 }
-            ) { action in
-                moreAction = action
-                showsMore = false
-            }
-            // On the Duo's cover screen the button sits in the side rail, and a popover there
-            // spread across the rail; a short sheet stays over the page.
-            .presentationCompactAdaptation(startCookingPlacement == .bottomRow ? .sheet : .popover)
-            .presentationDetents([.height(moreMenuHeight + DS.Space.xxl)])
-            .presentationBackground(DS.Colors.background)
-        }
-        .onChange(of: showsMore) { _, showing in
-            guard !showing, let action = moreAction else { return }
-            moreAction = nil
-            switch action {
-            case .edit: showsEditor = true
-            case .delete: deleting = summary
-            }
-        }
     }
 
     /// The ⋯ menu shows only when it has something in it, so there's never an empty button.
@@ -827,69 +810,6 @@ struct RecipeDetailTabPicker: View {
 }
 
 /// What the More menu runs once it has closed.
-enum RecipeMoreAction {
-    case edit, delete
-}
-
-/// The More menu's rows, on an opaque background: Share, Edit Recipe, and Delete Recipe in red.
-private struct RecipeMoreMenu: View {
-    let shareURL: URL?
-    let name: String
-    let canEdit: Bool
-    /// Its rows' height, for sizing the sheet it becomes on the Duo.
-    var measured: (CGFloat) -> Void = { _ in }
-    let choose: (RecipeMoreAction) -> Void
-
-    /// Wide enough for "Delete Recipe" at large text without wrapping.
-    static let width: CGFloat = 240
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let shareURL {
-                ShareLink(item: shareURL, subject: Text(name)) {
-                    row("Share", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.plain)
-            }
-            if canEdit {
-                if shareURL != nil { Divider() }
-                Button {
-                    choose(.edit)
-                } label: {
-                    row("Edit Recipe", systemImage: "pencil")
-                }
-                .buttonStyle(.plain)
-                Divider()
-                Button(role: .destructive) {
-                    choose(.delete)
-                } label: {
-                    row("Delete Recipe", systemImage: "trash", tint: DS.Colors.destructive)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .frame(minWidth: Self.width)
-        .padding(.vertical, DS.Space.xs)
-        .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self) {
-            $0.size.height
-        } action: {
-            measured($0)
-        }
-        .frame(maxHeight: .infinity, alignment: .top)
-    }
-
-    private func row(_ title: LocalizedStringKey, systemImage: String, tint: Color = .primary) -> some View {
-        DSIconRow(systemImage: systemImage, tint: tint) {
-            Text(title).foregroundStyle(tint)
-        }
-        .font(DS.Typography.body)
-        .padding(.horizontal, DS.Space.l)
-        .frame(minHeight: DS.Size.tapTarget)
-        .contentShape(.rect)
-    }
-}
-
 extension View {
     /// The recipe page's text column: the screen margin, and on a wide screen the readable
     /// width, centered, with the content kept to its leading edge.

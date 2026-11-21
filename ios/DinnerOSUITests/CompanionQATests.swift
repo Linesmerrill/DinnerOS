@@ -26,6 +26,13 @@ final class CompanionQATests: XCTestCase {
         // The dinner is next week, whose Menu has the Grocery List button.
         let next = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Next Week'")).firstMatch
         XCTAssertTrue(next.waitForExistence(timeout: 10), "No Next Week on the Menu")
+        // On a small iPhone the week strip snaps to whole chips, and Next Week can start past
+        // the screen's edge: bring it in first.
+        if !next.isHittable {
+            app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'This Week'"))
+                .firstMatch.swipeLeft()
+            sleep(1)
+        }
         next.tap()
 
         // 1. Companions, from the Menu's ⋯ menu.
