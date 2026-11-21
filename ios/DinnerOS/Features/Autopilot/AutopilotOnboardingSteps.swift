@@ -20,7 +20,9 @@ struct AutopilotTasteStep: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: DS.Space.m) {
-                ForEach(tiles) { tile in
+                // Alphabetical on screen, so the grid reads the same on every device and in
+                // light and dark mode, whatever the recipe counts did (build 121, review 2).
+                ForEach(CuisineTiles.displayOrder(tiles)) { tile in
                     CuisineTileView(
                         tile: tile, preference: settings.preference(for: tile.value, kind: .cuisine),
                         cycle: { cycle(tile) }, set: { set($0, on: tile) })
@@ -82,6 +84,8 @@ private struct CuisineTileView: View {
     private var artwork: some View {
         if let url = tile.imageURL {
             RecipePhoto(url: url, aspectRatio: 1, pointWidth: 200, cornerRadius: Self.cornerRadius)
+                // A photo that doesn't load leaves the plate glyph, never a blank gray tile.
+                .background { placeholder }
                 .overlay {
                     // A scrim under the name, so it stays readable on a light photo.
                     LinearGradient(
@@ -94,18 +98,22 @@ private struct CuisineTileView: View {
                     .clipShape(.rect(cornerRadius: Self.cornerRadius))
                 }
         } else {
-            // No photo: a plate glyph on the card color, like an imageless recipe card, so the
-            // tile never reads as an empty box (build 121).
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .fill(DS.Colors.surface)
-                .aspectRatio(1, contentMode: .fit)
-                .overlay {
-                    Image(systemName: "fork.knife")
-                        .font(DS.Typography.largeTitle)
-                        .foregroundStyle(DS.Colors.secondaryText)
-                        .accessibilityHidden(true)
-                }
+            placeholder
         }
+    }
+
+    /// No photo: a plate glyph on the card color, like an imageless recipe card, so the tile
+    /// never reads as an empty box (build 121).
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: Self.cornerRadius)
+            .fill(DS.Colors.surface)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                Image(systemName: "fork.knife")
+                    .font(DS.Typography.largeTitle)
+                    .foregroundStyle(DS.Colors.secondaryText)
+                    .accessibilityHidden(true)
+            }
     }
 
     private var name: some View {

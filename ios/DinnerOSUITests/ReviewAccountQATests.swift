@@ -14,8 +14,8 @@ final class ReviewAccountQATests: XCTestCase {
 
     /// The recipes in api/internal/reviewaccount/recipes.json.
     private let seeded = [
-        "Salmon with Asparagus and Rice", "Beef and Broccoli", "Spaghetti Pomodoro", "Shredded Beef Tacos",
-        "Chicken Tikka Masala", "Margherita Pizza", "Chicken Skewers with Garlic Sauce", "Turkey and Bean Chili",
+        "Salmon with Asparagus & Rice", "Beef & Broccoli", "Spaghetti Pomodoro", "Shredded Beef Tacos",
+        "Chicken Tikka Masala", "Margherita Pizza", "Chicken Skewers with Garlic Sauce", "Turkey & Bean Chili",
     ]
 
     override func setUp() {

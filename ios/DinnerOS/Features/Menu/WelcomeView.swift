@@ -44,19 +44,19 @@ struct WelcomeView: View {
                     }
                 }
             }
-            .padding(DS.Space.xxl)
+            // The same side margins as the footer, so the cards and Start Planning line up.
+            .padding(.horizontal, DS.Space.l)
+            .padding(.vertical, DS.Space.xxl)
             .dsReadableWidth()
         }
-        // The footer matches the sheet and spans its full width (build 121).
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            DSBottomBar {
-                Button {
-                    choose(.startPlanning)
-                } label: {
-                    Text("Start Planning")
-                }
-                .buttonStyle(.dsPrimary(fullWidth: true))
+        // The footer is the sheet's own color and spans its full width (build 121).
+        .dsBottomBar {
+            Button {
+                choose(.startPlanning)
+            } label: {
+                Text("Start Planning")
             }
+            .buttonStyle(.dsPrimary(fullWidth: true))
         }
         .interactiveDismissDisabled(false)
     }
@@ -95,6 +95,10 @@ struct WelcomeView: View {
             .padding(DS.Space.ml)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
+            // Outlined too: on a light sheet the fill alone barely shows.
+            .overlay {
+                RoundedRectangle(cornerRadius: DS.Radius.large).strokeBorder(DS.Colors.cardStroke)
+            }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

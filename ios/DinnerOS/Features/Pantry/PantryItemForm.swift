@@ -36,6 +36,7 @@ struct PantryItemFields: View {
             .keyboardType(.numbersAndPunctuation)
             .autocorrectionDisabled()
             .modifier(OptionalFocus(binding: amountFocus))
+            .accessibilityIdentifier("pantry.amount")
             Picker("Unit", selection: $draft.unit) {
                 ForEach(PantryUnit.options(including: draft.unit), id: \.self) { code in
                     Text(PantryUnit.pickerLabel(code)).tag(code)
@@ -387,6 +388,7 @@ struct PantryAddSheet: View {
                 Section {
                     TextField("Name", text: $name, prompt: Text("For example, olive oil"))
                         .focused($isNameFocused)
+                        .accessibilityIdentifier("pantry.name")
                         .textInputAutocapitalization(.words)
                         .submitLabel(.next)
                         .onSubmit {

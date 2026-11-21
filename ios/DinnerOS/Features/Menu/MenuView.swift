@@ -307,14 +307,17 @@ struct MenuView: View {
                 .padding(.top, DS.Space.m)
                 .padding(.bottom, DS.Space.xxl)
             }
+            .tabBarEdge()
             // A drag on the list puts the meal search's keyboard away, and Done above it does
             // when the results are too short to drag. The keyboard covers the tab bar.
             .scrollDismissesKeyboard(.immediately)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
+                    // Filled, so it reads on its own and not against the photo under the
+                    // keyboard's floating bar (white on yellow, Hark's review item 10).
                     Button("Done") { Keyboard.dismiss() }
-                        .fontWeight(.semibold)
+                        .buttonStyle(.dsPrimary(.small))
                 }
             }
             // The scroll view's width doesn't depend on what's in it, so this can't loop.
@@ -447,15 +450,11 @@ struct MenuView: View {
         // On an iPad the principal item gets a row of its own under the tab bar; leading puts the
         // switch in the tab bar's row instead, a whole row back for the meals.
         ToolbarItem(placement: horizontalSizeClass == .regular ? .topBarLeading : .principal) {
-            Picker("View", selection: $mode) {
-                ForEach(MenuMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            // Its own size, so the toolbar's capsule hugs the switch instead of drawing a second,
-            // offset outline around a wider frame (iPad).
-            .fixedSize()
+            // One capsule control, the toolbar's glass its only outline (Hark's review item 7).
+            // The leading item (iPad) sits on the toolbar's glass; the principal one (iPhone) doesn't.
+            DSSegmentedControl(
+                selection: $mode, options: MenuMode.allCases.map { ($0, $0.title) },
+                inGlassToolbar: horizontalSizeClass == .regular)
         }
         // Every tab's toolbar reads bell, +, more (`TabHeader`): the bell comes from
         // `.notificationsToolbar()`, outside this one.

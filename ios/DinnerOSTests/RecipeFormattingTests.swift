@@ -44,8 +44,8 @@ struct QuantityFormattingTests {
     @Test(
         arguments: [
             ("1/2", 0.5, "½"),
-            ("3/2", 1.5, "1½"),
-            ("7/4", 1.75, "1¾"),
+            ("3/2", 1.5, "1 ½"),
+            ("7/4", 1.75, "1 ¾"),
             ("2/4", 0.5, "½"),
             ("1/3", 0.333, "⅓"),
             ("5/8", 0.625, "⅝"),
@@ -76,7 +76,7 @@ struct QuantityFormattingTests {
             ("1/2", 0.5, "oz", "ounce", "½ oz"),
             ("1", 1, "clove", "clove", "1 clove"),
             ("2", 2, "clove", "clove", "2 cloves"),
-            ("3/2", 1.5, "cup", "cup", "1½ cups"),
+            ("3/2", 1.5, "cup", "cup", "1 ½ cups"),
             // Only exactly one is singular; a `> 1` rule wrote "0 cup".
             ("0", 0, "cup", "cup", "0 cups"),
             ("1/2", 0.5, "cup", "cup", "½ cup"),
@@ -152,7 +152,7 @@ struct ServingsTests {
         let four = recipe.ingredientLines(servings: 4, locale: locale)
 
         #expect(two.map(\.name) == ["Cheddar", "Garlic", "Flour Tortillas", "Salt", "Test Paste"])
-        #expect(two.map(\.amount) == ["½ oz", "1 clove", "6", nil, "1½ Tbsp"])
+        #expect(two.map(\.amount) == ["½ oz", "1 clove", "6", nil, "1 ½ Tbsp"])
         // ¾ oz, not 1 oz: the 4-serving amount comes from the API. Test Paste has no
         // authored 4-serving amount, so none is invented.
         #expect(four.map(\.amount) == ["¾ oz", "2 cloves", "12", nil, nil])

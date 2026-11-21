@@ -134,41 +134,29 @@ struct InstructionStepText: View {
     }
 }
 
-/// "Combine:" and what goes in, indented under a thin rule like the ingredient list's tree lines:
-/// two columns on a phone, three with room to spare, one at the largest text sizes, so the list
-/// stays short instead of running across the page.
+/// "Combine:" and what goes in: one tight, left-aligned list under a thin rule that runs beside
+/// every item. Columns spread items across an iPad's width ("2 Tbsp butter" far to the right)
+/// and drew the rule beside the first column only, so it's one column everywhere.
 struct StepIngredientGroup: View {
     let lead: Text
     let items: [Text]
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.horizontalSizeClass) private var sizeClass
-
-    private var columns: Int {
-        if dynamicTypeSize.isAccessibilitySize { return 1 }
-        return sizeClass == .regular ? 3 : 2
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.xs) {
             lead
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(alignment: .top, spacing: DS.Space.m) {
-                Capsule()
-                    .fill(Color.accentColor.opacity(0.5))
-                    .frame(width: 2)
-                Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 6) {
-                    ForEach(Array(stride(from: 0, to: items.count, by: columns)), id: \.self) { start in
-                        GridRow {
-                            ForEach(start..<min(start + columns, items.count), id: \.self) { i in
-                                items[i]
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                ForEach(items.indices, id: \.self) { i in
+                    items[i]
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+            .padding(.leading, DS.Space.m)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(DS.Colors.accent)
+                    .frame(width: DS.Space.hairline)
             }
             .padding(.leading, DS.Space.xxs)
         }

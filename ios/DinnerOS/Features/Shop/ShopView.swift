@@ -40,6 +40,7 @@ struct ShopView: View {
 
     var body: some View {
         content
+            .tabBarEdge()
             .tabHeader(String(localized: "Shop"))
             .safeAreaInset(edge: .top, spacing: 0) {
                 if isReady {
@@ -280,6 +281,8 @@ private struct ShopWeekList: View {
                 RequestStoreRow { isRequestingStore = true }
             }
         }
+        // A centered column on iPad, like the bar under it (build 121, review 2).
+        .dsReadableForm()
         // Choosing in Walmart, for every line without a product or one line's re-choose.
         .fullScreenCover(item: $walmartChoices) { choices in
             if shopping.writesCart {
@@ -1124,9 +1127,11 @@ private struct ShopComponentHeader: View {
                         Button("Never Make It", systemImage: "nosign", role: .destructive) { leaveOut(.always) }
                     }
                 } label: {
+                    // Secondary label gray, 4.5:1 on a row, not the light tinted mint (review 2).
                     Image(systemName: "minus.circle")
                         .imageScale(.large)
-                        .frame(minWidth: 44, minHeight: 44)
+                        .foregroundStyle(DS.Colors.secondaryText)
+                        .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
                 }
                 .accessibilityLabel("Don’t Make \(component.name)")
             }
@@ -1229,8 +1234,8 @@ private struct ShopRemoveMenu: View {
         } label: {
             Image(systemName: "minus.circle")
                 .imageScale(.large)
-                .foregroundStyle(.secondary)
-                .frame(minWidth: 44, minHeight: 44)
+                .foregroundStyle(DS.Colors.secondaryText)
+                .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
         }
         .accessibilityLabel("Remove \(options.name)")
     }
@@ -1714,28 +1719,12 @@ private struct ShopHandoffBar: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Counts only what the link adds: lines already in the cart aren't sent again.
+    /// Counts only what the link adds: lines already in the cart aren't sent again. Items still
+    /// waiting for a product are named too, so the count agrees with "Choose 14 Products".
     private var summary: String {
-        let count = shopping.linesToAdd.count
-        if shopping.opensListPage {
-            if proposal.cart != nil {
-                return count == 1
-                    ? String(localized: "Sends 1 new item to \(store). What you sent before isn’t sent again.")
-                    : String(localized: "Sends \(count) new items to \(store). What you sent before isn’t sent again.")
-            }
-            return count == 1
-                ? String(localized: "Sends 1 item to \(store). You pick the store and check out there.")
-                : String(localized: "Sends \(count) items to \(store). You pick the store and check out there.")
-        }
-        if proposal.cart != nil {
-            return count == 1
-                ? String(localized: "Adds 1 new item to your \(store) cart. What’s already there isn’t added again.")
-                : String(
-                    localized: "Adds \(count) new items to your \(store) cart. What’s already there isn’t added again.")
-        }
-        return count == 1
-            ? String(localized: "Adds 1 item to your \(store) cart. You check out in \(store).")
-            : String(localized: "Adds \(count) items to your \(store) cart. You check out in \(store).")
+        ShopHandoffText.summary(
+            adding: shopping.linesToAdd.count, needsProduct: proposal.needsProduct.count, store: store,
+            listPage: shopping.opensListPage, hasCart: proposal.cart != nil)
     }
 
     private func decisionNote(_ count: Int) -> String {
@@ -2021,5 +2010,48 @@ private struct SameItemSheet: View {
         }
         // Full height, so the search field shows without dragging the sheet up first.
         .presentationDetents([.large])
+    }
+}
+
+/// The words under the Shop tab's send button.
+enum ShopHandoffText {
+    /// "Adds 1 item to your Walmart cart. You check out in Walmart.", and when lines still need
+    /// a product, a second sentence that counts them, so the bar and "Choose 14 Products" agree
+    /// (build 121, review 2).
+    static func summary(adding count: Int, needsProduct: Int, store: String, listPage: Bool, hasCart: Bool)
+        -> String
+    {
+        let first: String
+        if listPage {
+            if hasCart {
+                first =
+                    count == 1
+                    ? String(localized: "Sends 1 new item to \(store). What you sent before isn’t sent again.")
+                    : String(
+                        localized: "Sends \(count) new items to \(store). What you sent before isn’t sent again.")
+            } else {
+                first =
+                    count == 1
+                    ? String(localized: "Sends 1 item to \(store). You pick the store and check out there.")
+                    : String(localized: "Sends \(count) items to \(store). You pick the store and check out there.")
+            }
+        } else if hasCart {
+            first =
+                count == 1
+                ? String(localized: "Adds 1 new item to your \(store) cart. What’s already there isn’t added again.")
+                : String(
+                    localized: "Adds \(count) new items to your \(store) cart. What’s already there isn’t added again.")
+        } else {
+            first =
+                count == 1
+                ? String(localized: "Adds 1 item to your \(store) cart. You check out in \(store).")
+                : String(localized: "Adds \(count) items to your \(store) cart. You check out in \(store).")
+        }
+        guard needsProduct > 0 else { return first }
+        let rest =
+            needsProduct == 1
+            ? String(localized: "Choose a product for 1 more to add it too.")
+            : String(localized: "Choose products for \(needsProduct) more to add them too.")
+        return first + " " + rest
     }
 }

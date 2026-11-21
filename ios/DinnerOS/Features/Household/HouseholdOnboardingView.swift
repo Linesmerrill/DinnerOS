@@ -14,14 +14,15 @@ struct HouseholdOnboardingView: View {
                     header
                         .listRowBackground(Color.clear)
                 }
-                // A friend's code from an invite link, already saved. Typing one in is part of
-                // Create a Household, so this screen has one way to join with a code (build 121).
+                // A friend's code from an invite link, already saved. There's no field to type one:
+                // Join with a Code is the one way to join with a code here (build 121). A friend's
+                // code can still be entered later, in Give a Free Month.
                 if plus.savedInvite?.accepted == true {
                     InviteCodeSetupSection()
                 }
                 Section {
                     NavigationLink {
-                        CreateHouseholdForm(offersInviteCode: true)
+                        CreateHouseholdForm()
                     } label: {
                         option(
                             "Create a Household",

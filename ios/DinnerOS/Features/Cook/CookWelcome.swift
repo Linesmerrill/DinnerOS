@@ -46,15 +46,12 @@ struct CookWelcome: View {
         VStack(spacing: 0) {
             TabView(selection: $page) {
                 ForEach(pages.indices, id: \.self) { index in
-                    pageView(pages[index])
+                    pageView(pages[index], index: index)
                         .tag(index)
                 }
             }
             // The system's page dots were white on a light gray; these use the app's colors.
             .tabViewStyle(.page(indexDisplayMode: .never))
-
-            CookWelcomeDots(count: pages.count, current: page)
-                .padding(.top, DS.Space.s)
 
             HStack {
                 if page < pages.count - 1 {
@@ -80,7 +77,7 @@ struct CookWelcome: View {
         .presentationBackground(DS.Colors.background)
     }
 
-    private func pageView(_ page: CookWelcomePage) -> some View {
+    private func pageView(_ page: CookWelcomePage, index: Int) -> some View {
         ScrollView {
             VStack(spacing: DS.Space.xl) {
                 CookWelcomeDrawing(kind: page.drawing)
@@ -92,14 +89,18 @@ struct CookWelcome: View {
                     .font(DS.Typography.title)
                     .multilineTextAlignment(.center)
                     .accessibilityAddTraits(.isHeader)
-                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                // Centered like the title above it.
+                VStack(alignment: .center, spacing: DS.Space.sm) {
                     ForEach(Array(page.lines.enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .font(DS.Typography.body)
+                            .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .frame(maxWidth: Self.columnWidth, alignment: .leading)
+                .frame(maxWidth: Self.columnWidth)
+                // Right under the text, not at the bottom of the sheet after a big gap.
+                CookWelcomeDots(count: pages.count, current: index)
             }
             .padding(.horizontal, DS.Space.xxl)
             .padding(.bottom, DS.Space.huge)

@@ -90,18 +90,22 @@ extension XCTestCase {
     /// upright PNG: an iPad in landscape once came out as a portrait image tagged with an EXIF
     /// rotation and cut off (build 120), so the pixels are redrawn the right way up.
     @MainActor
-    func snap(_ app: XCUIApplication, _ name: String, settle: Bool = true) {
+    /// Returns the PNG data kept, so a caller can tell two screenshots apart (build 121: some
+    /// "scrolled" shots were byte for byte the tab shot before them).
+    @discardableResult
+    func snap(_ app: XCUIApplication, _ name: String, settle: Bool = true) -> Data {
         if settle { settleForScreenshot(app) }
         let screenshot = XCUIScreen.main.screenshot()
         let orientation = XCUIDevice.shared.orientation
         // Only a device on its side needs the pixels redrawn; upright ones are kept as taken.
-        let attachment =
+        let data =
             orientation == .landscapeLeft || orientation == .landscapeRight
-            ? XCTAttachment(data: Self.uprightPNG(screenshot.image), uniformTypeIdentifier: "public.png")
-            : XCTAttachment(screenshot: screenshot, quality: .original)
+            ? Self.uprightPNG(screenshot.image) : screenshot.pngRepresentation
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        return data
     }
 
     /// The screenshot as PNG data with its rotation applied to the pixels and no EXIF tag.

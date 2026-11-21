@@ -44,15 +44,13 @@ struct AutopilotContextExplainerView: View {
                 }
                 .padding(DS.Space.l)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                DSBottomBar {
-                    Button(action: onContinue) {
-                        Text("Continue")
-                    }
-                    .buttonStyle(.dsPrimary(fullWidth: true))
-                    Button("Not Now", action: onNotNow)
-                        .buttonStyle(.dsTextLink)
+            .dsBottomBar {
+                Button(action: onContinue) {
+                    Text("Continue")
                 }
+                .buttonStyle(.dsPrimary(fullWidth: true))
+                Button("Not Now", action: onNotNow)
+                    .buttonStyle(.dsTextLink)
             }
         }
         .interactiveDismissDisabled()

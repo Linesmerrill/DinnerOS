@@ -107,7 +107,7 @@ struct PantryFormattingTests {
         let unknown = PantryFixtures.item(quantity: "2", quantityValue: 2, unit: "sprig")
         let none = PantryFixtures.item()
 
-        #expect(PantryFormat.amount(cups, locale: english) == "1½ cups")
+        #expect(PantryFormat.amount(cups, locale: english) == "1 ½ cups")
         #expect(PantryFormat.amount(count, locale: english) == "2")
         #expect(PantryFormat.amount(clove, locale: english) == "1 clove")
         #expect(PantryFormat.amount(unknown, locale: english) == "2 sprig")

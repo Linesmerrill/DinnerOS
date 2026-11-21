@@ -360,9 +360,9 @@ struct PlusStoreTests {
         let product = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: true)
         #expect(
             PlusText.chargeLine(yearly, product: product, trialDays: 14)
-                == "Free for 14 days, then $39.99 a year. Renews until you cancel.")
+                == "Free for 14 days, then $39.99 a year.")
         #expect(
-            PlusText.chargeLine(offer.plans[1], product: nil, trialDays: 0) == "$4.99 a month. Renews until you cancel."
+            PlusText.chargeLine(offer.plans[1], product: nil, trialDays: 0) == "$4.99 a month."
         )
     }
 

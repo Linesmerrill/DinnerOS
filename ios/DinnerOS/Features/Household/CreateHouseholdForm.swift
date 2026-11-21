@@ -3,9 +3,6 @@ import SwiftUI
 /// Creates a household. Pushed from onboarding, or presented in a sheet from the
 /// Household tab (which passes `onCreated` to dismiss).
 struct CreateHouseholdForm: View {
-    /// First-run setup asks for a friend's invite code here, so the free month comes with the
-    /// new household. The Household tab's sheet doesn't: codes are for new people.
-    var offersInviteCode = false
     var onCreated: () -> Void = {}
 
     @Environment(HouseholdStore.self) private var households
@@ -38,9 +35,6 @@ struct CreateHouseholdForm: View {
                 }
             } footer: {
                 Text("Weekly plans follow this time zone.")
-            }
-            if offersInviteCode {
-                InviteCodeSetupSection()
             }
             if let errorMessage {
                 Section {

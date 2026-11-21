@@ -59,6 +59,7 @@ struct PantryView: View {
 
     var body: some View {
         content
+            .tabBarEdge()
             .tabHeader(String(localized: "Pantry"))
             // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.
             .toolbar { toolbar }
@@ -242,7 +243,9 @@ struct PantryView: View {
                 Label("Your Pantry Is Empty", systemImage: "cabinet")
             } description: {
                 if canEdit {
-                    Text("Add what you keep at home so grocery lists know what you already have.")
+                    // Two short lines, each of which fits on its own, so no word is left alone
+                    // on the last line (build 121, review 2).
+                    Text("Add what you keep at home.\nGrocery lists will skip it.")
                 } else {
                     Text("No one in this household has added pantry items yet.")
                 }

@@ -302,6 +302,8 @@ nonisolated struct RecipeAmount: Decodable, Equatable, Sendable {
     /// The unit as the source wrote it.
     let sourceUnit: String
     let rawText: String
+    /// The server's own wording, "1 ½ cups" or "10 oz"; `nil` from an older server.
+    var text: String? = nil
 }
 
 // MARK: - List parameters

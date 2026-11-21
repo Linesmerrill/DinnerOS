@@ -35,3 +35,17 @@ extension View {
         }
     }
 }
+
+extension View {
+    /// A solid edge where a tab's scroll view runs under the floating tab bar (iOS 26 and
+    /// later), so a bright card scrolling behind it doesn't tint the bar's glass and its labels
+    /// keep their contrast (Hark's review item 11).
+    @ViewBuilder
+    func tabBarEdge() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectStyle(.hard, for: .bottom)
+        } else {
+            self
+        }
+    }
+}

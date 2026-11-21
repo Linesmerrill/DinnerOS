@@ -87,7 +87,7 @@ struct AutopilotPreferencesView: View {
                     row(section, profile: profile)
                 }
             } header: {
-                Text("Fine-tune Autopilot")
+                Text("Fine-Tune Autopilot")
             } footer: {
                 Text(
                     "Setup doesn’t ask about these. Autopilot uses the usual settings until you change them, and each change shows who made it."

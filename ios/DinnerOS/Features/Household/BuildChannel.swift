@@ -71,6 +71,24 @@ final class BuildChannelStore {
 
     func resolve() async {
         guard channel == nil else { return }
+        #if DEBUG
+            // Screenshot QA (build 121) shows channel-dependent screens as the App Store build
+            // has them: QA_BUILD_CHANNEL=appStore. Debug builds only.
+            if let forced = Self.forced(ProcessInfo.processInfo.environment["QA_BUILD_CHANNEL"]) {
+                channel = forced
+                return
+            }
+        #endif
         channel = await BuildChannel.lookUp()
+    }
+
+    /// A channel named by QA (Debug builds only), or nil.
+    nonisolated static func forced(_ name: String?) -> BuildChannel? {
+        switch name {
+        case "appStore": .appStore
+        case "testFlight": .testFlight
+        case "development": .development
+        default: nil
+        }
     }
 }

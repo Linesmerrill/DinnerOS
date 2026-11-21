@@ -3,8 +3,8 @@ import SwiftUI
 /// The recipe screen's bottom bar, in one layout everywhere: a row of equal-width controls at the
 /// design system's button height (`RecipePlanBarLayout`).
 ///
-/// Before the recipe is in the shown week: how many servings and Add to Week. Once it is: the
-/// day and a −/+ servings stepper over the same `PlanStore` the cards use. Plus moves to the
+/// Before the recipe is in the shown week: Pick a Day and Add to Week (the serving size is
+/// chosen on the Ingredients tab). Once it is: the day and a −/+ servings stepper over the same `PlanStore` the cards use. Plus moves to the
 /// recipe's next serving size up, minus to the next one down, and minus at the smallest size
 /// removes the meal with an undo toast. When the same recipe is planned more than once, the
 /// stepper acts on the most recently added meal.
@@ -35,6 +35,8 @@ struct RecipePlanBar: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var isChoosingWeek = false
+    /// The day Add to Week puts the meal on, picked before it's added.
+    @State private var pickedDay: PlanDay?
 
     private var entry: PlanEntry? { entries.last }
 
@@ -57,7 +59,7 @@ struct RecipePlanBar: View {
         RecipePlanBarLayout.make(
             isPlanned: entry != nil, canEdit: canEdit, isDraft: plans.isDraft, isPastWeek: isPastWeek,
             hasStartCooking: startCooking != nil, startCookingInBar: showsStartCooking,
-            stacksStartCooking: stacksStartCooking, hasServingChoices: options.count > 1)
+            stacksStartCooking: stacksStartCooking)
     }
 
     var body: some View {
@@ -75,6 +77,17 @@ struct RecipePlanBar: View {
                         .foregroundStyle(DS.Colors.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
+            // Rows fade into the bar instead of being cut mid-line at its edge.
+            .overlay(alignment: .top) {
+                LinearGradient(
+                    colors: [DS.Colors.barBackground.opacity(0), DS.Colors.barBackground],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: DS.Space.l)
+                .offset(y: -DS.Space.l)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
             .sheet(isPresented: $isChoosingWeek) {
                 AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
@@ -107,10 +120,8 @@ struct RecipePlanBar: View {
     @ViewBuilder
     private func control(_ control: RecipePlanBarLayout.Control, compact: Bool = false) -> some View {
         switch control {
-        case .servings:
-            servingsMenu(compact: compact)
         case .day:
-            if let entry { dayMenu(entry, compact: compact) }
+            dayMenu(compact: compact)
         case .stepper:
             if let entry { stepper(entry) }
         case .add(let primary):
@@ -125,26 +136,6 @@ struct RecipePlanBar: View {
             Label("Start Cooking", systemImage: "frying.pan")
         }
         .buttonStyle(.dsPrimary(fullWidth: true))
-    }
-
-    // MARK: Not planned
-
-    @ViewBuilder
-    private func servingsMenu(compact: Bool) -> some View {
-        if let selected = servings {
-            Menu {
-                Picker("Servings", selection: Binding(get: { selected }, set: { servings = $0 })) {
-                    ForEach(options, id: \.self) { option in
-                        Text(MenuFormat.servings(option)).tag(option)
-                    }
-                }
-            } label: {
-                PlanBarMenuLabel(text: MenuFormat.servings(selected), systemImage: compact ? nil : "person.2")
-            }
-            .buttonStyle(.dsOutline(fullWidth: true))
-            .accessibilityLabel("Servings")
-            .accessibilityValue(MenuFormat.servings(selected))
-        }
     }
 
     private func addButton(primary: Bool) -> some View {
@@ -166,37 +157,41 @@ struct RecipePlanBar: View {
         }
     }
 
-    // MARK: Planned
-
-    private func dayMenu(_ entry: PlanEntry, compact: Bool) -> some View {
-        Menu {
+    /// The day, before and after the meal is in the week: before, the day Add to Week puts it
+    /// on; after, the day it's on, with a way to take it off the week.
+    private func dayMenu(compact: Bool) -> some View {
+        let day = entry.map(\.day) ?? pickedDay
+        return Menu {
             Section(
-                entry.day?.title(in: plans.week, weekStartsOn: plans.weekStartsOn)
-                    ?? String(localized: "Unscheduled")
+                day?.title(in: plans.week, weekStartsOn: plans.weekStartsOn) ?? String(localized: "No Day Yet")
             ) {
-                ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
-                    Button(day.name()) {
-                        Task { await planner.move(entry, to: day) }
-                    }
-                    .disabled(entry.day == day)
+                ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { option in
+                    Button(option.name()) { pick(option) }
+                        .disabled(day == option)
                 }
-                Button("Unscheduled") {
-                    Task { await planner.move(entry, to: nil) }
-                }
-                .disabled(entry.day == nil)
+                Button("No Day Yet") { pick(nil) }
+                    .disabled(day == nil)
             }
-            Button("Remove from Week", systemImage: "trash", role: .destructive) {
-                Task { await planner.remove(entry) }
+            if let entry {
+                Button("Remove from Week", systemImage: "trash", role: .destructive) {
+                    Task { await planner.remove(entry) }
+                }
             }
         } label: {
-            // "Pick a Day" rather than "Unscheduled": it says what the button does.
-            PlanBarMenuLabel(
-                text: entry.day?.name() ?? String(localized: "Pick a Day"), systemImage: compact ? nil : "calendar")
+            PlanBarMenuLabel(text: RecipePlanBarLayout.dayLabel(day?.name()), systemImage: compact ? nil : "calendar")
         }
         .buttonStyle(.dsOutline(fullWidth: true))
-        .disabled(!plans.isDraft)
+        .disabled(entry != nil && !plans.isDraft)
         .accessibilityLabel("Day")
-        .accessibilityValue(entry.day?.name() ?? String(localized: "No day yet"))
+        .accessibilityValue(day?.name() ?? String(localized: "No day yet"))
+    }
+
+    private func pick(_ day: PlanDay?) {
+        if let entry {
+            Task { await planner.move(entry, to: day) }
+        } else {
+            pickedDay = day
+        }
     }
 
     private func stepper(_ entry: PlanEntry) -> some View {
@@ -218,7 +213,7 @@ struct RecipePlanBar: View {
         }
         Task {
             await planner.add(
-                recipeID: summary.id, name: summary.name, to: plans.week, servings: servings,
+                recipeID: summary.id, name: summary.name, to: plans.week, day: pickedDay, servings: servings,
                 selections: selections)
         }
     }
@@ -237,9 +232,7 @@ struct RecipePlanBar: View {
 /// case uses the same row of controls (build 121).
 nonisolated struct RecipePlanBarLayout: Equatable {
     enum Control: Hashable {
-        /// How many servings to add it at; only when the recipe has more than one size.
-        case servings
-        /// The day it's planned for.
+        /// The day it goes on, or is on: "Pick a Day" until there is one.
         case day
         /// − servings +, for the planned meal.
         case stepper
@@ -256,10 +249,15 @@ nonisolated struct RecipePlanBarLayout: Equatable {
     /// "This week is finalized." under the controls.
     var showsFinalizedNote = false
 
+    /// The day menu's label: the day, or "Pick a Day" until there is one.
+    static func dayLabel(_ dayName: String?) -> String {
+        dayName ?? String(localized: "Pick a Day")
+    }
+
     /// `nil` when the bar has nothing to show.
     static func make(
         isPlanned: Bool, canEdit: Bool, isDraft: Bool, isPastWeek: Bool, hasStartCooking: Bool,
-        startCookingInBar: Bool, stacksStartCooking: Bool, hasServingChoices: Bool
+        startCookingInBar: Bool, stacksStartCooking: Bool
     ) -> RecipePlanBarLayout? {
         let weekIsSet = !isDraft && !isPastWeek
         // The week is set: nothing to plan here, so the bar is for cooking.
@@ -272,7 +270,7 @@ nonisolated struct RecipePlanBarLayout: Equatable {
             if isPlanned {
                 layout.row = [.day, .stepper]
             } else {
-                layout.row = (hasServingChoices ? [.servings] : []) + [.add(primary: !cookInBar)]
+                layout.row = [.day, .add(primary: !cookInBar)]
             }
             if cookInBar {
                 if stacksStartCooking {

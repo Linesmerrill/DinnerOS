@@ -81,22 +81,20 @@ struct ShopSetupView: View {
         .dsReadableForm()
         // Use Walmart stays above the tab bar, and the last field scrolls clear of both bars
         // (build 121).
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if shopping.canEdit {
-                DSBottomBar(background: DS.Colors.groupedBackground) {
-                    Button(action: save) {
-                        Group {
-                            if isSaving {
-                                ProgressView()
-                            } else {
-                                Text("Use \(storeName)")
-                            }
-                        }
+        // The bar's inset is its own height, so the Store Number field and its helper text
+        // scroll fully above it.
+        .dsBottomBar(isShown: shopping.canEdit, background: DS.Colors.groupedBackground) {
+            Button(action: save) {
+                Group {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Text("Use \(storeName)")
                     }
-                    .buttonStyle(.dsPrimary(fullWidth: true))
-                    .disabled(!canSave)
                 }
             }
+            .buttonStyle(.dsPrimary(fullWidth: true))
+            .disabled(!canSave)
         }
         .sheet(isPresented: $isRequestingStore) {
             // Already on the setup screen, so an available store just closes the sheet.

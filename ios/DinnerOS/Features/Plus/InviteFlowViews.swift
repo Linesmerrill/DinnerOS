@@ -116,21 +116,19 @@ struct InviteCodeScreen: View {
             .padding(DS.Space.xxl)
             .dsReadableWidth()
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            DSBottomBar {
-                Button {
-                    plus.acceptInvite(code: invite.code, title: preview.title)
-                    dismiss()
-                } label: {
-                    Text("Accept")
-                }
-                .buttonStyle(.dsPrimary(fullWidth: true))
-                Button("Not Now") {
-                    plus.declineInvite()
-                    dismiss()
-                }
-                .buttonStyle(.dsTextLink)
+        .dsBottomBar {
+            Button {
+                plus.acceptInvite(code: invite.code, title: preview.title)
+                dismiss()
+            } label: {
+                Text("Accept")
             }
+            .buttonStyle(.dsPrimary(fullWidth: true))
+            Button("Not Now") {
+                plus.declineInvite()
+                dismiss()
+            }
+            .buttonStyle(.dsTextLink)
         }
     }
 
@@ -287,7 +285,7 @@ struct InviteCodeSetupSection: View {
                 }
             }
         } header: {
-            Text("Code from a Friend")
+            Text("Your Free Month")
         } footer: {
             // Once a code is saved, the row above already says this.
             if plus.savedInvite?.accepted != true {

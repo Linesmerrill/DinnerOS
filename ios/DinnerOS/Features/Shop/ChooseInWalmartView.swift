@@ -109,47 +109,55 @@ struct ChooseInWalmartView: View {
     /// The list item, with Back and Skip, and the one button that matters: Use This Product, live
     /// only on a product page.
     private func itemBar(_ item: WalmartChooser.Item) -> some View {
-        HStack(spacing: DS.Space.m) {
-            Button("Back", systemImage: "chevron.left") { chooser.back() }
-                .labelStyle(.iconOnly)
-                .disabled(!chooser.canGoBack || isSaving)
-                .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
-            VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                Text(item.name)
-                    .font(DS.Typography.headline)
-                    .lineLimit(2)
-                Text(
-                    productID == nil
-                        ? Self.subtitle(amountText: item.amountText)
-                        : (page.productName ?? addressName ?? String(localized: "This product"))
-                )
-                .font(DS.Typography.footnote)
-                .foregroundStyle(DS.Colors.secondaryText)
-                .lineLimit(2)
-                if !item.note.isEmpty {
-                    Text("Your note: \(item.note)")
-                        .font(DS.Typography.footnote.weight(.medium))
-                        .foregroundStyle(DS.Colors.warning)
+        // The item and its hint get the full width on their own lines; Skip and Use This sit on
+        // a row under them, so the hint is never squeezed between the buttons (review 2).
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack(alignment: .top, spacing: DS.Space.s) {
+                Button("Back", systemImage: "chevron.left") { chooser.back() }
+                    .labelStyle(.iconOnly)
+                    .disabled(!chooser.canGoBack || isSaving)
+                    .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                    Text(item.name)
+                        .font(DS.Typography.headline)
                         .lineLimit(2)
+                    Text(
+                        productID == nil
+                            ? Self.subtitle(amountText: item.amountText)
+                            : (page.productName ?? addressName ?? String(localized: "This product"))
+                    )
+                    .font(DS.Typography.footnote)
+                    .foregroundStyle(DS.Colors.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    if !item.note.isEmpty {
+                        Text("Your note: \(item.note)")
+                            .font(DS.Typography.footnote.weight(.medium))
+                            .foregroundStyle(DS.Colors.warning)
+                            .lineLimit(2)
+                    }
                 }
+                .frame(maxWidth: .infinity, minHeight: DS.Size.tapTarget, alignment: .leading)
+                .accessibilityElement(children: .combine)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            Button("Skip") { chooser.skip() }
-                .buttonStyle(.dsTextLink)
-                .disabled(isSaving)
-            Button {
-                use(item)
-            } label: {
-                if isSaving {
-                    ProgressView()
-                } else {
-                    Label("Use This", systemImage: "checkmark")
+            HStack(spacing: DS.Space.m) {
+                Spacer(minLength: 0)
+                Button("Skip") { chooser.skip() }
+                    .buttonStyle(.dsTextLink)
+                    .disabled(isSaving)
+                Button {
+                    use(item)
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Label("Use This", systemImage: "checkmark")
+                    }
                 }
+                .buttonStyle(.dsPrimary(.small))
+                .disabled(productID == nil || isSaving)
+                .accessibilityLabel("Use This Product for \(item.name)")
             }
-            .buttonStyle(.dsPrimary(.small))
-            .disabled(productID == nil || isSaving)
-            .accessibilityLabel("Use This Product for \(item.name)")
         }
         .padding(.horizontal, DS.Space.m)
         .padding(.vertical, DS.Space.s)
@@ -345,7 +353,10 @@ enum WalmartPageTidy {
         """
 
     /// Words on the boxes to hide, lowercased.
-    static let phrases = ["get the app", "ship to another country", "chat with us", "need help? chat"]
+    static let phrases = [
+        "get the app", "ship to another country", "chat with us", "need help? chat", "chat now", "ask sparky",
+        "sparky",
+    ]
 
     static let script = """
         (() => {
@@ -365,7 +376,38 @@ enum WalmartPageTidy {
               }
               return null;
             };
+            // Hides a box and collapses what it leaves behind: an emptied wrapper that still keeps
+            // its height, and padding the page kept on the body for a fixed banner.
+            const hide = (box) => {
+              const height = box.getBoundingClientRect().height;
+              const fixed = getComputedStyle(box).position === 'fixed';
+              box.style.setProperty('display', 'none', 'important');
+              let parent = box.parentElement;
+              for (let depth = 0; parent && parent !== document.body && depth < 4; depth++) {
+                const shown = Array.from(parent.children).some((c) => c.getBoundingClientRect().height > 0);
+                if (shown || parent.querySelector('input, form, main')) { break; }
+                parent.style.setProperty('display', 'none', 'important');
+                parent = parent.parentElement;
+              }
+              if (fixed && height > 0) {
+                for (const side of ['padding-top', 'padding-bottom', 'margin-top', 'margin-bottom']) {
+                  const value = parseFloat(getComputedStyle(document.body).getPropertyValue(side)) || 0;
+                  if (Math.abs(value - height) < 4) { document.body.style.setProperty(side, '0px', 'important'); }
+                }
+              }
+            };
+            // A floating chat button, found by its label rather than its words.
+            const chatButtons = () => {
+              for (const el of document.querySelectorAll('button[aria-label], a[aria-label], [role="button"][aria-label]')) {
+                const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                if (!label.includes('chat') && !label.includes('sparky')) { continue; }
+                const box = floating(el);
+                if (box && box !== document.documentElement && !box.querySelector('input, form, main')
+                  && box.getBoundingClientRect().height < window.innerHeight * 0.3) { hide(box); }
+              }
+            };
             const tidy = () => {
+              try { chatButtons(); } catch (e) {}
               try {
                 const nodes = document.querySelectorAll('a, button, span, p, h2, h3, [aria-label]');
                 for (const el of nodes) {
@@ -377,7 +419,7 @@ enum WalmartPageTidy {
                   // Never the page's own header or search: only a small box with no search field.
                   if (!box || box === document.documentElement || box.querySelector('input, form, main')) { continue; }
                   if (box.getBoundingClientRect().height > window.innerHeight * 0.45) { continue; }
-                  box.style.setProperty('display', 'none', 'important');
+                  hide(box);
                 }
               } catch (e) {}
             };

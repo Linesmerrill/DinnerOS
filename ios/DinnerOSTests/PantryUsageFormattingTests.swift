@@ -118,7 +118,7 @@ struct PantryUsageFormattingTests {
         #expect(PantryUsageFormat.purchaseAmount(purchases[1], locale: locale) == "No amount recorded")
         #expect(PantryUsageFormat.purchaseSource(purchases[0].source) == "Restocked")
         #expect(PantryUsageFormat.purchaseSource(purchases[1].source) == "Grocery list")
-        #expect(PantryUsageFormat.amount("3/2", value: 1.5, unit: "cup", locale: locale) == "1½ cups")
+        #expect(PantryUsageFormat.amount("3/2", value: 1.5, unit: "cup", locale: locale) == "1 ½ cups")
         #expect(PantryUsageFormat.amount("3", value: 3, unit: "count", locale: locale) == "3")
         // Only exactly one is singular. A `> 1` rule wrote "0 cup".
         #expect(PantryUsageFormat.amount("0", value: 0, unit: "cup", locale: locale) == "0 cups")

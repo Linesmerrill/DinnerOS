@@ -111,7 +111,7 @@ run_test() {
     xcrun simctl keychain "$id" reset 2>/dev/null
     rm -rf "$OUT/$name.xcresult"
     TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
-        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
+        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_BUILD_CHANNEL=appStore TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
         TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" TEST_RUNNER_QA_EXPECT_START_COOKING=$cook \
         TEST_RUNNER_QA_REVIEW_EMAIL="${REVIEW_ACCOUNT_EMAIL:-}" TEST_RUNNER_QA_REVIEW_PASSWORD="${REVIEW_ACCOUNT_PASSWORD:-}" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
@@ -235,6 +235,15 @@ run_config() {
     xcrun simctl boot "$id" 2>/dev/null
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
+    # iPads on Full Screen Apps, not windowed (Hark's build 121 review: a resize arc showed in
+    # the corner). Once per simulator: a flag in its data folder, which an erase removes.
+    case $config in
+    ipad*)
+        local flag="$HOME/Library/Developer/CoreSimulator/Devices/$id/data/.qa-full-screen-apps"
+        if [ -z "${PLAN_ONLY:-}" ] && [ ! -f "$flag" ]; then
+            full_screen_apps "$id" "$(ls "$OUT"/dd-8082/Build/Products/*.xctestrun | head -1)" && touch "$flag"
+        fi ;;
+    esac
     # No "Slide to type" tip over the keyboard in screenshots (build 121).
     xcrun simctl spawn "$id" defaults write com.apple.Preferences KeyboardContinuousPathEnabled -bool false 2>/dev/null
     xcrun simctl spawn "$id" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true 2>/dev/null

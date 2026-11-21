@@ -37,7 +37,7 @@ struct RecipePairingsSection: View {
     var body: some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: DS.Space.m) {
-                Text("Tastes even better with")
+                Text("Tastes Even Better With")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                 ScrollView(.horizontal) {
@@ -112,7 +112,7 @@ struct RecipePairingsSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if canEdit, pairing.offersRule {
-                Button("Always add this") { makeRule(pairing) }
+                Button("Always Add This") { makeRule(pairing) }
                     .buttonStyle(.borderless)
                     .font(.caption.weight(.semibold))
                     .disabled(isBusy(pairing))

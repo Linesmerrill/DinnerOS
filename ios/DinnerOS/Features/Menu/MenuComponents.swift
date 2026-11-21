@@ -111,7 +111,9 @@ struct RecipePhotoFrame: Layout {
     }
 }
 
-/// A small round ingredient photo with a fallback glyph.
+/// A small round ingredient photo with a fallback glyph, on the design system's one thumbnail
+/// plate: the same white circle with a hairline in light and dark, so a product shot on white
+/// and the fallback look alike side by side (build 121).
 struct IngredientPhoto: View {
     let url: URL?
     var size: CGFloat = 48
@@ -120,7 +122,7 @@ struct IngredientPhoto: View {
 
     var body: some View {
         Circle()
-            .fill(DS.Colors.surface)
+            .fill(DS.Colors.thumbnailFill)
             .frame(width: size, height: size)
             .overlay {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
@@ -130,6 +132,7 @@ struct IngredientPhoto: View {
                 }
             }
             .clipShape(.circle)
+            .overlay(Circle().strokeBorder(Color(.separator)))
             .accessibilityHidden(true)
     }
 
@@ -137,7 +140,7 @@ struct IngredientPhoto: View {
     private var carrotGlyph: some View {
         Image(systemName: "carrot")
             .font(.system(size: size * 0.4))
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(DS.Colors.thumbnailGlyph)
     }
 }
 

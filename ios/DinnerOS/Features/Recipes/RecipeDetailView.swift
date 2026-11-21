@@ -40,6 +40,15 @@ struct RecipeDetailView: View {
     /// The large title's bottom edge in the scroll view, so the bar's title shows only once the
     /// large one has gone under the bar: one title at a time.
     @State private var titleBottom: CGFloat = .infinity
+    /// The scroll view's own top safe area: where the bar ends.
+    @State private var scrollTop: CGFloat = 0
+    /// The one-line title's row under the bar's buttons.
+    @ScaledMetric(relativeTo: .headline) private var compactTitleHeight: CGFloat = 36
+    @State private var showsMore = false
+    /// The More menu's rows' height, so its sheet on the Duo fits them with no empty space.
+    @State private var moreMenuHeight: CGFloat = 3 * DS.Size.tapTarget
+    /// What the More menu asked for, run once its popover has closed.
+    @State private var moreAction: RecipeMoreAction?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// The page's safe area, which shows iPhone Duo's cover-screen button column.
@@ -116,42 +125,42 @@ struct RecipeDetailView: View {
                 // with steps was opened right after it was saved (100% CPU, no state changing).
                 VStack(alignment: .leading, spacing: DS.Space.xl) {
                     titleBlock
-                        .padding(.horizontal, DS.Space.l)
+                        .recipeColumn()
                         .padding(.top, DS.Space.l)
                     if recipe?.editedAt != nil {
                         Label("You edited this recipe", systemImage: "pencil")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, DS.Space.l)
+                            .font(DS.Typography.footnote)
+                            .foregroundStyle(DS.Colors.secondaryText)
+                            .recipeColumn()
                     }
                     if let recipe, let url = recipe.sourceURL,
                         recipe.source == RecipeSourceKey.fromPage || recipe.steps.isEmpty
                     {
                         ImportedRecipeBanner(url: url, showsNote: recipe.source == RecipeSourceKey.fromPage)
-                            .padding(.horizontal, DS.Space.l)
+                            .recipeColumn()
                     }
                     if let recipe, recipe.imageURLString == nil, canEditRecipe,
                         recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage
                     {
                         SuggestedPhotoBanner(recipe: recipe) { saved in show(saved) }
-                            .padding(.horizontal, DS.Space.l)
+                            .recipeColumn()
                     }
                     if let notes = recipe?.myRating?.notesForNextTime, !notes.isEmpty {
                         RecipeNotesForNextTime(notes: notes)
-                            .padding(.horizontal, DS.Space.l)
+                            .recipeColumn()
                     }
                     RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
-                        .stickyBelowTop(barBottom)
+                        .stickyBelowTop(pinLine)
                         .zIndex(1)
                     sectionContent
-                        .padding(.horizontal, DS.Space.l)
-                        .padding(.top, -DS.Space.l)
+                        .recipeColumn()
+                        .padding(.top, -DS.Space.s)
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
                             chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
                         )
-                        .padding(.horizontal, DS.Space.l)
+                        .recipeColumn()
                     }
                     // Picking recipes to share one by one happens here, on the recipe.
                     // Any recipe the household has, imports included, can be shared (decision 685).
@@ -159,23 +168,41 @@ struct RecipeDetailView: View {
                         households.access?.can(.recipesEdit) == true
                     {
                         RecipeSharingRow(recipe: recipe)
-                            .padding(.horizontal, DS.Space.l)
+                            .recipeColumn()
                     }
                 }
                 .padding(.bottom, DS.Space.xxl)
             }
         }
         .ignoresSafeArea(edges: .top)
-        // Once the photo has scrolled away, a solid bar with a hairline under it: nothing that
-        // scrolls under the buttons shows through as a blurred ghost or gets cut mid-line.
+        // Where the bar ends, measured on the scroll view itself so the solid bar and the pinned
+        // picker use the same line (on iPad the page's own inset left a 100 pt gap).
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.safeAreaInsets.top
+        } action: { top in
+            scrollTop = top
+        }
+        // Once the photo has scrolled away, a solid bar and, under the buttons, the recipe's
+        // name on one line. Nothing that scrolls under it shows through or gets cut mid-line;
+        // the pinned picker sits flush below it.
         .overlay(alignment: .top) {
             if showsNavigationBar {
-                DS.Colors.barBackground
-                    .frame(height: barBottom)
-                    .overlay(alignment: .bottom) { Divider() }
-                    .ignoresSafeArea(edges: .top)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: barBottom)
+                    Text(name)
+                        .font(DS.Typography.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, DS.Space.huge)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: compactTitleHeight)
+                        .opacity(showsCompactTitle ? 1 : 0)
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityHidden(!showsCompactTitle)
+                }
+                .background(DS.Colors.barBackground)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
             }
         }
         // The page has nothing to type in.
@@ -192,7 +219,8 @@ struct RecipeDetailView: View {
             let shows = RecipeDetailHeader.showsBar(offset: offset, heroHeight: heroHeight, showing: showsNavigationBar)
             if shows != showsNavigationBar { showsNavigationBar = shows }
         }
-        .navigationTitle(showsBarTitle ? name : "")
+        // The page draws its own one-line title under the buttons (above), on every device.
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(showsNavigationBar ? .visible : .hidden, for: .navigationBar)
         .modifier(RecipeScrollEdge())
@@ -217,7 +245,7 @@ struct RecipeDetailView: View {
                     .accessibilityLabel("Start Cooking")
                 }
                 if hasMoreMenu {
-                    moreMenu
+                    moreButton
                 }
             }
         }
@@ -328,7 +356,7 @@ struct RecipeDetailView: View {
                     colors: [DS.Colors.background.opacity(RecipeDetailHeader.scrimOpacity), .clear],
                     startPoint: .top, endPoint: .bottom
                 )
-                .frame(height: RecipeDetailHeader.scrimHeight)
+                .frame(height: max(RecipeDetailHeader.scrimHeight, barBottom + DS.Space.huge))
                 .allowsHitTesting(false)
             }
             .overlay(alignment: .bottomLeading) {
@@ -354,17 +382,19 @@ struct RecipeDetailView: View {
         horizontalSizeClass == .regular || verticalSizeClass == .compact
     }
 
-    /// Where the bar ends: the scroll view's top inset, or the page's top safe area when the
-    /// scroll view, drawn under the bar, reports none.
+    /// Where the bar ends, in the scroll view's own coordinates.
     private var barBottom: CGFloat {
-        max(pinTop, safeArea.top)
+        scrollTop > 0 ? scrollTop : max(pinTop, safeArea.top)
     }
 
-    /// The bar's small title, once the large one has scrolled under the bar. Not when Start
-    /// Cooking fills the middle of the bar: the title showed through behind it.
-    private var showsBarTitle: Bool {
-        let cookInTopBar = recipe?.steps.isEmpty == false && startCookingPlacement == .topBar
-        return !cookInTopBar && showsNavigationBar && titleBottom < barBottom
+    /// Where the picker pins: under the bar and its one-line title.
+    private var pinLine: CGFloat {
+        barBottom + compactTitleHeight
+    }
+
+    /// The one-line title, once the large one has gone under the bar: one title at a time.
+    private var showsCompactTitle: Bool {
+        showsNavigationBar && titleBottom < pinLine
     }
 
     /// "Autopilot pick" or "Make Again" from the card this recipe was opened from.
@@ -382,26 +412,38 @@ struct RecipeDetailView: View {
         canEditRecipe && (recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage)
     }
 
-    private var moreMenu: some View {
-        Menu {
-            if let shareURL {
-                ShareLink(item: shareURL, subject: Text(name)) {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-            if recipe != nil, canEditRecipe {
-                Button("Edit Recipe", systemImage: "pencil") { showsEditor = true }
-                // Not red here: red on the menu's glass over a photo didn't read, and the
-                // confirmation that follows is the red, destructive step.
-                Button("Delete Recipe", systemImage: "trash") {
-                    deleting = summary
-                }
-            }
+    /// The More menu: an opaque popover rather than a system menu, whose glass showed Start
+    /// Cooking and the photo through it. It stays beside its button, inside the page.
+    private var moreButton: some View {
+        Button {
+            showsMore = true
         } label: {
-            Image(systemName: "ellipsis")
+            Image(systemName: TabHeader.moreSystemImage)
                 .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
         }
         .accessibilityLabel("More")
+        .popover(isPresented: $showsMore) {
+            RecipeMoreMenu(
+                shareURL: shareURL, name: name, canEdit: recipe != nil && canEditRecipe,
+                measured: { moreMenuHeight = $0 }
+            ) { action in
+                moreAction = action
+                showsMore = false
+            }
+            // On the Duo's cover screen the button sits in the side rail, and a popover there
+            // spread across the rail; a short sheet stays over the page.
+            .presentationCompactAdaptation(startCookingPlacement == .bottomRow ? .sheet : .popover)
+            .presentationDetents([.height(moreMenuHeight + DS.Space.xxl)])
+            .presentationBackground(DS.Colors.background)
+        }
+        .onChange(of: showsMore) { _, showing in
+            guard !showing, let action = moreAction else { return }
+            moreAction = nil
+            switch action {
+            case .edit: showsEditor = true
+            case .delete: deleting = summary
+            }
+        }
     }
 
     /// The ⋯ menu shows only when it has something in it, so there's never an empty button.
@@ -708,6 +750,16 @@ enum RecipeDetailTab: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The segment's identifier, for UI tests: "recipeTab.ingredients".
+    var accessibilityID: String {
+        switch self {
+        case .customization: "recipeTab.customize"
+        case .description: "recipeTab.description"
+        case .ingredients: "recipeTab.ingredients"
+        case .nutrition: "recipeTab.nutrition"
+        }
+    }
+
     /// The tabs this recipe has something to show in, in the order they appear.
     static func available(hasCustomizations: Bool, hasPairings: Bool) -> [RecipeDetailTab] {
         allCases.filter { $0 != .customization || hasCustomizations || hasPairings }
@@ -719,22 +771,132 @@ enum RecipeDetailTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// The segmented picker that sticks under the navigation bar while the recipe scrolls.
+/// The segmented control that sticks under the bar while the recipe scrolls: opaque, flush
+/// with the bar, with a short fade under it so rows slip away rather than being cut. Its own
+/// buttons, so each segment has an identifier ("recipeTab.ingredients") and reads as selected.
 struct RecipeDetailTabPicker: View {
     let tabs: [RecipeDetailTab]
     @Binding var selection: RecipeDetailTab
 
+    @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 32
+
     var body: some View {
-        Picker("Section", selection: $selection) {
+        HStack(spacing: DS.Space.hairline) {
             ForEach(tabs) { tab in
-                Text(tab.title).tag(tab)
+                let isSelected = tab == selection
+                Button {
+                    selection = tab
+                } label: {
+                    Text(tab.title)
+                        .font(DS.Typography.subheadline.weight(isSelected ? .semibold : .regular))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(Color.primary)
+                        .frame(maxWidth: .infinity, minHeight: height)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(DS.Colors.background)
+                                    .overlay(Capsule().strokeBorder(Color(.separator)))
+                            }
+                        }
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(tab.accessibilityID)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .pickerStyle(.segmented)
+        .padding(DS.Space.hairline)
+        .background(DS.Colors.fill, in: .capsule)
+        .frame(maxWidth: DS.Size.readableWidth)
         .padding(.horizontal, DS.Space.l)
         .padding(.vertical, DS.Space.sm)
-        .background(.bar)
+        .frame(maxWidth: .infinity)
+        .background(DS.Colors.barBackground)
         .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [DS.Colors.barBackground, DS.Colors.barBackground.opacity(0)], startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: DS.Space.m)
+            .offset(y: DS.Space.m)
+            .allowsHitTesting(false)
+        }
+    }
+}
+
+/// What the More menu runs once it has closed.
+enum RecipeMoreAction {
+    case edit, delete
+}
+
+/// The More menu's rows, on an opaque background: Share, Edit Recipe, and Delete Recipe in red.
+private struct RecipeMoreMenu: View {
+    let shareURL: URL?
+    let name: String
+    let canEdit: Bool
+    /// Its rows' height, for sizing the sheet it becomes on the Duo.
+    var measured: (CGFloat) -> Void = { _ in }
+    let choose: (RecipeMoreAction) -> Void
+
+    /// Wide enough for "Delete Recipe" at large text without wrapping.
+    static let width: CGFloat = 240
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let shareURL {
+                ShareLink(item: shareURL, subject: Text(name)) {
+                    row("Share", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.plain)
+            }
+            if canEdit {
+                if shareURL != nil { Divider() }
+                Button {
+                    choose(.edit)
+                } label: {
+                    row("Edit Recipe", systemImage: "pencil")
+                }
+                .buttonStyle(.plain)
+                Divider()
+                Button(role: .destructive) {
+                    choose(.delete)
+                } label: {
+                    row("Delete Recipe", systemImage: "trash", tint: DS.Colors.destructive)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(minWidth: Self.width)
+        .padding(.vertical, DS.Space.xs)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+        } action: {
+            measured($0)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func row(_ title: LocalizedStringKey, systemImage: String, tint: Color = .primary) -> some View {
+        DSIconRow(systemImage: systemImage, tint: tint) {
+            Text(title).foregroundStyle(tint)
+        }
+        .font(DS.Typography.body)
+        .padding(.horizontal, DS.Space.l)
+        .frame(minHeight: DS.Size.tapTarget)
+        .contentShape(.rect)
+    }
+}
+
+extension View {
+    /// The recipe page's text column: the screen margin, and on a wide screen the readable
+    /// width, centered, with the content kept to its leading edge.
+    fileprivate func recipeColumn() -> some View {
+        padding(.horizontal, DS.Space.l)
+            .frame(maxWidth: DS.Size.readableWidth + 2 * DS.Space.l, alignment: .leading)
+            .frame(maxWidth: .infinity)
     }
 }
 
@@ -919,7 +1081,7 @@ enum RecipeDetailHeader {
 
     /// The background wash at the top of the photo, behind the status bar and the buttons.
     static let scrimHeight: CGFloat = 140
-    static let scrimOpacity: Double = 0.7
+    static let scrimOpacity: Double = 0.8
 
     /// The photo's height for a screen `width` wide: about 45% of a phone's height, and never
     /// taller than `DS.Size.heroMaxHeight` on an iPad or a phone on its side.

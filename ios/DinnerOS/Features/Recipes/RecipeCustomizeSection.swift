@@ -10,7 +10,7 @@ struct RecipeCustomizeSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.l) {
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                Label("Customize your meal", systemImage: "arrow.triangle.swap")
+                Label("Customize Your Meal", systemImage: "arrow.triangle.swap")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                 Text("Swap the protein or double it.")

@@ -73,6 +73,9 @@ nonisolated enum MenuFormat {
         isPast ? String(localized: "Nothing Was Planned This Week") : String(localized: "Nothing Planned Yet")
     }
 
+    /// Under Autopilot's button on an empty week: a sentence, so it needs no Title Case.
+    static let addMealsYourselfHint = String(localized: "You can also add meals yourself below.")
+
     static func mealsPlanned(_ count: Int) -> String {
         switch count {
         case 0: String(localized: "Nothing planned yet")

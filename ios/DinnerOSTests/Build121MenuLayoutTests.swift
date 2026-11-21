@@ -117,13 +117,27 @@ struct Build121MenuLayoutTests {
         #expect(WeekStripMetrics.pillName(week: lastYear, current: current, isWide: true) == "2025")
     }
 
-    @Test func aWideStripLinesUpTheWeekBeforeTheSelectedOne() throws {
+    @Test func everyStripLinesUpTheWeekBeforeTheSelectedOne() throws {
         let selected = try #require(ISOWeek("2026-W46"))
         let weeks = [selected.previous, selected, selected.next]
-        #expect(WeekStripMetrics.scrollTarget(selected: selected, isWide: true, available: weeks) == selected.previous)
-        #expect(WeekStripMetrics.scrollTarget(selected: selected, isWide: false, available: weeks) == selected)
+        // One start position on every screen: last week at the leading edge, the selected one
+        // second and whole.
+        #expect(WeekStripMetrics.scrollTarget(selected: selected, available: weeks) == selected.previous)
         // The household's first week has nothing before it.
-        #expect(WeekStripMetrics.scrollTarget(selected: selected, isWide: true, available: [selected]) == selected)
+        #expect(WeekStripMetrics.scrollTarget(selected: selected, available: [selected]) == selected)
+    }
+
+    // MARK: - Your Meals: stars only once it's cooked (#12)
+
+    @Test func onlyACookedMealAsksHowItWas() {
+        #expect(MealRating.shows(outcome: .cooked, nightHasPassed: false))
+        #expect(MealRating.shows(outcome: nil, nightHasPassed: true))
+        #expect(!MealRating.shows(outcome: nil, nightHasPassed: false))
+        #expect(!MealRating.shows(outcome: .skipped(nil), nightHasPassed: true))
+    }
+
+    @Test func theEmptyWeekHintIsASentence() {
+        #expect(MenuFormat.addMealsYourselfHint == "You can also add meals yourself below.")
     }
 
     // MARK: - The bell (QA: iPhone Duo)

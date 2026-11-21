@@ -234,6 +234,16 @@ nonisolated enum CuisineTiles {
         return lhs.value < rhs.value
     }
 
+    /// The order the grid shows: by name. Which tiles appear follows the counts (`top`), but
+    /// counts move as recipes are added, so on screen they're alphabetical and read the same
+    /// everywhere (build 121).
+    static func displayOrder(_ tiles: [CuisineTile]) -> [CuisineTile] {
+        tiles.sorted { lhs, rhs in
+            let order = lhs.label.localizedStandardCompare(rhs.label)
+            return order == .orderedSame ? lhs.value < rhs.value : order == .orderedAscending
+        }
+    }
+
     /// Gives each tile a photo no other tile is using.
     ///
     /// Cuisines overlap — a recipe can be both Italian and Mediterranean — so the same recipe

@@ -348,7 +348,7 @@ private struct CookHeader: View {
                 .frame(width: photoSize, height: photoSize)
                 VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     if let servings = dish.servings {
-                        Text("Serves \(servings)")
+                        Text(MenuFormat.servings(servings))
                             .font(DS.Typography.headline)
                     }
                     if let minutes = dish.recipe.displayMinutes {
@@ -375,7 +375,7 @@ struct CookIngredientList: View {
     let session: CookSession
     var layout: CookIngredientLayout = .all
 
-    /// The amount column, wide enough for "1½ Tbsp"; it grows with the text size.
+    /// The amount column, left-aligned and wide enough for "1 ½ Tbsp"; it grows with the text.
     @ScaledMetric(relativeTo: .subheadline) private var amountWidth: CGFloat = 64
 
     /// Where a row's name starts: after the check and the amount column.
@@ -412,7 +412,7 @@ struct CookIngredientList: View {
                 }
             case .byStep:
                 let current = session.current(recipe: dish.recipe.id)
-                ForEach(dish.stepGroups) { group in
+                ForEach(CookStepGroups.collapsingRepeatedFirstStep(dish.stepGroups)) { group in
                     stepGroup(group, isCurrent: group.index == current)
                 }
             }
@@ -432,6 +432,14 @@ struct CookIngredientList: View {
                 .padding(.top, DS.Space.l)
                 .padding(.bottom, DS.Space.xs)
                 .accessibilityAddTraits(.isHeader)
+            if group.items.isEmpty, let text = stepText(group.index) {
+                // Step 1 uses exactly what Have Ready lists: the step, not the list again.
+                Text(text)
+                    .font(DS.Typography.body)
+                    .foregroundStyle(DS.Colors.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, DS.Space.s)
+            }
             ForEach(group.items) { item in
                 stepItemRow(item)
                 ForEach(Array(item.parts.enumerated()), id: \.offset) { index, part in
@@ -448,6 +456,12 @@ struct CookIngredientList: View {
         }
     }
 
+    /// A step's own words, for a step whose list would only repeat Have Ready.
+    private func stepText(_ index: Int) -> String? {
+        dish.instructions?.steps.first { $0.index == index }?.text
+            ?? dish.recipe.steps.first { $0.index == index }?.text
+    }
+
     /// The check, the amount in its column, and the name with what's under it.
     private func row(
         isChecked: Bool, isQuiet: Bool, amount: String?, name: String, ingredientKey: String?,
@@ -455,17 +469,16 @@ struct CookIngredientList: View {
     ) -> some View {
         HStack(alignment: .center, spacing: DS.Space.m) {
             CookCircle(isChecked: isChecked)
-            Text(amount ?? "")
+            Text(amount.map(RecipeFormat.kitchenFractions) ?? "")
                 .font(DS.Typography.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(DS.Colors.secondaryText)
                 .strikethrough(isQuiet)
                 .lineLimit(2)
-                .multilineTextAlignment(.trailing)
-                .frame(width: amountWidth, alignment: .trailing)
+                .frame(width: amountWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 HStack(spacing: DS.Space.xs) {
-                    Text(name)
+                    Text(RecipeFormat.displayName(name))
                         .font(DS.Typography.body.weight(.semibold))
                         .strikethrough(isQuiet)
                         .foregroundStyle(isQuiet ? DS.Colors.secondaryText : Color.primary)
@@ -596,6 +609,25 @@ struct CookIngredientList: View {
     }
 }
 
+/// The by-step list's groups as shown.
+enum CookStepGroups {
+    /// When Step 1 uses exactly what Have Ready lists (a short recipe), Step 1 keeps its heading
+    /// and shows its words instead of the same list again. Have Ready keeps its full list
+    /// (decision 635).
+    nonisolated static func collapsingRepeatedFirstStep(_ groups: [CookStepGroup]) -> [CookStepGroup] {
+        guard let ready = groups.first(where: { $0.index == 0 }),
+            let first = groups.firstIndex(where: { $0.index == 1 })
+        else { return groups }
+        let key = { (item: CookStepItem) in item.ingredientKey ?? item.name.lowercased() }
+        let readyKeys = Set(ready.items.map(key))
+        let stepKeys = Set(groups[first].items.map(key))
+        guard !stepKeys.isEmpty, stepKeys == readyKeys else { return groups }
+        var out = groups
+        out[first] = CookStepGroup(index: 1, items: [])
+        return out
+    }
+}
+
 /// A by-step group's heading: "Have Ready" for what to gather first, then "Step 1", "Step 2".
 enum CookStepGroupTitle {
     static func text(_ index: Int) -> String {
@@ -615,7 +647,7 @@ struct CookSaveForLaterCard: View {
                 .foregroundStyle(Color.orange)
                 .accessibilityAddTraits(.isHeader)
             ForEach(notes) { note in
-                (Text(note.name).fontWeight(.semibold) + Text(": ") + Text(note.text))
+                (Text(RecipeFormat.displayName(note.name)).fontWeight(.semibold) + Text(": ") + Text(note.text))
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
             }

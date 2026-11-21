@@ -42,11 +42,18 @@ nonisolated enum DS {
         /// Disabled button fill and text: one look for every disabled action.
         static let disabledFill = Color(.tertiarySystemFill)
         static let disabledText = Color(.tertiaryLabel)
+        /// A card's outline, for a card on a sheet where its fill alone is too faint to see.
+        static let cardStroke = Color(.separator)
         /// The background under a pinned footer or bottom bar: the same as the sheet or screen.
         static let barBackground = Color(.systemBackground)
         /// The light accent wash behind a tinted control that isn't a system button, like the
         /// recipe bar's servings stepper, matching `.dsSecondary` (build 121).
         static let accentFill = Color.accentColor.opacity(0.15)
+        /// An ingredient thumbnail's plate: white in light and dark, like the product photos
+        /// shot on white that sit beside it (build 121).
+        static let thumbnailFill = Color.white
+        /// The fallback glyph on that plate: one mid gray in light and dark.
+        static let thumbnailGlyph = Color(white: 0.62)
     }
 
     // MARK: Spacing
@@ -118,6 +125,9 @@ nonisolated enum DS {
         static let readableWidth: CGFloat = 640
         /// A recipe's photo is never taller than this on a wide screen.
         static let heroMaxHeight: CGFloat = 360
+        /// The height of `DSSegmentedControl`: short enough that its capsule thumb stays round inside
+        /// a toolbar item.
+        static let segmentedHeight: CGFloat = 32
     }
 
     /// Button heights. Each style has one fixed height per size; it scales with Dynamic Type.
@@ -196,10 +206,12 @@ struct DSIconRow<Title: View>: View {
     }
 }
 
-/// A pinned footer for `.safeAreaInset(edge: .bottom, spacing: 0)`: its content in the readable
-/// column, on `DS.Colors.barBackground` from edge to edge, with a hairline on top (build 121).
+/// A pinned footer's content: in the readable column, from edge to edge. Use it through
+/// `.dsBottomBar { }`, which picks the right way to pin it (build 121).
 struct DSBottomBar<Content: View>: View {
-    var background: Color = DS.Colors.barBackground
+    /// `nil` leaves the bar clear, so it shows whatever the sheet or screen is drawn on.
+    var background: Color? = DS.Colors.barBackground
+    var showsDivider = true
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -208,8 +220,44 @@ struct DSBottomBar<Content: View>: View {
         }
         .padding(DS.Space.l)
         .dsReadableWidth()
-        .background(background)
-        .overlay(alignment: .top) { Divider() }
+        .background(background ?? .clear)
+        .overlay(alignment: .top) {
+            if showsDivider { Divider() }
+        }
+    }
+}
+
+/// Pins a `DSBottomBar`. On iOS 26 it's a safe-area bar: no fill of its own, so it's exactly
+/// the sheet's or screen's color, and content passing under it fades behind the system's soft
+/// scroll edge instead of being cut by a hard line. Earlier, an inset on `background`.
+private struct DSBottomBarModifier<Bar: View>: ViewModifier {
+    let isShown: Bool
+    let background: Color
+    let bar: Bar
+
+    func body(content: Content) -> some View {
+        if !isShown {
+            content
+        } else if #available(iOS 26.0, *) {
+            content.safeAreaBar(edge: .bottom, spacing: 0) {
+                DSBottomBar(background: nil, showsDivider: false) { bar }
+            }
+        } else {
+            content.safeAreaInset(edge: .bottom, spacing: 0) {
+                DSBottomBar(background: background) { bar }
+            }
+        }
+    }
+}
+
+extension View {
+    /// A footer pinned to the bottom, with a bottom inset equal to its height so the last
+    /// content scrolls clear of it. `background` is the fill before iOS 26: the screen's own
+    /// color (`groupedBackground` under a grouped list).
+    func dsBottomBar<Bar: View>(
+        isShown: Bool = true, background: Color = DS.Colors.barBackground, @ViewBuilder _ bar: () -> Bar
+    ) -> some View {
+        modifier(DSBottomBarModifier(isShown: isShown, background: background, bar: bar()))
     }
 }
 
@@ -248,18 +296,37 @@ struct DSPrimaryButtonStyle: PrimitiveButtonStyle {
 
     @Environment(\.isEnabled) private var isEnabled
 
+    @ViewBuilder
     func makeBody(configuration: Configuration) -> some View {
-        Button(role: configuration.role, action: configuration.trigger) {
-            DSButtonLabel(
-                label: configuration.label, size: size, fullWidth: fullWidth, font: font,
-                contentHeight: (size.height * scale - size.systemPadding).rounded()
-            )
-            // White in light mode, near-black on dark mode's lighter green (4.5:1 or better).
-            .foregroundStyle(isEnabled ? DS.Colors.onAccent : DS.Colors.disabledText)
+        if isEnabled {
+            Button(role: configuration.role, action: configuration.trigger) {
+                DSButtonLabel(
+                    label: configuration.label, size: size, fullWidth: fullWidth, font: font,
+                    contentHeight: (size.height * scale - size.systemPadding).rounded()
+                )
+                // White in light mode, near-black on dark mode's lighter green (4.5:1 or better).
+                .foregroundStyle(DS.Colors.onAccent)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(size.controlSize)
+        } else {
+            // The shared disabled look: the disabled fill with an outline, so it stays visible on
+            // a white bar in light mode instead of fading into it (build 121, review 2).
+            // Still a button, so VoiceOver and UI tests see a disabled button.
+            Button(role: configuration.role, action: configuration.trigger) {
+                DSButtonLabel(
+                    label: configuration.label, size: size, fullWidth: fullWidth, font: font,
+                    contentHeight: (size.height * scale).rounded() - 2
+                )
+                .padding(.horizontal, size == .large ? DS.Space.xl : DS.Space.ml)
+                .padding(.vertical, 1)
+                .foregroundStyle(DS.Colors.disabledText)
+                .background(DS.Colors.disabledFill, in: Capsule())
+                .overlay(Capsule().strokeBorder(DS.Colors.cardStroke, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .controlSize(size.controlSize)
     }
 }
 
@@ -388,4 +455,66 @@ extension ButtonStyle where Self == DSTextLinkButtonStyle {
         Button("Sign in with email") {}.buttonStyle(.dsTextLink)
     }
     .padding(DS.Space.l)
+}
+
+// MARK: Segmented control
+
+/// A capsule segmented control: the choices in a row, the selected one on a round thumb (build
+/// 121). Used instead of `Picker(.segmented)`, which in a toolbar drew its own outline inside the
+/// toolbar's glass, offset from it, with a thumb cut flat at the bottom (Hark's review, iPad).
+///
+/// In a toolbar on iOS 26 and later the toolbar's glass is the track (`inGlassToolbar`), so
+/// there is one outline; elsewhere the control draws its own capsule track.
+struct DSSegmentedControl<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, title: LocalizedStringKey)]
+    var inGlassToolbar = false
+
+    @Namespace private var thumb
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var drawsTrack: Bool {
+        if #available(iOS 26.0, *) { return !inGlassToolbar }
+        return true
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(options.enumerated()), id: \.offset) { _, option in
+                segment(option.value, title: option.title)
+            }
+        }
+        .padding(DS.Space.hairline)
+        .background {
+            if drawsTrack {
+                Capsule().fill(DS.Colors.fill)
+            }
+        }
+        .fixedSize()
+    }
+
+    private func segment(_ value: Value, title: LocalizedStringKey) -> some View {
+        let isSelected = value == selection
+        return Button {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection = value }
+        } label: {
+            Text(title)
+                .font(DS.Typography.subheadline.weight(isSelected ? .semibold : .regular))
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .padding(.horizontal, DS.Space.ml)
+                .frame(minHeight: DS.Size.segmentedHeight - DS.Space.hairline * 2)
+                .background {
+                    if isSelected {
+                        Capsule()
+                            .fill(DS.Colors.raisedSurface)
+                            .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
+                            .matchedGeometryEffect(id: "thumb", in: thumb)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
 }

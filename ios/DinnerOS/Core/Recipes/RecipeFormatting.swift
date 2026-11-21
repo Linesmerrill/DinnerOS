@@ -83,7 +83,32 @@ nonisolated enum RecipeFormat {
         guard let glyph = glyphs[remainder] else {
             return decimal(Double(fraction.numerator) / Double(fraction.denominator), locale: locale)
         }
-        return whole == 0 ? glyph : whole.formatted(.number.locale(locale)) + glyph
+        // "1 ½", with a space, the way the server writes it.
+        return whole == 0 ? glyph : whole.formatted(.number.locale(locale)) + " " + glyph
+    }
+
+    /// An amount as written by a person or a source, in the kitchen form: "1 1/2 cups" and
+    /// "1½ cups" read "1 ½ cups", "1/2 tsp" reads "½ tsp". Fractions without a glyph stay.
+    static func kitchenFractions(_ text: String) -> String {
+        let glyphFor: [String: String] = [
+            "1/2": "½", "1/3": "⅓", "2/3": "⅔", "1/4": "¼", "3/4": "¾", "1/8": "⅛", "3/8": "⅜", "5/8": "⅝",
+            "7/8": "⅞",
+        ]
+        var out = text
+        for (fraction, glyph) in glyphFor {
+            out = out.replacingOccurrences(
+                of: #"(?<![0-9/])"# + NSRegularExpression.escapedPattern(for: fraction) + #"(?![0-9/])"#,
+                with: glyph, options: .regularExpression)
+        }
+        // "1½" and "1  ½" read "1 ½".
+        return out.replacingOccurrences(
+            of: #"([0-9])\s*([½⅓⅔¼¾⅛⅜⅝⅞])"#, with: "$1 $2", options: .regularExpression)
+    }
+
+    /// A name as the household typed it, with a capital first letter: "sugar" reads "Sugar".
+    static func displayName(_ name: String) -> String {
+        guard let first = name.first, first.isLowercase else { return name }
+        return first.uppercased() + name.dropFirst()
     }
 
     private static func decimal(_ value: Double, locale: Locale) -> String {
@@ -177,7 +202,9 @@ nonisolated enum RecipeFormat {
 
     /// Quantity and unit together, for example "½ oz" or "2 cloves". `nil` when the
     /// source gave no amount ("salt, to taste").
+    /// The server's `text` wins when it sends one; this is the same format, made here.
     static func amount(_ amount: RecipeAmount, locale: Locale = .autoupdatingCurrent) -> String? {
+        if let text = amount.text?.trimmingCharacters(in: .whitespaces), !text.isEmpty { return text }
         guard let quantity = quantity(amount.quantity, value: amount.quantityValue, locale: locale) else {
             return nil
         }

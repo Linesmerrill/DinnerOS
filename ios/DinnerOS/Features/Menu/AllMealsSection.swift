@@ -15,6 +15,9 @@ struct AllMealsSection: View {
 
     @State private var isSearching = false
     @State private var searchText = ""
+    /// The search field has the keyboard: the header shrinks to the field alone, so a result
+    /// shows above the keyboard on a short screen (the Duo's cover screen, Hark's review item 10).
+    @State private var isTyping = false
     /// The width the cards share, as measured here, for the iPad's rows of cards
     /// (`AllMealsLayout`). Only used without a `containerWidth`.
     @State private var measuredWidth: CGFloat = 0
@@ -35,14 +38,17 @@ struct AllMealsSection: View {
                     .padding(.horizontal, DS.Space.l)
             } header: {
                 VStack(alignment: .leading, spacing: DS.Space.s) {
-                    if let title {
+                    // The title steps aside while searching, so a result clears the tab bar
+                    // after Done on a small phone (Hark's review item 4).
+                    if let title, !isTyping, !isSearching {
                         Text(title)
                             .font(.title3.bold())
                             .accessibilityAddTraits(.isHeader)
                             .padding(.horizontal, DS.Space.l)
                     }
                     MenuChipBar(
-                        list: list, options: options, isSearching: $isSearching, searchText: $searchText)
+                        list: list, options: options, isSearching: $isSearching, searchText: $searchText,
+                        isTyping: $isTyping)
                 }
                 .padding(.vertical, DS.Space.s)
                 .background(.bar)
@@ -264,34 +270,18 @@ struct MenuChipBar: View {
     let options: MenuFilterOptions
     @Binding var isSearching: Bool
     @Binding var searchText: String
+    /// Whether the search field has the keyboard.
+    @Binding var isTyping: Bool
 
     @State private var isShowingFilters = false
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         VStack(spacing: DS.Space.s) {
-            ScrollView(.horizontal) {
-                HStack(spacing: DS.Space.s) {
-                    searchChip
-                    filterChip
-                    sortMenu
-                    valueMenu(
-                        title: String(localized: "Main Protein"), options: options.proteins,
-                        selection: list.query.protein
-                    ) { value in
-                        apply { $0.protein = value }
-                    }
-                    timeMenu
-                    valueMenu(
-                        title: String(localized: "Cuisine"), options: options.cuisines, selection: list.query.cuisine
-                    ) { value in
-                        apply { $0.cuisine = value }
-                    }
-                }
-                .padding(.horizontal, DS.Space.l)
+            // The chips step aside while the field has the keyboard.
+            if !isSearchFocused {
+                chips
             }
-            .scrollIndicators(.hidden)
-            .carouselInSafeArea()
             if isSearching {
                 HStack(spacing: DS.Space.s) {
                     Image(systemName: "magnifyingglass")
@@ -315,11 +305,39 @@ struct MenuChipBar: View {
                 .padding(.horizontal, DS.Space.l)
             }
         }
+        .onChange(of: isSearchFocused) { _, focused in
+            withAnimation(.snappy) { isTyping = focused }
+        }
         .sheet(isPresented: $isShowingFilters) {
             MenuFilterSheet(query: list.query, options: options) { query in
                 Task { await list.setQuery(query) }
             }
         }
+    }
+
+    private var chips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: DS.Space.s) {
+                searchChip
+                filterChip
+                sortMenu
+                valueMenu(
+                    title: String(localized: "Main Protein"), options: options.proteins,
+                    selection: list.query.protein
+                ) { value in
+                    apply { $0.protein = value }
+                }
+                timeMenu
+                valueMenu(
+                    title: String(localized: "Cuisine"), options: options.cuisines, selection: list.query.cuisine
+                ) { value in
+                    apply { $0.cuisine = value }
+                }
+            }
+            .padding(.horizontal, DS.Space.l)
+        }
+        .scrollIndicators(.hidden)
+        .carouselInSafeArea()
     }
 
     private var searchChip: some View {

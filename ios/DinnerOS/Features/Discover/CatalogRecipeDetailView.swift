@@ -19,6 +19,14 @@ struct CatalogRecipeDetailView: View {
     @State private var isConfirmingHideCook = false
     @Environment(\.dismiss) private var dismiss
 
+    /// The large title's bottom edge in the scroll view, and where the bar ends.
+    @State private var titleBottom: CGFloat = .infinity
+    @State private var scrollTop: CGFloat = 0
+
+    private var showsBarTitle: Bool {
+        CatalogRecipeHeader.showsBarTitle(titleBottom: titleBottom, barBottom: scrollTop)
+    }
+
     private var canAdd: Bool {
         households.access?.can(.recipesEdit) == true
     }
@@ -45,8 +53,21 @@ struct CatalogRecipeDetailView: View {
                 }
             }
             .padding(DS.Space.l)
+            .dsReadableWidth()
         }
-        .navigationTitle(recipe?.name ?? route.name)
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentInsets.top
+        } action: { _, top in
+            scrollTop = top
+        }
+        // Add to Library stays above the tab bar, in the readable column on iPad.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if recipe != nil, isInLibrary || canAdd {
+                DSBottomBar { addButton }
+            }
+        }
+        // The small title only once the large one has scrolled off: one title at a time.
+        .navigationTitle(showsBarTitle ? (recipe?.name ?? route.name) : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -59,7 +80,7 @@ struct CatalogRecipeDetailView: View {
                         }
                     }
                 } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+                    Label("More", systemImage: TabHeader.moreSystemImage)
                 }
                 .accessibilityIdentifier("catalogRecipe.more")
             }
@@ -108,6 +129,11 @@ struct CatalogRecipeDetailView: View {
         Text(recipe.name)
             .font(DS.Typography.title)
             .accessibilityAddTraits(.isHeader)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .scrollView).maxY
+            } action: { bottom in
+                titleBottom = bottom
+            }
         if let headline = recipe.headline, !headline.isEmpty {
             Text(headline)
                 .font(DS.Typography.subtitle)
@@ -120,13 +146,12 @@ struct CatalogRecipeDetailView: View {
             Text(description)
                 .font(.body)
         }
-        addButton
     }
 
     @ViewBuilder
     private var addButton: some View {
         if isInLibrary {
-            Label("In your library", systemImage: "checkmark.circle.fill")
+            Label("In Your Library", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
         } else if canAdd {
@@ -218,5 +243,13 @@ struct CatalogRecipeDetailView: View {
             parts.append(String(localized: "Serves \(servings)"))
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// When the shared recipe page's bar shows its small title.
+enum CatalogRecipeHeader {
+    /// Only once the large title has scrolled fully under the bar.
+    static func showsBarTitle(titleBottom: CGFloat, barBottom: CGFloat) -> Bool {
+        titleBottom <= barBottom
     }
 }

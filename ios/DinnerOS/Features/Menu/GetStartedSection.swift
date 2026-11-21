@@ -99,20 +99,30 @@ struct GetStartedSection: View {
         }
     }
 
+    /// Each way in on its own row, its icon in the shared fixed-width column, so the two titles
+    /// start at the same place (Hark's review, build 121).
     private var actions: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
             NavigationLink(value: DiscoverRoute()) {
-                Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
+                DSIconRow(systemImage: SharedRecipes.systemImage) {
+                    Text(SharedRecipes.title).foregroundStyle(DS.Colors.accent)
+                }
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
             if canAddOwnRecipe, let onAddOwnRecipe {
                 Button {
                     onAddOwnRecipe()
                 } label: {
-                    Label("Add a Recipe", systemImage: "square.and.pencil")
+                    DSIconRow(systemImage: "square.and.pencil") {
+                        Text("Add a Recipe").foregroundStyle(DS.Colors.accent)
+                    }
+                    .contentShape(.rect)
                 }
+                .buttonStyle(.plain)
             }
         }
-        .font(.subheadline.weight(.medium))
+        .font(DS.Typography.subheadline.weight(.medium))
     }
 
     private func dismiss() {

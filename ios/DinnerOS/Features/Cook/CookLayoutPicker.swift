@@ -16,7 +16,7 @@ struct CookLayoutPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.m) {
-            Text("Show ingredients")
+            Text("Show Ingredients")
                 .font(.headline)
             HStack(spacing: DS.Space.m) {
                 option(.byStep, title: "By Step") { miniByStep }

@@ -75,7 +75,7 @@ struct RecipeDescriptionSection: View {
             RecipeAutopilotSection(recipeID: recipe.id)
             DetailSection("Order History") {
                 if recipe.orderWeeks.isEmpty {
-                    Text("Not ordered yet")
+                    Text("Not Ordered Yet")
                         .foregroundStyle(Color.secondary)
                 } else {
                     Text(RecipeFormat.timesOrdered(recipe.timesOrdered))
@@ -141,7 +141,7 @@ struct RecipeIngredientsSection: View {
     private var servingPicker: some View {
         if options.count > 1, let selected = servings {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
-                Text("Serving \(selected) people")
+                Text(MenuFormat.servings(selected).capitalized)
                     .font(.headline)
                 let selection = Binding(get: { selected }, set: { servings = $0 })
                 if dynamicTypeSize.isAccessibilitySize || options.count > 4 {
@@ -161,7 +161,7 @@ struct RecipeIngredientsSection: View {
                 }
             }
         } else if let only = options.first {
-            Text("Serving \(only) people")
+            Text(MenuFormat.servings(only).capitalized)
                 .font(.headline)
         }
     }
@@ -237,13 +237,13 @@ struct IngredientRow: View {
             IngredientPhoto(url: line.imageURL)
                 .opacity(isLeftOut ? 0.4 : 1)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                Text(line.nameWithNote)
+                Text(RecipeFormat.displayName(line.nameWithNote))
                     .font(.headline)
                     .strikethrough(isLeftOut)
                     .foregroundStyle(isLeftOut ? Color.secondary : Color.primary)
                 HStack(spacing: DS.Space.xs) {
                     if let amount = line.amount {
-                        Text(amount)
+                        Text(RecipeFormat.kitchenFractions(amount))
                             .font(.subheadline)
                             .strikethrough(isLeftOut)
                             .foregroundStyle(Color.secondary)

@@ -10,26 +10,27 @@ struct RecipePageLayoutTests {
 
     private func bar(
         planned: Bool = false, canEdit: Bool = true, draft: Bool = true, past: Bool = false, cook: Bool = true,
-        inBar: Bool = false, stacks: Bool = false, choices: Bool = true
+        inBar: Bool = false, stacks: Bool = false
     ) -> RecipePlanBarLayout? {
         RecipePlanBarLayout.make(
             isPlanned: planned, canEdit: canEdit, isDraft: draft, isPastWeek: past, hasStartCooking: cook,
-            startCookingInBar: inBar, stacksStartCooking: stacks, hasServingChoices: choices)
+            startCookingInBar: inBar, stacksStartCooking: stacks)
     }
 
-    @Test func anIPhoneOffersServingsAndAddToWeekFilled() {
-        #expect(bar()?.row == [.servings, .add(primary: true)])
+    /// Every recipe, imported or typed by hand, gets the same row: Pick a Day and Add to Week.
+    @Test func anIPhoneOffersPickADayAndAddToWeekFilled() {
+        #expect(bar()?.row == [.day, .add(primary: true)])
         #expect(bar()?.cookRowOnTop == false)
     }
 
-    /// A recipe typed by hand has one size: Add to Week takes the whole row, no empty half.
-    @Test func oneServingSizeLeavesAddToWeekAlone() {
-        #expect(bar(choices: false)?.row == [.add(primary: true)])
+    @Test func theDayMenuSaysPickADayUntilThereIsOne() {
+        #expect(RecipePlanBarLayout.dayLabel(nil) == "Pick a Day")
+        #expect(RecipePlanBarLayout.dayLabel("Tuesday") == "Tuesday")
     }
 
     /// Start Cooking is the filled button wherever the bar has it; Add to Week steps back.
     @Test func onIPadStartCookingIsTheFilledButton() {
-        #expect(bar(inBar: true)?.row == [.servings, .add(primary: false), .startCooking])
+        #expect(bar(inBar: true)?.row == [.day, .add(primary: false), .startCooking])
         #expect(bar(planned: true, inBar: true)?.row == [.day, .stepper, .startCooking])
     }
 
@@ -37,7 +38,7 @@ struct RecipePageLayoutTests {
     @Test func theDuoStacksStartCookingOnTop() {
         let layout = bar(inBar: true, stacks: true)
         #expect(layout?.cookRowOnTop == true)
-        #expect(layout?.row == [.servings, .add(primary: false)])
+        #expect(layout?.row == [.day, .add(primary: false)])
     }
 
     @Test func aPlannedMealShowsItsDayAndServings() {
@@ -146,6 +147,75 @@ struct RecipePageLayoutTests {
         #expect(InstructionStepText.leadingAmount("3 eggs") == "3")
         #expect(InstructionStepText.leadingAmount("a big pinch of salt") == nil)
         #expect(InstructionStepText.leadingAmount("pepper") == nil)
+    }
+
+    private func item(_ name: String, key: String? = nil) -> CookStepItem {
+        CookStepItem(
+            id: name, name: name, amountText: nil, prep: nil, parts: [], isLeftOut: false, ingredientKey: key)
+    }
+
+    /// Sip Fudge: Step 1 uses exactly what Have Ready lists, so it isn't listed twice.
+    @Test func aFirstStepThatRepeatsHaveReadyShowsNoList() {
+        let groups = [
+            CookStepGroup(index: 0, items: [item("sugar"), item("butter")]),
+            CookStepGroup(index: 1, items: [item("Butter"), item("Sugar")]),
+            CookStepGroup(index: 2, items: [item("sugar")]),
+        ]
+        let shown = CookStepGroups.collapsingRepeatedFirstStep(groups)
+        #expect(shown.map(\.index) == [0, 1, 2])
+        #expect(shown[0].items.count == 2)
+        #expect(shown[1].items.isEmpty)
+        #expect(shown[2].items.count == 1)
+    }
+
+    @Test func aFirstStepWithPartOfTheListKeepsIt() {
+        let groups = [
+            CookStepGroup(index: 0, items: [item("Rice", key: "rice"), item("Salt", key: "salt")]),
+            CookStepGroup(index: 1, items: [item("Rice", key: "rice")]),
+        ]
+        #expect(CookStepGroups.collapsingRepeatedFirstStep(groups) == groups)
+    }
+
+    @Test func amountsReadInTheKitchenForm() {
+        #expect(RecipeFormat.kitchenFractions("1 1/2 cups") == "1 ½ cups")
+        #expect(RecipeFormat.kitchenFractions("1½ Tbsp") == "1 ½ Tbsp")
+        #expect(RecipeFormat.kitchenFractions("1/2 tsp") == "½ tsp")
+        #expect(RecipeFormat.kitchenFractions("2 1/3 cups") == "2 ⅓ cups")
+        #expect(RecipeFormat.kitchenFractions("10/12 oz") == "10/12 oz")
+        #expect(RecipeFormat.kitchenFractions("2 Tbsp") == "2 Tbsp")
+        #expect(RecipeFormat.quantity("3/2", value: 1.5, locale: Locale(identifier: "en_US")) == "1 ½")
+    }
+
+    @Test func theServersAmountTextWins() {
+        let fromServer = RecipeAmount(
+            servings: 2, quantity: "3/2", quantityValue: 1.5, unit: "cup", sourceUnit: "cup", rawText: "1 1/2 cups",
+            text: "1 ½ cups")
+        #expect(RecipeFormat.amount(fromServer) == "1 ½ cups")
+        let older = RecipeAmount(
+            servings: 2, quantity: "3/2", quantityValue: 1.5, unit: "cup", sourceUnit: "cup", rawText: "1 1/2 cups")
+        #expect(RecipeFormat.amount(older, locale: Locale(identifier: "en_US")) == "1 ½ cups")
+    }
+
+    @Test func typedNamesStartWithACapital() {
+        #expect(RecipeFormat.displayName("sugar") == "Sugar")
+        #expect(RecipeFormat.displayName("Butter") == "Butter")
+        #expect(RecipeFormat.displayName("") == "")
+        #expect(RecipeFormat.displayName("1% milk") == "1% milk")
+    }
+
+    // MARK: The tab picker
+
+    @Test func everyTabHasAnIdentifierForTests() {
+        #expect(RecipeDetailTab.description.accessibilityID == "recipeTab.description")
+        #expect(RecipeDetailTab.ingredients.accessibilityID == "recipeTab.ingredients")
+        #expect(RecipeDetailTab.nutrition.accessibilityID == "recipeTab.nutrition")
+        #expect(RecipeDetailTab.customization.accessibilityID == "recipeTab.customize")
+    }
+
+    /// The shared recipe page: the bar's title only once the large one is under the bar.
+    @Test func theStarterPageShowsOneTitleAtATime() {
+        #expect(!CatalogRecipeHeader.showsBarTitle(titleBottom: 180, barBottom: 100))
+        #expect(CatalogRecipeHeader.showsBarTitle(titleBottom: 90, barBottom: 100))
     }
 
     @Test func stepGroupsAreNamedForWhatToDo() {

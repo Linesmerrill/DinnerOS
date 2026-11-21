@@ -167,15 +167,26 @@ final class ScreensQATests: XCTestCase {
             card.tap()
             XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn’t open")
             shot(app, "Recipe page › \(kind)")
-            // Each tab, scrolled so its content is on screen (on an iPhone the tab picker sits
-            // below the photo).
-            for tab in ["Ingredients", "Nutrition"] where app.buttons[tab].firstMatch.exists {
-                let picker = app.buttons[tab].firstMatch
+            // Each tab, picked by its accessibility identifier and checked selected (build 121: a
+            // tap by label landed on Customize, Description or a rating tag), then scrolled so its
+            // content is on screen. A shot that's the same as the one before it didn't scroll.
+            var lastShot = Data()
+            for (tab, id) in [("Ingredients", "recipeTab.ingredients"), ("Nutrition", "recipeTab.nutrition")] {
+                let byID = app.descendants(matching: .any)[id].firstMatch
+                let picker = byID.exists ? byID : app.buttons[tab].firstMatch
+                guard picker.exists else { continue }
                 reveal(picker, in: app)
                 picker.tap()
                 sleep(1)
+                if !(picker.isSelected || (picker.value as? String)?.contains("elected") == true) {
+                    picker.tap()
+                    sleep(1)
+                }
+                XCTAssertTrue(
+                    picker.isSelected || (picker.value as? String)?.contains("elected") == true,
+                    "Recipe page › \(kind): the \(tab) tab isn’t selected")
                 scrollContent(app)
-                shot(app, "Recipe page › \(kind) › \(tab)")
+                lastShot = shot(app, "Recipe page › \(kind) › \(tab)")
                 scrollToTop(app)
             }
             let more = app.buttons["More"].firstMatch
@@ -193,8 +204,16 @@ final class ScreensQATests: XCTestCase {
                 dismissMenu(app)
             }
             scrollToTop(app)
+            let top = snap(app, "debug top before scrolling", settle: false)
             scrollContent(app)
-            shot(app, "Recipe page › \(kind) › scrolled")
+            var scrolled = shot(app, "Recipe page › \(kind) › scrolled")
+            if scrolled == top || scrolled == lastShot {
+                scrollContent(app)
+                scrolled = shot(app, "Recipe page › \(kind) › scrolled")
+                if scrolled == top || scrolled == lastShot {
+                    problems.append("Recipe page › \(kind) › scrolled: the page didn’t scroll")
+                }
+            }
             // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
             // to the top in case it ever scrolls away again.
             let startCooking = app.buttons["Start Cooking"].firstMatch
@@ -264,6 +283,14 @@ final class ScreensQATests: XCTestCase {
         if add.exists {
             add.tap()
             sleep(1)
+            // With the keyboard up on Amount, so the shot shows the form with a keyboard (Hark's
+            // review: it must not cover the field).
+            let amount = app.descendants(matching: .any)["pantry.amount"].firstMatch
+            let field = amount.exists ? amount : app.textFields.element(boundBy: 1)
+            if field.waitForExistence(timeout: 3) {
+                field.tap()
+                _ = app.keyboards.firstMatch.waitForExistence(timeout: 3)
+            }
             shot(app, "Pantry › Add an Item")
             back(app)
         }
@@ -292,8 +319,15 @@ final class ScreensQATests: XCTestCase {
     // MARK: Helpers
 
     @MainActor
-    private func shot(_ app: XCUIApplication, _ name: String) {
-        snap(app, "\(name) (\(mode))")
+    @discardableResult
+    private func shot(_ app: XCUIApplication, _ name: String) -> Data {
+        let data = snap(app, "\(name) (\(mode))")
+        defer { checkToolbar(app, name) }
+        return data
+    }
+
+    @MainActor
+    private func checkToolbar(_ app: XCUIApplication, _ name: String) {
         // One snapshot of the whole screen: on iOS 27 the bar's buttons can change while they are
         // read one query at a time, and a button that left mid-read failed the test.
         guard let root = try? app.snapshot() else { return }

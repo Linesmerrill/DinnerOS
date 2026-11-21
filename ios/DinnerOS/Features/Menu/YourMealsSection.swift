@@ -196,7 +196,7 @@ struct YourMealsSection: View {
     private func emptyState(suggestionsPending: Bool) -> some View {
         if suggestionsPending {
             if isEditable {
-                Text("or add meals below")
+                Text(MenuFormat.addMealsYourselfHint)
                     .font(.footnote)
                     .foregroundStyle(Color.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -222,7 +222,7 @@ struct YourMealsSection: View {
                 }
                 .buttonStyle(.dsPrimary(.small))
                 .disabled(autopilot.isGenerating)
-                Text("or add meals below")
+                Text(MenuFormat.addMealsYourselfHint)
                     .font(.footnote)
                     .foregroundStyle(Color.secondary)
             } else if menu.selectedTiming != .past, !plans.isDraft {
@@ -341,7 +341,9 @@ struct MealCard: View {
             // opinion about the food. A meal counts as made unless someone says it wasn't
             // (decision 662), so the row only offers that, once the night is over.
             MealOutcomeRow(entry: entry)
-            if let feedbackRecipe {
+            if let feedbackRecipe,
+                MealRating.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date))
+            {
                 MealRatingRow(recipe: feedbackRecipe)
             }
         }
@@ -603,4 +605,18 @@ struct MoveToWeekMenu: View {
     }
     .menuPreviewEnvironment(
         plan: PlanPreviewData.emptyPlan, menu: MenuPreviewData.proposalMenu, withProposal: true)
+}
+
+/// When a planned meal asks "How was it?" (build 121, Hark's review item 12).
+nonisolated enum MealRating {
+    /// Only once it's been cooked: marked made, or its night is over and nobody said it wasn't
+    /// (a meal counts as made unless someone says otherwise, decision 662). A meal still ahead,
+    /// or one that wasn't made, has nothing to rate.
+    static func shows(outcome: MealOutcome?, nightHasPassed: Bool) -> Bool {
+        switch outcome {
+        case .cooked: true
+        case .skipped: false
+        case nil: nightHasPassed
+        }
+    }
 }

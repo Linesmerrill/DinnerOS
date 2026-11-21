@@ -92,31 +92,29 @@ struct AutopilotOnboardingView: View {
             }
         }
         .dsReadableWidth()
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            DSBottomBar {
-                if let errorMessage {
-                    FormErrorLabel(message: errorMessage)
-                        .font(.footnote)
+        .dsBottomBar {
+            if let errorMessage {
+                FormErrorLabel(message: errorMessage)
+                    .font(.footnote)
+            }
+            HStack(spacing: DS.Space.m) {
+                if step.index > 0 {
+                    Button("Back") { move(to: step.index - 1) }
+                        .buttonStyle(.dsTextLink)
+                        .disabled(isSaving)
+                } else {
+                    // Setup opens here, so leaving it entirely belongs on this step.
+                    Button("Set Up Later") { dismiss() }
+                        .buttonStyle(.dsTextLink)
+                        .disabled(isSaving)
                 }
-                HStack(spacing: DS.Space.m) {
-                    if step.index > 0 {
-                        Button("Back") { move(to: step.index - 1) }
-                            .buttonStyle(.dsTextLink)
-                            .disabled(isSaving)
-                    } else {
-                        // Setup opens here, so leaving it entirely belongs on this step.
-                        Button("Set Up Later") { dismiss() }
-                            .buttonStyle(.dsTextLink)
-                            .disabled(isSaving)
-                    }
-                    Spacer()
-                    if isSaving {
-                        ProgressView()
-                            .padding(.horizontal)
-                    } else {
-                        Button(step.index == Self.steps.count - 1 ? "Finish" : "Next") { move(to: step.index + 1) }
-                            .buttonStyle(.dsPrimary(.small))
-                    }
+                Spacer()
+                if isSaving {
+                    ProgressView()
+                        .padding(.horizontal)
+                } else {
+                    Button(step.index == Self.steps.count - 1 ? "Finish" : "Next") { move(to: step.index + 1) }
+                        .buttonStyle(.dsPrimary(.small))
                 }
             }
         }
@@ -181,24 +179,22 @@ struct AutopilotOnboardingView: View {
         }
         .padding(DS.Space.l)
         .dsReadableWidth()
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            DSBottomBar {
-                if let onPlanWeek {
-                    Button {
-                        dismiss()
-                        onPlanWeek()
-                    } label: {
-                        Label("Plan My Week", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.dsPrimary(fullWidth: true))
-                }
+        .dsBottomBar {
+            if let onPlanWeek {
                 Button {
                     dismiss()
+                    onPlanWeek()
                 } label: {
-                    Text(onPlanWeek == nil ? "Done" : "Not Now")
+                    Label("Plan My Week", systemImage: "sparkles")
                 }
-                .buttonStyle(.dsSecondary(fullWidth: true))
+                .buttonStyle(.dsPrimary(fullWidth: true))
             }
+            Button {
+                dismiss()
+            } label: {
+                Text(onPlanWeek == nil ? "Done" : "Not Now")
+            }
+            .buttonStyle(.dsSecondary(fullWidth: true))
         }
     }
 

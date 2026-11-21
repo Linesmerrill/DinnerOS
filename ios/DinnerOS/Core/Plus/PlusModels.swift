@@ -434,12 +434,12 @@ nonisolated enum PlusText {
         return String(localized: "You have DinnerOS Plus.")
     }
 
-    /// What the selected plan charges: "Free for 14 days, then $39.99 a year. Renews until
-    /// you cancel." with a trial.
+    /// What the selected plan charges: "Free for 14 days, then $39.99 a year." with a trial.
     static func chargeLine(_ plan: PlusPlan, product: PlusProduct?, trialDays: Int) -> String {
         let price = Self.price(plan, product: product)
-        guard trialDays > 0 else { return String(localized: "\(price). Renews until you cancel.") }
-        return String(localized: "Free for \(trialDays) days, then \(price). Renews until you cancel.")
+        // The terms under it say Plus renews until you cancel, so it isn't said twice.
+        guard trialDays > 0 else { return String(localized: "\(price).") }
+        return String(localized: "Free for \(trialDays) days, then \(price).")
     }
 
     /// The free trial's length: the App Store's when it said, the API's otherwise. 0 when

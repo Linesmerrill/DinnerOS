@@ -162,9 +162,13 @@ struct HouseholdView: View {
                 operatorSection
             }
         }
+        // No tall empty band between the bar and the household card.
+        .listSectionSpacing(.compact)
+        .contentMargins(.top, DS.Space.s, for: .scrollContent)
         .dsReadableForm()
         // The shared tab header: a small title in the bar, with the household's name one step
         // down in the card, so the tab never shows two large titles (build 121).
+        .tabBarEdge()
         .tabHeader(String(localized: "Household"))
         .notificationsToolbar()
         .task { await loadAccount() }
@@ -219,7 +223,7 @@ struct HouseholdView: View {
     /// `BuildChannel.showsTesterThanks` allows it, never in an App Store build.
     private var plusLine: String? {
         guard let plus, plus.isEnabled, let status = plus.status else { return nil }
-        guard status.active else { return String(localized: "No Plus yet") }
+        guard status.active else { return String(localized: "No Plus Yet") }
         let thanks = BuildChannel.showsTesterThanks(BuildChannelStore.shared.channel, comp: status.comp)
         return PlusText.status(status, testerThanks: thanks)
     }
@@ -235,18 +239,15 @@ struct HouseholdView: View {
                 DSIconRow(systemImage: "checkmark.seal") { Text("DinnerOS Plus") }
             }
         } else {
+            // The list's own disclosure chevron, in the same place as the other rows': a link
+            // inside the button draws it, and the button opens the purchase sheet.
             Button {
                 plus.showsPurchase = true
             } label: {
-                HStack {
+                NavigationLink(destination: EmptyView()) {
                     DSIconRow(systemImage: "sparkles") { Text("DinnerOS Plus") }
-                    Image(systemName: "chevron.forward")
-                        .font(DS.Typography.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
                 }
                 .foregroundStyle(Color.primary)
-                .contentShape(.rect)
             }
         }
     }
@@ -721,9 +722,11 @@ private struct HouseholdHeaderCard: View {
     @ScaledMetric(relativeTo: .subheadline) private var avatarSize: CGFloat = 36
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DS.Space.m) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            // One step below a title, so it reads as the card's heading, not a second title
+            // under the tab's "Household" (build 121, review 2).
             Text(detail.household.name)
-                .font(DS.Typography.title)
+                .font(DS.Typography.sectionTitle)
                 .accessibilityAddTraits(.isHeader)
             if let members = detail.members, !members.isEmpty {
                 HStack(spacing: -DS.Space.s) {
@@ -752,6 +755,7 @@ private struct HouseholdHeaderCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Clear of the row's rounded corners, which would otherwise clip the first letter.
         .padding(.vertical, DS.Space.s)
     }
 

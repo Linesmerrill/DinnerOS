@@ -5,6 +5,7 @@ import SwiftUI
 struct PlusPurchaseView: View {
     @Environment(PlusStore.self) private var plus
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedPlanID: String?
     @State private var error: String?
     @State private var notice: String?
@@ -30,7 +31,13 @@ struct PlusPurchaseView: View {
                 PlusInviteView()
             }
         }
+        // A page-sized sheet on iPad, tall enough that every plan, price and term shows at once.
+        .presentationSizing(.page)
     }
+
+    /// On an iPad everything fits in the sheet, so the purchase controls follow the plans
+    /// instead of sitting in a pinned footer over them (build 121, review 2).
+    private var pinsPurchaseBar: Bool { horizontalSizeClass != .regular }
 
     private func content(_ offer: PlusOffer) -> some View {
         ScrollView {
@@ -85,15 +92,19 @@ struct PlusPurchaseView: View {
                 Button("Have an Invite Code?") { showsInvite = true }
                     .buttonStyle(.dsTextLink)
                     .frame(maxWidth: .infinity)
+                if !pinsPurchaseBar {
+                    VStack(spacing: DS.Space.sm) { purchaseBar(offer) }
+                        .frame(maxWidth: .infinity)
+                }
             }
             .padding(DS.Space.l)
             .dsReadableWidth()
         }
-        // The button, the price, the renewal terms, Restore, and the Terms and Privacy links
-        // stay on screen however small the phone (Apple wants them by the button).
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            DSBottomBar { purchaseBar(offer) }
-        }
+        // On a phone the button, the price, the renewal terms, Restore, and the Terms and
+        // Privacy links stay on screen however small it is (Apple wants them by the button).
+        // The inset keeps the last lines scrollable above the bar, and the bar's fade softens
+        // whatever passes under it.
+        .dsBottomBar(isShown: pinsPurchaseBar) { purchaseBar(offer) }
     }
 
     @ViewBuilder
@@ -163,7 +174,8 @@ struct PlusPurchaseView: View {
         }
     }
 
-    /// "Free for 14 days, then $39.99 a year. Renews until you cancel." for the selected plan.
+    /// "Free for 14 days, then $39.99 a year." for the selected plan. The renewal itself is in
+    /// the terms under it, so it's said once.
     private func chargeLine(_ offer: PlusOffer) -> String {
         guard let plan = offer.plans.first(where: { $0.productID == selectedID(offer) }) ?? offer.plans.first
         else { return "" }
