@@ -38,3 +38,12 @@ func Curly(s string) string {
 	}
 	return b.String()
 }
+
+// Title writes a recipe title the one way the app shows titles: "and"
+// between words becomes "&" ("Chicken & Rice Bowls"), and apostrophes are
+// curly. The stored title is never rewritten.
+func Title(s string) string {
+	s = strings.ReplaceAll(s, " and ", " & ")
+	s = strings.ReplaceAll(s, " And ", " & ")
+	return Curly(s)
+}

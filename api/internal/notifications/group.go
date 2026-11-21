@@ -35,39 +35,68 @@ func groupKey(n Notification) string {
 	return ""
 }
 
-// collapse folds each group in items (newest first) into its newest
-// notification, which takes the group's count in its title and body and the
-// IDs of all of them in GroupIDs. The group is unread for userID while any of
-// them is, and a banner while any unread one is. A group of one is unchanged.
-func collapse(items []Notification, userID string) []Notification {
+// maxGroupPages bounds how many store pages a read scans for a group's
+// members: MaxListLimit times this many notifications.
+const maxGroupPages = 20
+
+// groupMembers lists every notification matching f that belongs to a group,
+// newest first, by group key. A group is counted across the whole household,
+// never per page, so its card says the same number wherever it shows.
+func (s *Service) groupMembers(ctx context.Context, householdID string, f ListFilter) (map[string][]Notification, error) {
+	out := map[string][]Notification{}
+	f.Limit, f.Before = MaxListLimit, ""
+	for range maxGroupPages {
+		items, err := s.store.List(ctx, householdID, f)
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range items {
+			if k := groupKey(n); k != "" {
+				out[k] = append(out[k], n)
+			}
+		}
+		if len(items) < f.Limit {
+			break
+		}
+		f.Before = items[len(items)-1].ID
+	}
+	return out, nil
+}
+
+func hasGroup(items []Notification) bool {
+	return slices.ContainsFunc(items, func(n Notification) bool { return groupKey(n) != "" })
+}
+
+// collapse shows each group in items (newest first) once, where its newest
+// member is, as one notification that carries the group's count in its title
+// and body and every member's ID in GroupIDs; members (from groupMembers)
+// are the whole group, so an older member on a later page is never shown
+// again. The group is unread for userID while any member is, and a banner
+// while any unread member is. A group of one is unchanged.
+func collapse(items []Notification, userID string, members map[string][]Notification) []Notification {
 	out := make([]Notification, 0, len(items))
-	at := map[string]int{}
 	for _, n := range items {
 		key := groupKey(n)
-		i, seen := at[key]
-		if key == "" || !seen {
-			if key != "" {
-				at[key] = len(out)
-				n.GroupIDs = []string{n.ID}
-			}
+		all := members[key]
+		if key == "" || len(all) < 2 {
 			out = append(out, n)
 			continue
 		}
-		g := &out[i]
-		g.GroupIDs = append(g.GroupIDs, n.ID)
-		if !n.ReadByUser(userID) {
-			g.ReadBy = slices.DeleteFunc(slices.Clone(g.ReadBy), func(id string) bool { return id == userID })
-			g.Banner = g.Banner || n.Banner
+		if all[0].ID != n.ID {
+			continue // shown with the group's newest member
 		}
-	}
-	for i := range out {
-		g := &out[i]
-		if len(g.GroupIDs) < 2 {
-			g.GroupIDs = nil
-			continue
+		g := n
+		g.ReadBy, g.GroupIDs = slices.Clone(n.ReadBy), make([]string, 0, len(all))
+		for _, m := range all {
+			g.GroupIDs = append(g.GroupIDs, m.ID)
+			if !m.ReadByUser(userID) {
+				g.ReadBy = slices.DeleteFunc(g.ReadBy, func(id string) bool { return id == userID })
+				g.Banner = g.Banner || m.Banner
+			}
 		}
-		rule := groups[groupKey(*g)]
-		g.Title, g.Body = rule.title(len(g.GroupIDs)), rule.body(len(g.GroupIDs))
+		rule := groups[key]
+		g.Title, g.Body = rule.title(len(all)), rule.body(len(all))
+		out = append(out, g)
 	}
 	return out
 }
@@ -75,23 +104,19 @@ func collapse(items []Notification, userID string) []Notification {
 // expandGroups adds to ids every other notification in the groups they name,
 // so reading or dismissing the grouped card covers all of it.
 func (s *Service) expandGroups(ctx context.Context, householdID, userID string, ids []string) ([]string, error) {
-	items, err := s.store.List(ctx, householdID, ListFilter{Viewer: userID, Limit: MaxListLimit})
+	members, err := s.groupMembers(ctx, householdID, ListFilter{Viewer: userID})
 	if err != nil {
 		return nil, err
 	}
-	keys := map[string]bool{}
-	for _, n := range items {
-		if k := groupKey(n); k != "" && slices.Contains(ids, n.ID) {
-			keys[k] = true
-		}
-	}
-	if len(keys) == 0 {
-		return ids, nil
-	}
 	out := slices.Clone(ids)
-	for _, n := range items {
-		if keys[groupKey(n)] && !slices.Contains(out, n.ID) {
-			out = append(out, n.ID)
+	for _, list := range members {
+		if !slices.ContainsFunc(list, func(n Notification) bool { return slices.Contains(ids, n.ID) }) {
+			continue
+		}
+		for _, n := range list {
+			if !slices.Contains(out, n.ID) {
+				out = append(out, n.ID)
+			}
 		}
 	}
 	return out, nil
@@ -103,9 +128,12 @@ func (s *Service) unreadCount(ctx context.Context, householdID, userID string) (
 	if err != nil || n < 2 {
 		return n, err
 	}
-	unread, err := s.store.List(ctx, householdID, ListFilter{UnreadBy: userID, Viewer: userID, Limit: MaxListLimit})
+	members, err := s.groupMembers(ctx, householdID, ListFilter{UnreadBy: userID, Viewer: userID})
 	if err != nil {
 		return 0, err
 	}
-	return n - (len(unread) - len(collapse(unread, userID))), nil
+	for _, list := range members {
+		n -= len(list) - 1
+	}
+	return n, nil
 }

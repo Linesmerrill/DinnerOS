@@ -503,7 +503,7 @@ func summaryResponse(it Result) CatalogSummaryResponse {
 	cook := recipes.CookMinutes(c.PrepMinutes, c.TotalMinutes)
 	facts := recipes.FactsOf(c.Nutrition)
 	return CatalogSummaryResponse{
-		ID: it.ID, CatalogKey: it.CatalogKey, Source: c.Source, Name: c.Name, Headline: c.Headline,
+		ID: it.ID, CatalogKey: it.CatalogKey, Source: c.Source, Name: copytext.Title(c.Name), Headline: c.Headline,
 		ImageURL: c.ImageURL, IsAddon: c.IsAddon, TotalMinutes: c.TotalMinutes, CookMinutes: cook,
 		TimeBand: recipes.TimeBandOf(cook, autopilot.TimeBands{}), Calories: facts.Calories, ProteinGrams: facts.ProteinGrams,
 		Cuisines: shownCuisineLabels(c), Tags: orEmpty(c.Tags),

@@ -15,6 +15,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
@@ -422,7 +423,7 @@ func newEntryResponse(p Plan, e Entry) EntryResponse {
 	resp := EntryResponse{
 		ID: e.ID,
 		Recipe: EntryRecipeResponse{
-			ID: e.RecipeID, Name: e.RecipeName, IsAddon: e.RecipeIsAddon, ImageURL: e.RecipeImageURL,
+			ID: e.RecipeID, Name: copytext.Title(e.RecipeName), IsAddon: e.RecipeIsAddon, ImageURL: e.RecipeImageURL,
 		},
 		Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy, AddedAt: e.AddedAt.UTC(), Origin: e.Origin,
 	}

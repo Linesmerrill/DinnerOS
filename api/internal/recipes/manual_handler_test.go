@@ -64,7 +64,7 @@ func TestCreateRecipeEndpointStoresAPrivateRecipe(t *testing.T) {
 		t.Fatalf("status = %d; want 201 (%s)", rec.Code, rec.Body.String())
 	}
 	resp := decodeBody[RecipeResponse](t, rec)
-	if resp.Source != SourceManual || resp.Name != "Grandma's Chili" {
+	if resp.Source != SourceManual || resp.Name != "Grandma’s Chili" {
 		t.Fatalf("stored %+v", resp)
 	}
 	if len(resp.Ingredients) != 1 || resp.Ingredients[0].Amounts[0].Unit != "can" {

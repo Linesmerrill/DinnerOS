@@ -131,23 +131,24 @@ func TestHomeBuildsRowsAndLeavesEmptyOnesOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No ratings, no saves: Top Rated and Trending have nothing and are left out.
-	if got, want := sectionIDs(home), []string{"chefs-picks", "seasonal", "quick", "crowd"}; !slices.Equal(got, want) {
+	// No ratings, no saves: Top Rated and Trending have nothing. Chef’s Picks
+	// shows all three dinners, so the filter rows would only repeat it and
+	// are left out too.
+	if got, want := sectionIDs(home), []string{"chefs-picks"}; !slices.Equal(got, want) {
 		t.Fatalf("sections = %v; want %v", got, want)
 	}
-	if got := itemNames(section(t, home, "quick").Items); !slices.Equal(got, []string{"Quick Tacos"}) {
-		t.Errorf("quick = %v", got)
-	}
-	if got := itemNames(section(t, home, "crowd").Items); !slices.Equal(got, []string{"Big Beef Chili"}) {
-		t.Errorf("crowd = %v", got)
-	}
-	// testNow is in March: spring.
-	seasonal := section(t, home, "seasonal")
-	if got := itemNames(seasonal.Items); !slices.Equal(got, []string{"Lemon Asparagus Pasta"}) {
-		t.Errorf("seasonal = %v", got)
-	}
-	if seasonal.Subtitle != "Just right for spring" {
-		t.Errorf("seasonal subtitle = %q", seasonal.Subtitle)
+	// Each row's own list (See All) still holds what it qualifies for.
+	for id, want := range map[string][]string{
+		"quick": {"Quick Tacos"}, "crowd": {"Big Beef Chili"}, "seasonal": {"Lemon Asparagus Pasta"},
+	} {
+		c, page, err := h.service.Section(t.Context(), hhAda, id, Query{})
+		if err != nil || !slices.Equal(itemNames(page.Items), want) {
+			t.Errorf("%s = %v, %v; want %v", id, itemNames(page.Items), err, want)
+		}
+		// testNow is in March: spring.
+		if id == "seasonal" && c.Subtitle != "Just right for spring" {
+			t.Errorf("seasonal subtitle = %q", c.Subtitle)
+		}
 	}
 	if picks := section(t, home, "chefs-picks"); len(picks.Items) != 3 || picks.Title != "Chef’s Picks This Week" {
 		t.Errorf("chef's picks = %q %v", picks.Title, itemNames(picks.Items))
@@ -401,15 +402,48 @@ func TestAddRecordsOneSaveAndTrendingCountsTheWeek(t *testing.T) {
 	if got := itemNames(section(t, home, "trending").Items); !slices.Equal(got, []string{"Quick Tacos"}) {
 		t.Errorf("trending = %v; want only this week's save", got)
 	}
-	// Saves count toward Top Rated too, with no ratings at all.
-	if got := itemNames(section(t, home, "top-rated").Items); !slices.Equal(got, []string{"Quick Tacos", "Big Beef Chili"}) {
+	// Saves count toward Top Rated too, with no ratings at all. Trending
+	// claimed the tacos, so Top Rated shows the chili and nothing repeats;
+	// its own list still has both.
+	if got := itemNames(section(t, home, "top-rated").Items); !slices.Equal(got, []string{"Big Beef Chili"}) {
 		t.Errorf("top rated = %v", got)
+	}
+	if _, all, err := h.service.Section(t.Context(), "66e5a1f2c3b4a5d6e7f80a03", "top-rated", Query{}); err != nil ||
+		!slices.Equal(itemNames(all.Items), []string{"Quick Tacos", "Big Beef Chili"}) {
+		t.Errorf("top rated See All = %v, %v", itemNames(all.Items), err)
 	}
 
 	// A failed save write never fails the add.
 	saves.err = errors.New("down")
 	if _, created, err := h.service.Add(t.Context(), hhBob, chili); err != nil || !created {
 		t.Errorf("Add with saves down = %v, %v", created, err)
+	}
+}
+
+// Chef’s Picks and Top Rated never show the same recipe (build 121 review):
+// the rated recipes stay in Top Rated and Chef’s Picks shows the others.
+func TestTopRatedAndChefsPicksDontRepeat(t *testing.T) {
+	h := newHarness(t, nil)
+	seedHome(t, h)
+	h.service.WithRatings(fakeRatings{
+		"import:hf-quick": {Households: 3, Sum: 15},
+		"import:hf-chili": {Households: 3, Sum: 14},
+	})
+	home, err := h.service.Home(t.Context(), hhAda)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	for _, sec := range home.Sections {
+		for _, n := range itemNames(sec.Items) {
+			if first, ok := seen[n]; ok {
+				t.Errorf("%s shows in %s and %s", n, first, sec.ID)
+			}
+			seen[n] = sec.ID
+		}
+	}
+	if seen["Quick Tacos"] != "top-rated" || seen["Lemon Asparagus Pasta"] != "chefs-picks" {
+		t.Errorf("rows = %v", seen)
 	}
 }
 

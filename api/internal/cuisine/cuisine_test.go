@@ -217,3 +217,25 @@ func TestFill(t *testing.T) {
 		}
 	}
 }
+
+// HelloFresh files enchiladas verdes under "North American"; the title says
+// Mexican, so that's what shows. A plain American dish, an American style
+// ("Cajun"), or a household's own choice stays as it is.
+func TestFillPrefersTheTitleOverPlainAmerican(t *testing.T) {
+	for _, tc := range []struct {
+		own    []string
+		chosen bool
+		name   string
+		want   []string
+	}{
+		{[]string{"North American"}, false, "One-Pan Chicken Enchiladas Verdes", []string{"mexican"}},
+		{[]string{"North American"}, false, "Cheeseburger Sliders", []string{"american"}},
+		{[]string{"North American"}, false, "Cajun Shrimp Tacos", []string{"american"}},
+		{[]string{"North American"}, true, "Chicken Enchiladas", []string{"american"}},
+		{[]string{"North American", "Italian"}, false, "Chicken Enchiladas", []string{"american", "italian"}},
+	} {
+		if got := Fill(tc.own, tc.chosen, tc.name, nil); !slices.Equal(got, tc.want) {
+			t.Errorf("Fill(%v, %v, %q) = %v, want %v", tc.own, tc.chosen, tc.name, got, tc.want)
+		}
+	}
+}

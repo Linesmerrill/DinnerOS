@@ -1,6 +1,7 @@
 package cuisine
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -190,8 +191,21 @@ func earliest(text string, keys map[string]string) string {
 // when none of its own is a standard cuisine and the household never chose
 // (chosen false). A recipe stored with only "Southern Europe" shows what its
 // title names, or nothing.
+//
+// A meal kit files many dishes under plain "American" (HelloFresh's "North
+// American" covers enchiladas verdes). When that is all a recipe says and
+// its title names a dish of another cuisine, the title wins.
 func Fill(own []string, chosen bool, name string, tags []string) []string {
-	if c := Shown(own); len(c) > 0 || chosen {
+	c := Shown(own)
+	if chosen {
+		return c
+	}
+	if len(c) == 1 && c[0] == "american" {
+		if g := Guess(name, nil); len(g) == 1 && g[0] != "american" && !slices.Contains(Ancestors(g[0]), "american") {
+			return g
+		}
+	}
+	if len(c) > 0 {
 		return c
 	}
 	return Guess(name, tags)

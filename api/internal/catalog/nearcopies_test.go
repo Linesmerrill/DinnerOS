@@ -129,8 +129,8 @@ func TestRowsDropNearCopies(t *testing.T) {
 	}
 }
 
-// A row leaves out what an earlier row showed when it has enough new
-// recipes, and puts its new ones first when it doesn't (decision 733).
+// A row leaves out what an earlier row showed: a recipe shows in the first
+// row it qualifies for, even when that leaves a short row.
 func TestRowsPreferRecipesNotShownAbove(t *testing.T) {
 	for _, tc := range []struct {
 		dishes    int
@@ -139,8 +139,8 @@ func TestRowsPreferRecipesNotShownAbove(t *testing.T) {
 	}{
 		// Chef’s Picks shows 1 to 12; Quick has 13 to 20 new, enough alone.
 		{20, quickDishes(13, 20), true},
-		// Quick has only 13 and 14 new: they lead, then the repeats.
-		{14, append(quickDishes(13, 14), quickDishes(1, 10)...), true},
+		// Quick has only 13 and 14 new: just those, and See All has the rest.
+		{14, quickDishes(13, 14), true},
 	} {
 		t.Run(fmt.Sprint(tc.dishes), func(t *testing.T) {
 			h := newHarness(t, nil)

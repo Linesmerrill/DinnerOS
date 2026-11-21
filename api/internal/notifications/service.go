@@ -165,7 +165,16 @@ func (s *Service) List(ctx context.Context, actor households.Membership, q ListQ
 		page.Items = items[:limit]
 		page.NextCursor = items[limit-1].ID
 	}
-	page.Items = collapse(page.Items, actor.UserID)
+	if hasGroup(page.Items) {
+		// A group counts every member, read or not, unless only unread ones
+		// were asked for.
+		mf := ListFilter{Viewer: actor.UserID, UnreadBy: f.UnreadBy}
+		members, err := s.groupMembers(ctx, actor.HouseholdID, mf)
+		if err != nil {
+			return Page{}, fmt.Errorf("list notifications: %w", err)
+		}
+		page.Items = collapse(page.Items, actor.UserID, members)
+	}
 	return page, nil
 }
 
@@ -183,7 +192,15 @@ func (s *Service) Banners(ctx context.Context, actor households.Membership) ([]N
 	if err != nil {
 		return nil, fmt.Errorf("list banners: %w", err)
 	}
-	items = collapse(items, actor.UserID)
+	if hasGroup(items) {
+		members, err := s.groupMembers(ctx, actor.HouseholdID, ListFilter{
+			UnreadBy: actor.UserID, Viewer: actor.UserID, BannerOnly: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list banners: %w", err)
+		}
+		items = collapse(items, actor.UserID, members)
+	}
 	return items[:min(len(items), MaxBanners)], nil
 }
 

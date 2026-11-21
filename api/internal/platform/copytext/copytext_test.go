@@ -22,3 +22,18 @@ func TestCurly(t *testing.T) {
 		}
 	}
 }
+
+func TestTitle(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"Orange and Cashew Chicken Stir-Fry", "Orange & Cashew Chicken Stir-Fry"},
+		{"Salmon And Rice", "Salmon & Rice"},
+		{"Ginger Chicken & Rice Bowls", "Ginger Chicken & Rice Bowls"},
+		{"Sandwiches", "Sandwiches"},
+		{"Grandma's Brandy Andouille", "Grandma’s Brandy Andouille"},
+		{"and more", "and more"},
+	} {
+		if got := Title(tc.in); got != tc.want {
+			t.Errorf("Title(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

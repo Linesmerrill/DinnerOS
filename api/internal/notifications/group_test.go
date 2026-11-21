@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -125,5 +126,53 @@ func TestCreateMakesApostrophesCurly(t *testing.T) {
 	})
 	if err != nil || n.Title != "Time to order this week’s groceries" || n.Body != "It’s order day." {
 		t.Errorf("Create = %q / %q, %v", n.Title, n.Body, err)
+	}
+}
+
+// A group is counted across the household, not per page: build 121 showed
+// "45", "50" and "9 invites counted" cards out of order.
+func TestAGroupShowsOnceWithItsFullCountAcrossPages(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+	actor := memberOf(hhA, userA)
+	if _, _, err := svc.Create(ctx, lowNotification("pantry.low:old")); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 60 {
+		if _, _, err := svc.Create(ctx, inviteCounted(fmt.Sprintf("r%02d", i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	newest := lowNotification("pantry.low:new")
+	newest.Title = "Milk is running low"
+	if _, _, err := svc.Create(ctx, newest); err != nil {
+		t.Fatal(err)
+	}
+
+	var titles []string
+	q := ListQuery{Limit: 20}
+	for range 10 {
+		page, err := svc.List(ctx, actor, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range page.Items {
+			titles = append(titles, n.Title)
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		q.Before = page.NextCursor
+	}
+	want := []string{"Milk is running low", "60 invites counted", "Butter is running low"}
+	if !slices.Equal(titles, want) {
+		t.Errorf("titles = %q, want %q", titles, want)
+	}
+	if n, err := svc.UnreadCount(ctx, actor); err != nil || n != 3 {
+		t.Errorf("UnreadCount = %d, %v; want 3", n, err)
+	}
+	banners, err := svc.Banners(ctx, actor)
+	if err != nil || len(banners) != 1 || banners[0].Title != "60 invites counted" {
+		t.Errorf("banners = %d, %v", len(banners), err)
 	}
 }

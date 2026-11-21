@@ -19,6 +19,8 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 )
@@ -177,7 +179,7 @@ type RecipeSummaryResponse struct {
 func NewRecipeSummaryResponse(s RecipeSummary, rating ratings.Summary, bands autopilot.TimeBands) RecipeSummaryResponse {
 	facts := s.Facts()
 	item := RecipeSummaryResponse{
-		ID: s.ID, Name: s.Name, Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes, CookMinutes: s.CookMinutes(),
+		ID: s.ID, Name: copytext.Title(s.Name), Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes, CookMinutes: s.CookMinutes(),
 		TimesOrdered: s.TimesOrdered, LastOrderedWeek: s.LastOrderedWeek, IsAddon: s.IsAddon, Tags: orEmpty(s.Tags),
 		Calories: facts.Calories, ProteinGrams: facts.ProteinGrams, TimeBand: TimeBandOf(s.CookMinutes(), bands),
 	}
@@ -301,6 +303,10 @@ type AmountResponse struct {
 	Unit          string   `json:"unit"`
 	SourceUnit    string   `json:"sourceUnit"`
 	RawText       string   `json:"rawText"`
+	// Text is the amount as the app shows it: kitchen fractions and a short
+	// unit ("1 ½ cups", "10 oz", "2 Tbsp"). Empty when there's no exact
+	// amount. Sent, never read.
+	Text string `json:"text,omitempty"`
 }
 
 // NewAmountResponse returns the wire form of an ingredient amount. Other
@@ -311,8 +317,21 @@ func NewAmountResponse(a Amount) AmountResponse {
 	if q, ok := a.ExactQuantity(); ok {
 		exact, value := a.Quantity, q.Float64()
 		ar.Quantity, ar.QuantityValue = &exact, &value
+		ar.Text = AmountText(q, a.Unit)
 	}
 	return ar
+}
+
+// AmountText is an exact amount as the app shows it: "1 ½ cups" (never
+// "1 1/2"), "10 oz", "2 Tbsp", or the bare number for a count.
+func AmountText(q ingredients.Quantity, unit string) string {
+	text := q.Format()
+	if u, err := ingredients.LookupUnit(unit); err == nil {
+		if label := u.Label(q); label != "" {
+			text += " " + label
+		}
+	}
+	return text
 }
 
 // ImportResultResponse is returned by POST /households/{householdId}/recipes/import.
@@ -346,7 +365,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		TimeBand: TimeBandOf(r.CookMinutes(), bands), Calories: facts.Calories, ProteinGrams: facts.ProteinGrams,
 		ID: r.ID, HouseholdID: r.HouseholdID, Source: r.Source, SourceRecipeID: r.SourceRecipeID,
 		SourceAliases: orEmpty(r.SourceAliases), SourceURL: r.SourceURL,
-		Name: r.Name, Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
+		Name: copytext.Title(r.Name), Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
 		Servings: orEmpty(r.Servings), PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, CookMinutes: r.CookMinutes(), Difficulty: r.Difficulty,
 		Tags: orEmpty(r.Tags), Utensils: orEmpty(r.Utensils), Allergens: orEmpty(r.Allergens),
 		Nutrition:   make([]NutrientResponse, 0, len(r.Nutrition)),

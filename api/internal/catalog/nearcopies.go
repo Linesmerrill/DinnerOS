@@ -117,26 +117,17 @@ func withoutNearCopies(items []Result) []Result {
 	return out
 }
 
-// minFreshRow is how many recipes not shown in an earlier row a row needs
-// to leave the earlier ones out. A row with fewer shows them all, its new
-// ones first, rather than going nearly empty.
-const minFreshRow = 6
-
-// freshFirst is a row's items for the top of Shared Recipes, given what
-// earlier rows showed: only the new ones when there are at least
-// minFreshRow, else the new ones followed by the repeats, so the same
-// dinner isn't offered row after row (decision 733).
-func freshFirst(items []Result, shown nearIndex) []Result {
-	var fresh, repeats []Result
+// freshOnly is a row's items for the top of Shared Recipes, given what
+// earlier rows showed: only the ones no earlier row showed, so a recipe
+// appears in the first row it qualifies for and Top Rated never repeats
+// Chef’s Picks (decisions 733, 764). A row left with nothing new is left out;
+// See All still lists everything.
+func freshOnly(items []Result, shown nearIndex) []Result {
+	var fresh []Result
 	for _, it := range items {
-		if shown.has(nearKeyOf(it.Content)) {
-			repeats = append(repeats, it)
-		} else {
+		if !shown.has(nearKeyOf(it.Content)) {
 			fresh = append(fresh, it)
 		}
 	}
-	if len(fresh) >= minFreshRow {
-		return fresh
-	}
-	return append(fresh, repeats...)
+	return fresh
 }

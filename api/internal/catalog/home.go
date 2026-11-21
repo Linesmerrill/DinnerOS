@@ -82,30 +82,59 @@ func (s *Service) Home(ctx context.Context, householdID string) (Home, error) {
 	sig := &signals{service: s}
 	now := s.now().UTC()
 	out := Home{Sections: []Section{}}
-	// Rows try not to repeat what an earlier row showed (decision 733).
-	shownAbove := nearIndex{}
-	for _, c := range cols {
-		if !c.Active(now) {
-			continue
+	// No row repeats another (decisions 733, 764). Rows built on what
+	// households did (Trending, Top Rated) claim their recipes first;
+	// Chef’s Picks and the filter rows take from what’s left, in order. Rows
+	// still show in their own order, and See All still lists everything.
+	order := make([]int, 0, len(cols))
+	for i, c := range cols {
+		if c.Active(now) {
+			order = append(order, i)
 		}
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(claimRank(cols[a]), claimRank(cols[b])) })
+	rows := map[int]Section{}
+	shownAbove := nearIndex{}
+	for _, i := range order {
+		c := cols[i]
 		items, err := s.fill(ctx, c, pool, sig)
 		if err != nil {
 			return Home{}, err
 		}
-		if len(items) == 0 {
+		row := freshOnly(items, shownAbove)
+		if len(row) == 0 {
 			continue
 		}
-		row := freshFirst(items, shownAbove)
 		row = row[:min(len(row), SectionSize)]
 		for _, it := range row {
 			shownAbove.add(nearKeyOf(it.Content))
 		}
-		out.Sections = append(out.Sections, Section{Collection: s.dressed(c), Items: row, More: len(items) > len(row)})
+		rows[i] = Section{Collection: s.dressed(c), Items: row, More: len(items) > len(row)}
+	}
+	for i := range cols {
+		if row, ok := rows[i]; ok {
+			out.Sections = append(out.Sections, row)
+		}
 	}
 	if out.Filters, err = s.FilterGroups(ctx); err != nil {
 		return Home{}, err
 	}
 	return out, nil
+}
+
+// claimRank orders rows for claiming recipes: the ones built from what
+// households did come first, narrowest first (this week's saves, then
+// ratings), because no other row can show those recipes in their place.
+func claimRank(c Collection) int {
+	switch {
+	case len(c.RecipeIDs) > 0:
+		return 2
+	case c.Rule == RuleTrending:
+		return 0
+	case c.Rule == RuleTopRated:
+		return 1
+	}
+	return 2
 }
 
 // Section returns one row in full, a page at a time, for See All.

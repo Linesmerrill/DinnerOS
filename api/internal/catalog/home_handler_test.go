@@ -44,7 +44,7 @@ func TestDiscoverHomeRoute(t *testing.T) {
 		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
 	}
 	resp := decode[DiscoverHomeResponse](t, rec)
-	if len(resp.Sections) != 4 || resp.Sections[0].ID != "chefs-picks" || resp.Sections[0].Type != TypeEditorial {
+	if len(resp.Sections) != 1 || resp.Sections[0].ID != "chefs-picks" || resp.Sections[0].Type != TypeEditorial {
 		t.Fatalf("sections = %+v", resp.Sections)
 	}
 	if resp.BrowseTitle != "Browse All" || resp.SeeAllTitle != "See All" || resp.SearchPrompt == "" || resp.NoMatchTitle == "" {

@@ -8190,6 +8190,10 @@ components:
         rawText:
           type: string
           example: ½ ounce Parmesan Cheese
+        text:
+          type: string
+          description: The amount as the app shows it, with kitchen fractions and a short unit ("1 ½ cups", "10 oz"). Absent when there's no exact amount.
+          example: ½ oz
     RecipeInstructions:
       type: object
       required: [recipeId, recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions, unchosenSpecialties, leftOutApplied, ingredients]
