@@ -116,6 +116,13 @@ final class ScreensQATests: XCTestCase {
                 // All Meals is the Menu's last section and the list is lazy: on a large iPhone
                 // with a full week it can take more than 12 swipes to reach (build 121).
                 reveal(search, in: app, maxSwipes: 24)
+                // Missed it (the lazy list skipped past, or a carousel took the swipe): from the
+                // top once more.
+                if !search.exists {
+                    scrollToTop(app)
+                    scrollToTop(app)
+                    reveal(search, in: app, maxSwipes: 24)
+                }
                 search.tap()
             }
             XCTAssertTrue(field.waitForExistence(timeout: 5))

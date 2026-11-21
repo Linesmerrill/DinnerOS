@@ -35,12 +35,14 @@ final class DiscoverQATests: XCTestCase {
         // Shared Recipes, from its row on the Menu.
         // A new household's Get Started card offers it as a button (build 121: one way in at a
         // time); otherwise it's the row under Your Meals.
-        let button = app.buttons["Shared Recipes"].firstMatch
-        let text = app.staticTexts["Shared Recipes"].firstMatch
-        if !button.waitForExistence(timeout: 5) { reveal(text, in: app, maxSwipes: 10) }
-        let entry = button.exists ? button : text
+        // The row's button reads "Shared Recipes, Recipes other households shared"; the card's
+        // is "Shared Recipes". Tap low on it: its top can sit under the pinned week strip.
+        let entry = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Shared Recipes'")).firstMatch
         reveal(entry, in: app, maxSwipes: 10)
-        entry.tap()
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "No way to Shared Recipes on the Menu")
+        let open = { entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap() }
+        open()
+        if !app.navigationBars["Shared Recipes"].waitForExistence(timeout: 6), entry.exists { open() }
         XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn’t open")
 
         // 1. Rows show, with cards.
