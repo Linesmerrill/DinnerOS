@@ -206,8 +206,8 @@ final class BiometricSetting {
 
 /// The lock's states, with no UI or system calls, so every path is a unit test.
 ///
-/// - Locked at launch when sign-in is behind Face ID, and again after more than 15 minutes in
-///   the background.
+/// - Locked only at launch, when sign-in is behind Face ID. Leaving the app and coming back
+///   never locks it: resuming goes straight back to where the person was.
 /// - Asks once each time the app becomes active while locked. A cancel, a failed match, changed
 ///   faces or a missing Keychain item all end in normal sign-in, never another automatic ask, so
 ///   it can't loop. Only a system interruption (a call, the app leaving) asks again.
@@ -234,12 +234,7 @@ nonisolated struct BiometricLockMachine: Equatable, Sendable {
         case signInAnotherWay
     }
 
-    static let fifteenMinutes: TimeInterval = 15 * 60
-
-    /// Time away before it locks again. Shorter only in UI tests.
-    var relockAfter: TimeInterval = Self.fifteenMinutes
     private(set) var phase: Phase = .open
-    private(set) var backgroundedAt: Date?
     /// Set when locking; cleared when an ask starts, so each lock asks by itself only once.
     private(set) var asksWhenActive = false
 
@@ -249,22 +244,12 @@ nonisolated struct BiometricLockMachine: Equatable, Sendable {
         guard phase == .open else { return }
         phase = .locked
         asksWhenActive = true
-        backgroundedAt = nil
     }
 
-    mutating func sceneChanged(to scene: Scene, at date: Date, isOn: Bool) -> Effect {
-        switch scene {
-        case .background:
-            if phase == .open, isOn { backgroundedAt = date }
-            return .none
-        case .inactive, .active:
-            if phase == .open, let since = backgroundedAt {
-                backgroundedAt = nil
-                if isOn, date.timeIntervalSince(since) > relockAfter { lock() }
-            }
-            guard scene == .active, phase == .locked, asksWhenActive else { return .none }
-            return .ask
-        }
+    /// Only a lock from launch asks; going to the background and back never locks.
+    mutating func sceneChanged(to scene: Scene) -> Effect {
+        guard scene == .active, phase == .locked, asksWhenActive else { return .none }
+        return .ask
     }
 
     /// Starts an ask. `false` while one is already showing or when unlocked.
@@ -300,8 +285,6 @@ nonisolated struct BiometricLockMachine: Equatable, Sendable {
     }
 
     mutating func reset() {
-        let relockAfter = relockAfter
         self = BiometricLockMachine()
-        self.relockAfter = relockAfter
     }
 }

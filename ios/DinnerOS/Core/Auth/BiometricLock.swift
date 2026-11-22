@@ -3,7 +3,8 @@ import Observation
 import os
 
 /// Face ID (or Touch ID, Optic ID) sign-in: the offer after signing in, the Account toggle, and
-/// the lock at launch and after 15 minutes away (decision 760).
+/// the unlock at launch (decision 760). It's only for signing in: coming back to the app from
+/// the background never asks.
 ///
 /// The rules live in `BiometricLockMachine`; this runs its effects. Every way a check can end
 /// short of a match ends in normal sign-in, so the lock never hangs or loops.
@@ -15,26 +16,17 @@ final class BiometricLock {
     /// Shown when turning it on didn't work.
     var turnOnError: String?
     private(set) var isTurningOn = false
-    /// The lock came on over a signed-in app (time away), not at launch.
-    private var lockedOverApp = false
 
     @ObservationIgnored let session: AuthSession
     @ObservationIgnored private let authenticator: any BiometricAuthenticating
-    @ObservationIgnored private let now: () -> Date
     /// Whether the app is in front, so an ask isn't started for a background launch.
     @ObservationIgnored var isAppActive: () -> Bool = { true }
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "auth")
 
-    init(session: AuthSession, authenticator: any BiometricAuthenticating, now: @escaping () -> Date = Date.init) {
+    init(session: AuthSession, authenticator: any BiometricAuthenticating) {
         self.session = session
         self.authenticator = authenticator
-        self.now = now
-        #if DEBUG
-            if let seconds = ProcessInfo.processInfo.environment["QA_RELOCK_SECONDS"].flatMap(Double.init) {
-                machine.relockAfter = seconds
-            }
-        #endif
         session.didSignIn = { [weak self] in self?.offerIfNeeded() }
     }
 
@@ -44,14 +36,9 @@ final class BiometricLock {
         authenticator.availableKind() ?? (session.isBiometricSignInOn ? .faceID : nil)
     }
 
-    /// Showing the lock screen: locked at launch, or locked again over a signed-in app.
+    /// Showing the lock screen: only at launch, with sign-in behind Face ID.
     var isLocked: Bool {
         session.state == .locked || machine.isLocked
-    }
-
-    /// Locked over a signed-in app (after 15 minutes away), as opposed to at launch.
-    var coversSignedInApp: Bool {
-        lockedOverApp && machine.isLocked
     }
 
     // MARK: Lock
@@ -59,12 +46,7 @@ final class BiometricLock {
     func sceneChanged(to scene: BiometricLockMachine.Scene) {
         syncWithSession()
         if scene == .active { session.saveUnsavedSession() }
-        let wasLocked = machine.isLocked
-        // Signed out with Face ID kept, there's nothing to lock: the sign-in screen shows.
-        let effect = machine.sceneChanged(
-            to: scene, at: now(), isOn: session.isBiometricSignInOn && session.state != .signedOut)
-        if !wasLocked, machine.isLocked { lockedOverApp = session.currentUser != nil }
-        if effect == .ask {
+        if machine.sceneChanged(to: scene) == .ask {
             Task { await ask() }
         }
     }
@@ -159,11 +141,9 @@ final class BiometricLock {
     }
 
     private func run(_ effect: BiometricLockMachine.Effect) async {
-        if !machine.isLocked { lockedOverApp = false }
         switch effect {
         case .signInAnotherWay:
             machine.reset()
-            lockedOverApp = false
             await session.signOut()
         case .ask:
             await ask()
@@ -178,7 +158,6 @@ final class BiometricLock {
             machine.lock()
         } else if session.state == .signedOut, machine.isLocked {
             machine.reset()
-            lockedOverApp = false
         }
     }
 

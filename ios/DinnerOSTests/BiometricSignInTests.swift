@@ -15,7 +15,7 @@ struct BiometricLockMachineTests {
         machine.lock()
         #expect(machine.phase == .locked)
         do {
-            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .active)
             #expect(result == .ask)
         }
         do {
@@ -28,7 +28,7 @@ struct BiometricLockMachineTests {
             #expect(!result)
         }
         do {
-            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .active)
             #expect(result == .none)
         }
     }
@@ -60,7 +60,7 @@ struct BiometricLockMachineTests {
         #expect(machine.phase == .open)
         // No loop: coming back active doesn't ask.
         do {
-            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .active)
             #expect(result == .none)
         }
     }
@@ -77,11 +77,11 @@ struct BiometricLockMachineTests {
         }
         #expect(machine.phase == .locked)
         do {
-            let result = machine.sceneChanged(to: .inactive, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .inactive)
             #expect(result == .none)
         }
         do {
-            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .active)
             #expect(result == .ask)
         }
         do {
@@ -94,7 +94,7 @@ struct BiometricLockMachineTests {
             #expect(result == .none)
         }
         do {
-            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .active)
             #expect(result == .ask)
         }
     }
@@ -117,54 +117,15 @@ struct BiometricLockMachineTests {
         #expect(lockedOnly.phase == .locked)
     }
 
-    @Test func relocksAfterMoreThanFifteenMinutesAway() {
+    /// Face ID is only for signing in (Merrill, Nov 22): the background and back never lock,
+    /// however long it was.
+    @Test func goingToTheBackgroundAndBackNeverLocks() {
         var machine = BiometricLockMachine()
-        _ = machine.sceneChanged(to: .background, at: start, isOn: true)
-        let back = start.addingTimeInterval(15 * 60 + 1)
-        // Locked already on the way in, so nothing shows before the lock.
-        do {
-            let result = machine.sceneChanged(to: .inactive, at: back, isOn: true)
+        for scene in [BiometricLockMachine.Scene.background, .inactive, .active, .background, .active] {
+            let result = machine.sceneChanged(to: scene)
             #expect(result == .none)
+            #expect(machine.phase == .open)
         }
-        #expect(machine.phase == .locked)
-        do {
-            let result = machine.sceneChanged(to: .active, at: back, isOn: true)
-            #expect(result == .ask)
-        }
-    }
-
-    @Test func fifteenMinutesOrLessStaysOpen() {
-        var machine = BiometricLockMachine()
-        _ = machine.sceneChanged(to: .background, at: start, isOn: true)
-        do {
-            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(15 * 60), isOn: true)
-            #expect(result == .none)
-        }
-        #expect(machine.phase == .open)
-        // The time away starts again each time it leaves.
-        _ = machine.sceneChanged(to: .background, at: start.addingTimeInterval(20 * 60), isOn: true)
-        do {
-            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(30 * 60), isOn: true)
-            #expect(result == .none)
-        }
-        #expect(machine.phase == .open)
-    }
-
-    @Test func offNeverLocks() {
-        var machine = BiometricLockMachine()
-        _ = machine.sceneChanged(to: .background, at: start, isOn: false)
-        do {
-            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(3600), isOn: false)
-            #expect(result == .none)
-        }
-        #expect(machine.phase == .open)
-        // Turned off while away: no lock either.
-        _ = machine.sceneChanged(to: .background, at: start, isOn: true)
-        do {
-            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(3600), isOn: false)
-            #expect(result == .none)
-        }
-        #expect(machine.phase == .open)
     }
 
     @Test func signInAnotherWayOnlyFromTheLockScreen() {
@@ -180,7 +141,7 @@ struct BiometricLockMachineTests {
         }
         #expect(machine.phase == .open)
         do {
-            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            let result = machine.sceneChanged(to: .active)
             #expect(result == .none)
         }
         // Not while the check is showing: its result decides.
@@ -526,8 +487,6 @@ struct BiometricLockTests {
     @Test func aMatchAtLaunchSignsIn() async throws {
         let (lock, session, auth, _) = try await setup([.matched])
         #expect(lock.isLocked)
-        // At launch the lock is the screen itself, not a window over the app.
-        #expect(!lock.coversSignedInApp)
         await lock.askIfReady()
         #expect(session.state == .signedIn(Fixtures.user))
         #expect(!lock.isLocked)
@@ -661,35 +620,21 @@ struct BiometricLockTests {
         #expect(!session.isBiometricSignInOn)
     }
 
-    @Test func relocksAfterFifteenMinutesAndAMatchOpensItAgain() async throws {
-        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+    /// Signed in with Face ID on, the app goes to the background and comes back: no ask, no
+    /// lock, still signed in.
+    @Test func resumingNeverAsks() async throws {
         let (_, session, _, _) = try await setup([], locked: false)
-        let auth = ScriptedAuthenticator([.matched, .matched])
-        let lock = BiometricLock(session: session, authenticator: auth, now: { clock })
+        let auth = ScriptedAuthenticator([.matched])
+        let lock = BiometricLock(session: session, authenticator: auth)
         #expect(await lock.turnOn())
-        lock.sceneChanged(to: .background)
-        clock = clock.addingTimeInterval(16 * 60)
-        lock.sceneChanged(to: .inactive)
-        #expect(lock.coversSignedInApp)
+        #expect(auth.asks == 1)
+        for scene in [BiometricLockMachine.Scene.inactive, .background, .inactive, .active] {
+            lock.sceneChanged(to: scene)
+        }
         await lock.askIfReady()
+        #expect(auth.asks == 1)
         #expect(!lock.isLocked)
-        // Signed in all along: nothing was reset.
         #expect(session.state == .signedIn(Fixtures.user))
-    }
-
-    @Test func aRelockCancelSignsOutFully() async throws {
-        var clock = Date(timeIntervalSince1970: 1_800_000_000)
-        let (_, session, _, _) = try await setup([], locked: false)
-        let auth = ScriptedAuthenticator([.matched, .canceled])
-        let lock = BiometricLock(session: session, authenticator: auth, now: { clock })
-        #expect(await lock.turnOn())
-        lock.sceneChanged(to: .background)
-        clock = clock.addingTimeInterval(16 * 60)
-        lock.sceneChanged(to: .inactive)
-        await lock.askIfReady()
-        #expect(session.state == .signedOut)
-        #expect(!lock.isLocked)
-        #expect(session.canSignInWithBiometrics)
     }
 
     // MARK: The sign-in screen
@@ -775,11 +720,9 @@ struct BiometricLockTests {
     }
 
     @Test func signedOutWithFaceIDKeptNeverLocks() async throws {
-        var clock = Date(timeIntervalSince1970: 1_800_000_000)
         let (_, session, _, _) = try await signedOut([])
-        let lock = BiometricLock(session: session, authenticator: ScriptedAuthenticator(), now: { clock })
+        let lock = BiometricLock(session: session, authenticator: ScriptedAuthenticator())
         lock.sceneChanged(to: .background)
-        clock = clock.addingTimeInterval(16 * 60)
         lock.sceneChanged(to: .active)
         #expect(!lock.isLocked)
         #expect(session.state == .signedOut)

@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Shown while sign-in is behind Face ID (or Touch ID, Optic ID): at launch, and after more
-/// than 15 minutes away. Asks once by itself; "Sign in another way" signs out.
+/// Shown at launch while sign-in is behind Face ID (or Touch ID, Optic ID). Asks once by itself;
+/// "Sign in another way" signs out. Coming back from the background never shows it.
 struct LockScreenView: View {
     @Environment(BiometricLock.self) private var lock
     @Environment(\.appConfiguration) private var configuration
@@ -71,8 +71,7 @@ struct LockScreenView: View {
 }
 
 extension View {
-    /// The offer after sign-in, the error when turning it on fails, and the lock over the app
-    /// after 15 minutes away. The lock is its own window, so it covers sheets too.
+    /// The offer after sign-in and the error when turning it on fails.
     func biometricSignIn(_ lock: BiometricLock?, configuration: AppConfiguration) -> some View {
         modifier(BiometricSignInModifier(lock: lock, configuration: configuration))
     }
@@ -100,39 +99,8 @@ private struct BiometricSignInModifier: ViewModifier {
                 } message: { message in
                     Text(message)
                 }
-                .onChange(of: lock.coversSignedInApp, initial: true) { _, covers in
-                    LockWindow.shared.show(covers, lock: lock, configuration: configuration)
-                }
         } else {
             content
         }
-    }
-}
-
-/// A window above everything, sheets and alerts included, while the lock covers the app.
-@MainActor
-final class LockWindow {
-    static let shared = LockWindow()
-    private var window: UIWindow?
-
-    func show(_ shown: Bool, lock: BiometricLock, configuration: AppConfiguration) {
-        guard shown else {
-            window?.isHidden = true
-            window = nil
-            return
-        }
-        guard window == nil,
-            let scene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first(where: { $0.activationState != .unattached })
-        else { return }
-        let window = UIWindow(windowScene: scene)
-        window.windowLevel = .alert + 1
-        window.rootViewController = UIHostingController(
-            rootView: LockScreenView()
-                .environment(lock)
-                .environment(\.appConfiguration, configuration))
-        window.makeKeyAndVisible()
-        self.window = window
     }
 }

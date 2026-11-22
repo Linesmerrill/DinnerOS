@@ -1,8 +1,8 @@
 import Darwin
 import XCTest
 
-/// Face ID sign-in (decision 760): the offer, the Account toggle, the lock at launch and after
-/// time away, and every way back to normal sign-in.
+/// Face ID sign-in (decision 760): the offer, the Account toggle, the unlock at launch, every way
+/// back to normal sign-in, and no ask when the app comes back from the background.
 ///
 /// `testFakeFaceID` stands in for Face ID with DINNEROS_FAKE_BIOMETRICS (a debug build), so every
 /// outcome is certain. `testSimulatorFaceID` uses the simulator's own Face ID: it enrolls a face
@@ -76,26 +76,39 @@ final class BiometricSignInQATests: XCTestCase {
         // launch's faces count as the enrolled ones.
         setToggle(app, on: false)
 
-        // Away longer than the relock time (2 seconds here, 15 minutes for real): locked over
-        // the app, then a match opens it where it was.
-        app = relaunch(app, fake: "match", relockSeconds: 2)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The app didn’t open")
-        setToggle(app, on: true)
-        away(app)
-        XCTAssertTrue(waitGone(app.buttons["lock.anotherWay"], timeout: 10), "The lock stayed after a match")
-        XCTAssertTrue(
-            app.switches["account.biometricSignIn"].firstMatch.waitForExistence(timeout: 10),
-            "The app didn’t open where it was")
+        app.terminate()
+    }
 
-        // Interrupted on the way back: the lock covers the app; Sign in another way signs out.
-        app = relaunch(app, fake: "match,interrupt", relockSeconds: 2)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn’t open the app")
-        away(app)
-        XCTAssertTrue(app.buttons["lock.anotherWay"].waitForExistence(timeout: 15), "No lock after time away")
-        snap(app, "Face ID › Locked after time away")
-        app.buttons["lock.anotherWay"].tap()
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 15), "Sign in another way didn’t sign out")
-        devSignIn(app).tap()
+    /// Face ID only unlocks sign-in (Merrill, Nov 22): with it on, leaving the app and coming
+    /// back goes straight back to where the person was, with no Face ID check.
+    @MainActor
+    func testComingBackFromTheBackgroundNeverAsksForFaceID() throws {
+        // Every check after the first is "interrupt", which would leave the lock screen up, so
+        // any ask on the way back shows.
+        var app = launch(fake: "match,interrupt")
+        signInIfNeeded(app)
+        answerOffer(app, use: false)
+        setToggle(app, on: true)
+        let toggle = app.switches["account.biometricSignIn"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Not on the Account screen")
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for seconds: UInt32 in [5, 20] {
+            XCUIDevice.shared.press(.home)
+            sleep(seconds)
+            app.activate()
+            XCTAssertFalse(
+                app.buttons["lock.anotherWay"].waitForExistence(timeout: 5), "Face ID was asked after \(seconds)s away")
+            XCTAssertFalse(app.buttons["lock.unlock"].exists, "The lock screen showed after \(seconds)s away")
+            XCTAssertFalse(springboard.alerts.firstMatch.exists, "A system prompt showed after \(seconds)s away")
+            XCTAssertFalse(devSignIn(app).exists, "Coming back signed out")
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Coming back didn’t return to the Account screen")
+            XCTAssertTrue(waitForToggle(app, true), "Coming back turned Face ID off")
+        }
+        snap(app, "Face ID › Back from the background (\(mode))")
+
+        // A new launch still unlocks with Face ID.
+        app = relaunch(app, fake: "match")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match at launch didn’t open the app")
         setToggle(app, on: false)
         app.terminate()
     }
@@ -285,7 +298,7 @@ final class BiometricSignInQATests: XCTestCase {
     // MARK: Steps
 
     @MainActor
-    private func launch(fake: String?, relockSeconds: Int? = nil, hideDeveloper: Bool = false) -> XCUIApplication {
+    private func launch(fake: String?, hideDeveloper: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         if hideDeveloper { app.launchEnvironment["QA_HIDE_DEVELOPER_SIGN_IN"] = "1" }
         applyOrientation()
@@ -293,7 +306,6 @@ final class BiometricSignInQATests: XCTestCase {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
         if let fake { app.launchEnvironment["DINNEROS_FAKE_BIOMETRICS"] = fake }
-        if let relockSeconds { app.launchEnvironment["QA_RELOCK_SECONDS"] = String(relockSeconds) }
         app.launch()
         assertFullScreen(app)
         return app
@@ -302,23 +314,14 @@ final class BiometricSignInQATests: XCTestCase {
     /// Relaunches; with `expectLock`, the lock screen must show first.
     @MainActor
     private func relaunch(
-        _ app: XCUIApplication, fake: String?, relockSeconds: Int? = nil, expectLock: Bool = false,
-        hideDeveloper: Bool = false
+        _ app: XCUIApplication, fake: String?, expectLock: Bool = false, hideDeveloper: Bool = false
     ) -> XCUIApplication {
         app.terminate()
-        let next = launch(fake: fake, relockSeconds: relockSeconds, hideDeveloper: hideDeveloper)
+        let next = launch(fake: fake, hideDeveloper: hideDeveloper)
         if expectLock {
             XCTAssertTrue(next.buttons["lock.anotherWay"].waitForExistence(timeout: 15), "No lock screen at launch")
         }
         return next
-    }
-
-    /// Home, a few seconds away, then back.
-    @MainActor
-    private func away(_ app: XCUIApplication) {
-        XCUIDevice.shared.press(.home)
-        sleep(5)
-        app.activate()
     }
 
     /// The sign-in buttons share one size (build 120) and one title font (build 121): Face ID,
