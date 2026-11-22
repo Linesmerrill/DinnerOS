@@ -85,3 +85,11 @@ func TestImportsDropDescriptionLabels(t *testing.T) {
 		t.Errorf("imported description = %q", r.Description)
 	}
 }
+
+func TestHaveReadySharesStaySentenceCase(t *testing.T) {
+	got := ingredientNames([]string{"scallion whites", "1 Tbsp for step 1, melted", "2 Tbsp for step 2, softened"})
+	want := []string{"Scallion Whites", "1 Tbsp for step 1, melted", "2 Tbsp for step 2, softened"}
+	if !slices.Equal(got, want) {
+		t.Errorf("ingredientNames = %q, want %q", got, want)
+	}
+}

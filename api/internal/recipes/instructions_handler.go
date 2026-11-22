@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 
@@ -373,10 +374,16 @@ func checklistResponse(c Checklist) ChecklistResponse {
 	return out
 }
 
-// ingredientNames are names in the app's Title Case ("Scallion Whites").
+// ingredientNames are names in the app's Title Case ("Scallion Whites"). A
+// Have Ready share ("1 Tbsp for step 1, melted") starts with its amount and is
+// a sentence, so it stays as written.
 func ingredientNames(names []string) []string {
 	out := make([]string, 0, len(names))
 	for _, n := range names {
+		if n != "" && (unicode.IsDigit(rune(n[0])) || strings.Contains(n, " for step ")) {
+			out = append(out, n)
+			continue
+		}
 		out = append(out, copytext.IngredientName(n))
 	}
 	return out
