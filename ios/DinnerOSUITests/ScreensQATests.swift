@@ -317,11 +317,16 @@ final class ScreensQATests: XCTestCase {
         sleep(1)
         let choose = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH 'Choose' AND label CONTAINS 'Walmart'")).firstMatch
-        if choose.waitForExistence(timeout: 5) {
+        // The Shop can still be loading its list; a missing button fails the run instead of
+        // quietly dropping the shot (build 122: iPad landscape light published without it).
+        if choose.waitForExistence(timeout: 15) {
             choose.tap()
             sleep(10)
             shot(app, "Shop › Choose in Walmart (after 10 s)")
             back(app)
+        } else {
+            snap(app, "Shop: no Choose in Walmart button (\(mode))", unique: false)
+            problems.append("Shop: no Choose in Walmart button")
         }
 
         pantryAddAnItem(app)
