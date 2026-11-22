@@ -82,6 +82,16 @@ struct TabBarPlacementTests {
         #expect(TabBarPlacement.edge(isPad: true, horizontalSizeClass: .compact) == .bottom)
     }
 
+    /// One band per size class, at the bar's edge; the page itself never moves between branches,
+    /// so a size class flip (an iPad going to the background) keeps the tab where it was.
+    @Test func theBandShowsOnlyAtTheBarsEdge() {
+        #expect(TabBarBacking.shows(edge: .top, isPad: true, horizontalSizeClass: .regular))
+        #expect(!TabBarBacking.shows(edge: .bottom, isPad: true, horizontalSizeClass: .regular))
+        #expect(TabBarBacking.shows(edge: .bottom, isPad: true, horizontalSizeClass: .compact))
+        #expect(!TabBarBacking.shows(edge: .top, isPad: true, horizontalSizeClass: .compact))
+        #expect(TabBarBacking.shows(edge: .bottom, isPad: false, horizontalSizeClass: .compact))
+    }
+
     @Test func theScrimIsSolidWhereTheBarBegins() {
         #expect(TabBarScrimLayout.opacity == 1)
         #expect(TabBarScrimLayout.barStops.allSatisfy { $0.opacity == 1 })

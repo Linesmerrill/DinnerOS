@@ -147,11 +147,20 @@ struct TabBarBacking: ViewModifier {
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
+    /// Whether the band shows where this modifier sits.
+    static func shows(edge: VerticalEdge, isPad: Bool, horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
+        guard #available(iOS 26.0, *) else { return false }
+        return TabBarPlacement.edge(isPad: isPad, horizontalSizeClass: horizontalSizeClass) == edge
+    }
+
+    /// `content` stays in one place whatever the size class: only the band inside the overlay
+    /// comes and goes. Branching on the size class around `content` gave the tab's navigation
+    /// stack a new identity whenever an iPad went to the background (iPadOS briefly reports the
+    /// other size class for its snapshots), so the app came back on the Menu instead of where it
+    /// was (BiometricSignInQATests, iPad portrait, build 122).
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *),
-            TabBarPlacement.edge(isPad: isPad, horizontalSizeClass: horizontalSizeClass) == edge
-        {
-            content.overlay {
+        content.overlay {
+            if Self.shows(edge: edge, isPad: isPad, horizontalSizeClass: horizontalSizeClass) {
                 VStack(spacing: 0) {
                     if edge == .bottom { Spacer(minLength: 0) }
                     // Zero high on the safe area's edge; its background reaches over the bar's
@@ -168,8 +177,6 @@ struct TabBarBacking: ViewModifier {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
-        } else {
-            content
         }
     }
 }
