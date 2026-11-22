@@ -21,6 +21,11 @@ import (
 // SectionSize is how many recipes a row shows before See All.
 const SectionSize = 12
 
+// editorialReserve is how many recipes the rows built on saves and ratings
+// leave unclaimed (at least one, at most half of what's left), so Chef’s
+// Picks always has some.
+const editorialReserve = 3
+
 // trendingWindow is how far back Trending counts saves.
 const trendingWindow = 7 * 24 * time.Hour
 
@@ -102,6 +107,15 @@ func (s *Service) Home(ctx context.Context, householdID string) (Home, error) {
 			return Home{}, err
 		}
 		row := freshOnly(items, shownAbove)
+		if claimRank(c) < 2 {
+			// A row built on what households did leaves some of what's
+			// left for Chef’s Picks: on a small catalog where every recipe
+			// has a save or a rating, it would otherwise take them all and
+			// the headline row would vanish.
+			fresh := len(freshOnly(pool, shownAbove))
+			left := fresh - max(1, min(editorialReserve, fresh/2))
+			row = row[:max(0, min(len(row), left))]
+		}
 		if len(row) == 0 {
 			continue
 		}

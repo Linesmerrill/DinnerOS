@@ -635,3 +635,28 @@ func TestSeasonOfAndSeasonWords(t *testing.T) {
 		}
 	}
 }
+
+// When every recipe was saved this week, Trending still leaves some for Chef’s
+// Picks, so the headline row never vanishes on a small catalog (build 122 QA:
+// every starter saved during the week took Chef’s Picks off Shared Recipes).
+func TestChefsPicksKeepsSomeWhenEverythingIsTrending(t *testing.T) {
+	saves := &fakeSaves{}
+	h := newHarness(t, nil)
+	h.service.WithSaves(saves)
+	quick, chili, spring := seedHome(t, h)
+	for _, id := range []string{quick, chili, spring} {
+		if _, _, err := h.service.Add(t.Context(), hhBob, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	home, err := h.service.Home(t.Context(), "66e5a1f2c3b4a5d6e7f80a03")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemNames(section(t, home, "chefs-picks").Items); len(got) == 0 {
+		t.Errorf("chefs-picks is empty")
+	}
+	if got := itemNames(section(t, home, "trending").Items); len(got) == 0 {
+		t.Errorf("trending is empty")
+	}
+}
