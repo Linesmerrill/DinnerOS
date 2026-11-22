@@ -27,7 +27,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light duo-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID ShopComponentQATests StartCookingQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID ShopComponentQATests ShopPrepQATests StartCookingQATests"}
 STALL=${STALL:-600}
 # Tests to run on a second simulator per config, "QA matrix <config> 2", at the same time as the
 # first. Off by default: on this Mac (build 118) 17 simulators ran 40 to 70% slower each and
@@ -166,7 +166,7 @@ run_test() {
     # Screenshot tests keep their results; other passing tests don't, to save disk.
     case "$verdict $test" in
     "ok AppSweepQATests/"* | "ok ScreensQATests/"* | "ok StartCookingQATests"* | "ok BiometricSignInQATests/testSignInScreenWithFaceID" | \
-        "ok BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID" | "ok ShopComponentQATests"*) ;;
+        "ok BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID" | "ok ShopComponentQATests"* | "ok ShopPrepQATests"*) ;;
     "ok "*) rm -rf "$OUT/$name.xcresult" ;;
     esac
 }
@@ -223,6 +223,8 @@ runs_on() {
     # Skipping every item of a sauce still makes it (Nov 22), on the large iPhone in dark, as
     # Merrill saw it.
     ShopComponentQATests) placed=large-dark ;;
+    # The freeze card counts whole dinners (Nov 22), on the small iPhone in dark.
+    ShopPrepQATests) placed=small-dark ;;
     # The App Review account (decision 752) is one account, so its test runs once, and only
     # when the review account's email and password are exported for it.
     ReviewAccountQATests)

@@ -58,6 +58,12 @@ type BulkPack struct {
 	Bought  string
 	Needed  string
 	Surplus string
+	// MealNeed is what the week's meals take in all, in the pack's unit:
+	// Needed plus what the pantry already had (HandoffLine.Needed). One
+	// dinner's portion comes from it, never from Needed alone: a pack bought
+	// to top up 9 oz on hand to a 10 oz dinner is not a pack of 1 oz dinners
+	// (Merrill, Nov 22: "12 bags to freeze" of under an ounce of pork each).
+	MealNeed string
 	// SurplusPercent is Surplus ÷ Bought as a whole percent.
 	SurplusPercent int
 	// Freezable is true when the category is one that freezes well, so
@@ -157,10 +163,15 @@ func bulkPackOf(l HandoffLine) (BulkPack, bool) {
 		return BulkPack{}, false
 	}
 	pct := new(big.Rat).Quo(scaled, left.Bought)
+	mealNeed := left.Needed
+	if whole := mealNeedOf(l); whole != nil && whole.Cmp(mealNeed) > 0 {
+		mealNeed = whole
+	}
 	pack := BulkPack{
 		LineSource: l.LineSource, LineID: l.ID, ProductID: l.ProductID, ProductName: l.ProductName,
 		PackageSize: l.PackageSize, Packages: packages,
 		Bought: left.Bought.RatString(), Needed: left.Needed.RatString(), Surplus: surplus.RatString(),
+		MealNeed:       mealNeed.RatString(),
 		SurplusPercent: int(new(big.Int).Quo(pct.Num(), pct.Denom()).Int64()),
 		Freezable:      freezableCategories[l.Category],
 	}
@@ -168,6 +179,21 @@ func bulkPackOf(l HandoffLine) (BulkPack, bool) {
 		pack.Unit = l.PackageSize.Unit
 	}
 	return pack, true
+}
+
+// mealNeedOf is the meals' whole need in the pack's unit, when the pantry
+// covered part of it (the line's Needed); nil otherwise or when it can't be
+// converted.
+func mealNeedOf(l HandoffLine) *big.Rat {
+	if l.Needed == nil {
+		return nil
+	}
+	count := providers.CountPackagesFor(needsOf([]Amount{*l.Needed}), amountFromSize(l.PackageSize), l.Coverage,
+		providers.Item{Name: l.Name, Category: l.Category})
+	if count.Needed == nil || len(count.Unconverted) > 0 {
+		return nil
+	}
+	return count.Needed.Quantity.Rat()
 }
 
 // frozenLines are the handoff's line IDs whose remainder is already sealed.

@@ -104,6 +104,31 @@ struct QAOwnHousehold {
             body: ["ingredientKey": key, "name": name, "scope": "week", "week": week(weeksAhead: weeksAhead)])
     }
 
+    /// Adds an item to the pantry, in stock.
+    func addToPantry(_ name: String, quantity: String, unit: String) async throws {
+        _ = try await Self.call(
+            "POST", "households/\(householdID)/pantry", token: token,
+            body: ["name": name, "quantity": quantity, "unit": unit, "status": "in_stock"])
+    }
+
+    /// Saves the Walmart product for a grocery item, with its package size.
+    func chooseWalmartProduct(key: String, productID: String, name: String, size: String, unit: String) async throws {
+        let encoded = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
+        _ = try await Self.call(
+            "PUT", "households/\(householdID)/shopping/walmart/preferences/\(encoded)", token: token,
+            body: [
+                "productId": productID, "displayName": name, "packageSize": ["quantity": size, "unit": unit],
+                "ingredientName": name,
+            ])
+    }
+
+    /// Sends the week's list to Walmart, as Add to Shopping Cart does.
+    func sendToWalmart(weeksAhead: Int) async throws {
+        _ = try await Self.call(
+            "POST", "households/\(householdID)/plans/\(week(weeksAhead: weeksAhead))/shopping/walmart/handoffs",
+            token: token, body: [String: String]())
+    }
+
     /// Shops at Walmart, as the shared test household does, so the Shop tab shows its list and
     /// export rather than the store setup.
     func shopAtWalmart() async throws {

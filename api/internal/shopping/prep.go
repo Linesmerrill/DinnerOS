@@ -560,7 +560,13 @@ func portionPlanFor(pack BulkPack, meals int, bagOz *int) PortionPlan {
 	if mealCount < 1 {
 		mealCount, plan.Basis = 1, BasisWeek
 	}
-	surplus, needed := ratOfExact(pack.Surplus), ratOfExact(pack.Needed)
+	// A dinner is the meals' whole need, pantry included, not just what was
+	// bought to top it up.
+	need := pack.MealNeed
+	if need == "" {
+		need = pack.Needed
+	}
+	surplus, needed := ratOfExact(pack.Surplus), ratOfExact(need)
 	typical := new(big.Rat).Quo(needed, big.NewRat(int64(mealCount), 1))
 	plan.TypicalMeal = typical.RatString()
 	bag := typical
@@ -693,6 +699,12 @@ func prepInstruction(card PrepCard) string {
 	keep := fmt.Sprintf("Keep %s out", reserved)
 	if len(card.Meals) > 0 {
 		keep = fmt.Sprintf("Keep %s out for %s", reserved, mealsText(card.Meals))
+	}
+	// Bought to top up what the pantry had: say so, or "Keep 1 oz out" reads
+	// as the whole dinner.
+	if had := new(big.Rat).Sub(ratOfExact(card.Pack.MealNeed), ratOfExact(card.Pack.Needed)); card.Pack.MealNeed != "" &&
+		had.Sign() > 0 {
+		keep += fmt.Sprintf(" with the %s you already have", amountText(had.RatString(), card.Pack.Unit))
 	}
 	leftover := ""
 	if ratOfExact(card.Portions.Leftover).Sign() > 0 {

@@ -1115,12 +1115,19 @@ dinners, only whole bags are frozen, and what's left is too little for a
 dinner: the card says to throw it in or toss it.
 
 ```text
-typical meal = needed ÷ meals that need it
+typical meal = meal need ÷ meals that need it
+               (meal need: the meals' whole need, pantry included, never just
+               the top-up bought for it)
 bag          = household freezeMinOunces (weight packs only), else typical meal
 portions     = floor(surplus ÷ bag), at most MaxPrepPortions = 12
 leftover     = surplus − portions × bag
 ```
 
+- **A pack bought to top up the pantry still counts whole dinners.** With
+  9 oz of pork on hand for a 10 oz dinner, the list buys a 1.5 lb pack for
+  1 oz. Before Nov 22 the card took that 1 oz as a dinner and offered
+  "12 bags to freeze" (26, capped); a dinner is the meal's whole 10 oz, so it
+  offers 2 bags and says to keep 1 oz out with the 9 oz already there.
 - **Every meat pack with extra gets a card**, even under the 50% bulk-pack
   threshold. 19 oz of chicken for a 10 oz dinner is 9 oz the member wants
   told about: "9 oz left over. Throw it in for a little more protein, or toss

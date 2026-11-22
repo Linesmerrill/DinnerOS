@@ -338,3 +338,40 @@ func TestKeptOutThroughIsTheLastKeptOutMeal(t *testing.T) {
 		t.Errorf("with an unscheduled meal = %q, want a week out", got)
 	}
 }
+
+// Merrill's week (Nov 22): the pantry had 9.12 oz of Ground Pork for a 10 oz
+// dinner, so the list bought a 1.5 lb pack to top up 0.88 oz. A dinner is
+// still 10 oz: two bags of 10 oz and about 3 oz extra, not twelve bags of
+// under an ounce (the cap on 26).
+func TestPrepPortionsATopUpPackByTheWholeDinner(t *testing.T) {
+	line := boughtLine("l7", "Ground Pork", ingredients.CategoryMeatSeafood, providers.CoveragePerWeek,
+		&PackageSize{Quantity: "3/2", Unit: "lb"}, 1, Amount{"22/25", "oz"})
+	line.Needed = &Amount{"10", "oz"}
+	line.OnHand = &Amount{"228/25", "oz"}
+	pack, ok := bulkPackOf(line)
+	if !ok {
+		t.Fatal("a 1.5 lb pack bought for 0.88 oz is not a bulk pack")
+	}
+	if pack.MealNeed != "5/8" {
+		t.Errorf("MealNeed = %q, want 5/8 lb (10 oz), the whole dinner", pack.MealNeed)
+	}
+	plan := portionPlanFor(pack, 1, nil)
+	if plan.Portions != 2 || plan.PortionSize != "5/8" {
+		t.Fatalf("plan = %d bags of %s lb, want 2 bags of 5/8 lb (10 oz)", plan.Portions, plan.PortionSize)
+	}
+	if got := amountText(plan.Leftover, pack.Unit); got != "3 oz" {
+		t.Errorf("leftover = %q, want 3 oz", got)
+	}
+	card := PrepCard{Pack: pack, Meals: []PrepMeal{{RecipeName: "Sesame-Soy Pork Bowls", Day: "mon"}}, Portions: plan}
+	want := "Keep 1 oz out for Monday's Sesame-Soy Pork Bowls with the 9 oz you already have, then freeze 2 bags of 10 oz, one per future dinner. 3 oz left over. Throw it in for a little more protein, or toss it."
+	if got := prepInstruction(card); got != want {
+		t.Errorf("instruction:\n got %q\nwant %q", got, want)
+	}
+
+	// Without a pantry top-up the dinner is still what the list bought for.
+	plain := boughtLine("l8", "Ground Pork", ingredients.CategoryMeatSeafood, providers.CoveragePerWeek,
+		&PackageSize{Quantity: "3/2", Unit: "lb"}, 1, Amount{"10", "oz"})
+	if p, _ := bulkPackOf(plain); p.MealNeed != p.Needed {
+		t.Errorf("MealNeed = %q, want Needed %q when the pantry had none", p.MealNeed, p.Needed)
+	}
+}
