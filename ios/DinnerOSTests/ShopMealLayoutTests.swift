@@ -106,13 +106,21 @@ struct ShopMealLayoutTests {
         let crema = try #require(tacos.components.first)
         #expect(crema.name == "Smoky Red Pepper Crema")
         #expect(crema.rows.map(\.name) == ["Sour Cream", "Roasted Red Peppers"])
-        #expect(!crema.isLeftOut)
+        #expect(!crema.isNotMade(skips: [], recipeID: "r-tacos"))
+        #expect(!crema.hasNothingToBuy)
         // One sour cream purchase: the plain row holds it, the crema's row points to it.
         #expect(tacos.rows.first?.isPrimary == true)
         #expect(crema.rows.first?.isPrimary == false)
     }
 
-    @Test func aLeftOutComponentReadsAsNotMade() throws {
+    private func skip(_ key: String, _ name: String, scope: GrocerySkipScope, recipeID: String? = nil) -> GrocerySkip {
+        GrocerySkip(
+            id: "skip-\(key)-\(recipeID ?? "")", ingredientKey: key, key: name.lowercased(), name: name, scope: scope,
+            week: scope == .week ? "2026-W48" : nil, text: "Skipped", recipeID: recipeID)
+    }
+
+    /// "Don’t Make This" is a skip of the component itself: only that reads as not made.
+    @Test func aComponentIsNotMadeOnlyWhenItsOwnSkipSaysSo() throws {
         let leftOut = with(
             ShoppingFixtures.excludedJSON(
                 key: "i-peppers", name: "Roasted Red Peppers", reason: "skipped", text: "Skipped in Beef Tacos",
@@ -120,7 +128,35 @@ struct ShopMealLayoutTests {
             #""skipScope":"recipe","shares":[\#(share("r-tacos", "Beef Tacos", "2 tsp", component: "Smoky Red Pepper Crema"))]"#
         )
         let layout = ShopMealLayout(proposal: try proposal(lines: [], excluded: [leftOut]))
-        #expect(layout.groups.first?.components.first?.isLeftOut == true)
+        let crema = try #require(layout.groups.first?.components.first)
+        let forTacos = skip("i-crema", "Smoky Red Pepper Crema", scope: .recipe, recipeID: "r-tacos")
+        #expect(crema.isNotMade(skips: [forTacos], recipeID: "r-tacos"))
+        #expect(crema.notMadeSkips(in: [forTacos], recipeID: "r-tacos") == [forTacos])
+        let never = skip("i-crema", "Smoky Red Pepper Crema", scope: .always)
+        #expect(crema.isNotMade(skips: [never], recipeID: "r-tacos"))
+        // Another dish's skip doesn't count.
+        let forChili = skip("i-crema", "Smoky Red Pepper Crema", scope: .recipe, recipeID: "r-chili")
+        #expect(!crema.isNotMade(skips: [forChili], recipeID: "r-tacos"))
+    }
+
+    /// Merrill's Cream Sauce Base (Nov 22): Milk skipped because they have it, and every part
+    /// is skipped, but the sauce is still made. There's just nothing to buy.
+    @Test func skippingEveryPartNeverMeansNotMakingIt() throws {
+        let milk = with(
+            ShoppingFixtures.excludedJSON(
+                key: "i-milk", name: "Milk", reason: "skipped", text: "You have it this week", groceryStatus: "skipped"),
+            #""skipScope":"week","shares":[\#(share("r-tacos", "Beef Tacos", "1 cup", component: "Cream Sauce Base"))]"#
+        )
+        let layout = ShopMealLayout(proposal: try proposal(lines: [], excluded: [milk]))
+        let sauce = try #require(layout.groups.first?.components.first)
+        #expect(sauce.rows.allSatisfy { $0.isLeftOut })
+        #expect(sauce.hasNothingToBuy)
+        let milkSkip = skip("i-milk", "Milk", scope: .week)
+        #expect(!sauce.isNotMade(skips: [milkSkip], recipeID: "r-tacos"))
+        // Milk left out of the dish on purpose is still about Milk, not the sauce.
+        let milkForTacos = skip("i-milk", "Milk", scope: .recipe, recipeID: "r-tacos")
+        #expect(!sauce.isNotMade(skips: [milkSkip, milkForTacos], recipeID: "r-tacos"))
+        #expect(sauce.notMadeSkips(in: [milkSkip, milkForTacos], recipeID: "r-tacos").isEmpty)
     }
 
     @Test func onePartOfAComponentCanBeSkippedOnItsOwn() throws {
@@ -140,7 +176,8 @@ struct ShopMealLayoutTests {
 
         let crema = try #require(layout.groups.first?.components.first)
         // Still made: only the peppers are struck through, and each part knows its meal.
-        #expect(!crema.isLeftOut)
+        #expect(!crema.isNotMade(skips: [skip("i-peppers", "Roasted Red Peppers", scope: .week)], recipeID: "r-tacos"))
+        #expect(!crema.hasNothingToBuy)
         #expect(crema.rows.map(\.isLeftOut) == [false, true])
         #expect(crema.rows.allSatisfy { $0.recipeID == "r-tacos" })
     }

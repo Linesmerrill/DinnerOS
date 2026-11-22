@@ -84,8 +84,28 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
         let rows: [Row]
 
         var name: String { component.specialtyName }
-        /// Everything in it is left out: the meal doesn't make it.
-        var isLeftOut: Bool { !rows.isEmpty && rows.allSatisfy(\.isLeftOut) }
+
+        /// The skips of the component itself ("Don’t Make This"): for this meal's recipe, or
+        /// every recipe. Only these mean the meal doesn't make it. Skipping each item in it
+        /// (already have it, don't buy it) never does.
+        func notMadeSkips(in skips: [GrocerySkip], recipeID: String?) -> [GrocerySkip] {
+            let key = GroceryComponentKey.skipKey(for: component)
+            return skips.filter { skip in
+                guard skip.matches(ingredientKey: key) else { return false }
+                switch skip.scope {
+                case .always: return skip.recipeID == nil
+                case .recipe: return recipeID != nil && skip.recipeID == recipeID
+                default: return false
+                }
+            }
+        }
+
+        func isNotMade(skips: [GrocerySkip], recipeID: String?) -> Bool {
+            !notMadeSkips(in: skips, recipeID: recipeID).isEmpty
+        }
+
+        /// Every item in it is skipped or had: it's still made, there's just nothing to buy.
+        var hasNothingToBuy: Bool { !rows.isEmpty && rows.allSatisfy(\.isLeftOut) }
     }
 
     enum GroupKind: Equatable, Sendable {

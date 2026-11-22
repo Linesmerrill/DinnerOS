@@ -24,7 +24,11 @@ import time
 REPO = "Linesmerrill/DinnerOS"
 # The tests whose screenshots are screens: the tab sweeps, the deeper screens and sheets, the
 # sign-in screen with and without Face ID, and Start Cooking on a scrolled recipe.
-TESTS = ("AppSweepQATests", "ScreensQATests", "testSignInScreenWithFaceID", "StartCookingQATests")
+TESTS = ("AppSweepQATests", "ScreensQATests", "testSignInScreenWithFaceID", "StartCookingQATests",
+         "testComingBackFromTheBackgroundNeverAsksForFaceID", "ShopComponentQATests")
+# Shots that run on one config only, and must be in the set somewhere (Nov 22: Face ID never
+# asks on the way back; a sauce with every item had is still made).
+REQUIRED_ONCE = ("Face ID › Back from the background", "Shop › Sauce with every item had")
 DEVICES = {
     "large": ("iPhone 17 Pro Max", "portrait"),
     "small": ("iPhone SE", "portrait"),
@@ -147,6 +151,8 @@ def main():
             missing.append("Start Cooking › Steps")
         if missing:
             problems.append(f"{c} is missing: {', '.join(missing)}")
+    everywhere = set().union(*screens.values()) if screens else set()
+    problems += [f"no {r} shot in any config" for r in REQUIRED_ONCE if r not in everywhere]
     if problems:
         print("\n".join(problems), file=sys.stderr)
         if os.environ.get("MISSING_OK") != "1":

@@ -63,6 +63,47 @@ struct QAOwnHousehold {
         return try XCTUnwrap(recipe["id"] as? String, "\(name) wasn’t saved")
     }
 
+    /// A typed recipe with the given ingredients (name, quantity, unit) and steps. Returns its id.
+    @discardableResult
+    func addRecipe(
+        _ name: String, ingredients: [(String, String, String?)], steps: [String], cuisine: String = "Italian"
+    ) async throws -> String {
+        let lines: [[String: String]] = ingredients.map { name, quantity, unit in
+            var line = ["name": name, "quantity": quantity]
+            if let unit { line["unit"] = unit }
+            return line
+        }
+        let recipe = try await Self.call(
+            "POST", "households/\(householdID)/recipes", token: token,
+            body: [
+                "name": name, "servings": 2, "cuisines": [cuisine], "tags": [String](), "warnings": [String](),
+                "ingredients": lines, "steps": steps, "fromUrl": false,
+            ])
+        return try XCTUnwrap(recipe["id"] as? String, "\(name) wasn’t saved")
+    }
+
+    /// The grocery items of the week `weeksAhead` from this one: key and name, with the
+    /// component each is part of, if any.
+    func groceryItems(weeksAhead: Int) async throws -> [(key: String, name: String, component: String?)] {
+        let list = try await Self.call(
+            "GET", "households/\(householdID)/plans/\(week(weeksAhead: weeksAhead))/grocery", token: token)
+        let categories = list["categories"] as? [[String: Any]] ?? []
+        return categories.flatMap { ($0["items"] as? [[String: Any]]) ?? [] }.compactMap { item in
+            guard let key = item["ingredientKey"] as? String, let name = item["name"] as? String else { return nil }
+            let shares = item["shares"] as? [[String: Any]] ?? []
+            let component = shares.lazy.compactMap { ($0["component"] as? [String: Any])?["specialtyName"] as? String }
+                .first
+            return (key, name, component)
+        }
+    }
+
+    /// "Have It This Week" for one grocery item.
+    func haveThisWeek(key: String, name: String, weeksAhead: Int) async throws {
+        _ = try await Self.call(
+            "POST", "households/\(householdID)/grocery-skips", token: token,
+            body: ["ingredientKey": key, "name": name, "scope": "week", "week": week(weeksAhead: weeksAhead)])
+    }
+
     /// Shops at Walmart, as the shared test household does, so the Shop tab shows its list and
     /// export rather than the store setup.
     func shopAtWalmart() async throws {

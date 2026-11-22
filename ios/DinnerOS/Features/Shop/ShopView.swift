@@ -422,13 +422,14 @@ private struct ShopWeekList: View {
                     mealRow(row, in: group)
                 }
                 ForEach(group.components) { component in
+                    let notMade = component.isNotMade(skips: grocerySkips.items, recipeID: group.meal?.recipeID)
                     ShopComponentHeader(
-                        component: component, canEdit: canLeaveOut && group.meal != nil,
+                        component: component, isNotMade: notMade, canEdit: canLeaveOut && group.meal != nil,
                         isWorking: working.contains(component.id),
                         leaveOut: { scope in leaveOut(component: component, in: group, scope: scope) },
-                        putBack: { putBack(component: component) })
+                        putBack: { putBack(component: component, in: group) })
                     ForEach(component.rows) { row in
-                        mealRow(row, in: group, inComponent: true, componentLeftOut: component.isLeftOut)
+                        mealRow(row, in: group, inComponent: true, componentLeftOut: notMade)
                     }
                 }
             } header: {
@@ -658,13 +659,9 @@ private struct ShopWeekList: View {
         leaveOut(request, keys: Set(component.rows.map(\.ingredientKey)), rowID: component.id)
     }
 
-    private func putBack(component: ShopMealLayout.Component) {
-        var skips: [GrocerySkip] = []
-        for row in component.rows {
-            if case .leftOut(let line) = row.kind {
-                skips += line.holdingSkips(in: grocerySkips.items).filter { skip in !skips.contains(skip) }
-            }
-        }
+    /// Makes the component again. Its items skipped on their own (already have it) stay skipped.
+    private func putBack(component: ShopMealLayout.Component, in group: ShopMealLayout.Group) {
+        let skips = component.notMadeSkips(in: grocerySkips.items, recipeID: group.meal?.recipeID)
         resume(skips, keys: Set(component.rows.map(\.ingredientKey)), rowID: component.id)
     }
 
@@ -1138,27 +1135,36 @@ private struct LeftOutShopRow: View {
 /// This" for the whole of it, or Put Back when the meal doesn't make it.
 private struct ShopComponentHeader: View {
     let component: ShopMealLayout.Component
+    /// The household chose not to make it. Skipping each of its items doesn't count.
+    let isNotMade: Bool
     let canEdit: Bool
     let isWorking: Bool
     let leaveOut: (GrocerySkipScope) -> Void
     let putBack: () -> Void
+
+    private var status: String {
+        if isNotMade { return String(localized: "Not making this") }
+        if component.hasNothingToBuy { return String(localized: "Nothing to buy") }
+        return String(localized: "Made from the items below")
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Label(component.name, systemImage: "square.stack.3d.up")
                     .font(.subheadline.weight(.semibold))
-                    .strikethrough(component.isLeftOut)
-                    .foregroundStyle(component.isLeftOut ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
-                Text(component.isLeftOut ? "Not making this" : "Made from the items below")
+                    .strikethrough(isNotMade)
+                    .foregroundStyle(isNotMade ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
+                Text(status)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("shop.component.\(component.name)")
             Spacer(minLength: 0)
             if isWorking {
                 ProgressView()
-            } else if canEdit, component.isLeftOut {
+            } else if canEdit, isNotMade {
                 Button("Put Back", action: putBack)
                     .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Make \(component.name) Again")
