@@ -43,6 +43,10 @@ const (
 
 var testNow = time.Date(2026, 9, 15, 18, 0, 0, 0, time.UTC)
 
+// beforeTestWeeks is the Sunday before testWeek, for tests that plan whole
+// weeks: Autopilot suggests nothing for a day that's already gone.
+var beforeTestWeeks = time.Date(2026, 9, 13, 18, 0, 0, 0, time.UTC)
+
 func line(names ...string) []recipes.RecipeIngredient {
 	var out []recipes.RecipeIngredient
 	for i, n := range names {

@@ -196,6 +196,27 @@ struct RecipePageLayoutTests {
         #expect(CookStepGroups.shown(groups) == groups)
     }
 
+    /// "Save ½ Lemon for Pesto" shows once, on the row where the lemon first goes in: the
+    /// chicken bowls showed it on Step 2 and again on Step 3 (build 122, Hark's review item 4).
+    @Test func saveReminderShowsOnceWhereItFirstGoesIn() {
+        let lemon = { (id: String) in
+            CookStepItem(
+                id: id, name: "Lemon", amountText: nil, prep: nil, parts: [], isLeftOut: false, ingredientKey: "lemon")
+        }
+        let groups = [
+            CookStepGroup(index: 2, items: [lemon("lemon@2"), item("Scallions", key: "scallion")]),
+            CookStepGroup(index: 3, items: [lemon("lemon@3")]),
+        ]
+        let notes = [
+            InstructionSaveForLater(
+                ingredientIndex: 4, ingredientKey: "lemon", name: "Lemon",
+                text: "Use 1 Lemon. Save ½ Lemon for Pesto Bow Tie Pasta.",
+                short: "Save ½ Lemon for Pesto Bow Tie Pasta")
+        ]
+        #expect(CookStepGroups.saveReminderRows(groups, notes: notes) == ["lemon@2"])
+        #expect(CookStepGroups.saveReminderRows(groups, notes: []).isEmpty)
+    }
+
     /// A recipe without a Have Ready group is shown as it is.
     @Test func noHaveReadyIsUnchanged() {
         let groups = [CookStepGroup(index: 1, items: [item("Rice", key: "rice")])]
@@ -226,7 +247,7 @@ struct RecipePageLayoutTests {
         #expect(RecipeFormat.displayName("sugar") == "Sugar")
         #expect(RecipeFormat.displayName("Butter") == "Butter")
         #expect(RecipeFormat.displayName("") == "")
-        #expect(RecipeFormat.displayName("1% milk") == "1% milk")
+        #expect(RecipeFormat.displayName("1% milk") == "1% Milk")
     }
 
     // MARK: The tab picker

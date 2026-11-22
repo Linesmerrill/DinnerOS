@@ -515,7 +515,7 @@ func recipeResponse(it Result) CatalogRecipeResponse {
 	c := it.Content
 	out := CatalogRecipeResponse{
 		CatalogSummaryResponse: summaryResponse(it), CanHideCook: HidesCook(it.Recipe),
-		Description: c.Description, SourceURL: c.SourceURL, Servings: orEmpty(c.Servings),
+		Description: copytext.Description(c.Description), SourceURL: c.SourceURL, Servings: orEmpty(c.Servings),
 		PrepMinutes: c.PrepMinutes, Difficulty: c.Difficulty,
 		Utensils: orEmpty(c.Utensils), Allergens: orEmpty(c.Allergens),
 		Nutrition:   make([]recipes.NutrientResponse, 0, len(c.Nutrition)),
@@ -527,7 +527,7 @@ func recipeResponse(it Result) CatalogRecipeResponse {
 	}
 	for _, line := range c.Ingredients {
 		l := CatalogIngredientResponse{
-			IngredientID: line.IngredientID, Name: line.Name, PantryStaple: line.PantryStaple,
+			IngredientID: line.IngredientID, Name: copytext.IngredientName(line.Name), PantryStaple: line.PantryStaple,
 			Amounts: make([]recipes.AmountResponse, 0, len(line.Amounts)),
 		}
 		for _, a := range line.Amounts {
@@ -536,6 +536,7 @@ func recipeResponse(it Result) CatalogRecipeResponse {
 		out.Ingredients = append(out.Ingredients, l)
 	}
 	for _, s := range c.Steps {
+		s.Text = recipes.ServedStepText(s.Text)
 		out.Steps = append(out.Steps, recipes.StepResponse(s))
 	}
 	return out

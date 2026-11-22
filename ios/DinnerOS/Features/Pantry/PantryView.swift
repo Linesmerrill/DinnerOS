@@ -172,6 +172,9 @@ struct PantryView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // One gray from edge to edge: an empty list drew its own white slab in the iPad's
+        // centered column (Hark's review, build 122 round 4).
+        .scrollContentBackground(.hidden)
         // A centered column on an iPad, like the Shop list (Hark's review item 16).
         .dsReadableForm()
         .searchable(text: $searchText, prompt: "Search pantry")

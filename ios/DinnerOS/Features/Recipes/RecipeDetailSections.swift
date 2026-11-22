@@ -255,13 +255,13 @@ struct IngredientRow: View {
                             .foregroundStyle(Color.secondary)
                     }
                     if line.isPantryStaple {
-                        Text("pantry")
+                        Text("Pantry")
                             .font(.caption2)
                             .foregroundStyle(Color.secondary)
                             .padding(.horizontal, DS.Space.xs)
                             .padding(.vertical, 1)
                             .background(.quaternary, in: .capsule)
-                            .accessibilityLabel("pantry staple")
+                            .accessibilityLabel("Pantry staple")
                     }
                 }
                 if let component = state?.component, !component.parts.isEmpty {
@@ -300,18 +300,23 @@ struct RecipeNutritionSection: View {
         let nutrients = MenuFormat.orderedNutrition(recipe.nutritionValues)
         VStack(alignment: .leading, spacing: DS.Space.l) {
             if nutrients.isEmpty {
-                ContentUnavailableView {
-                    Label("No Nutrition Values", systemImage: "chart.pie")
-                } description: {
+                // Compact and leading, like the section with values: the centered empty view's
+                // padding pushed Add Nutrition half under the bottom bar on an iPad on its side
+                // (Hark's review, build 122 round 4).
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
+                    Text("No Nutrition Values")
+                        .font(.title3.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                     Text(
                         onAdd == nil
                             ? "This recipe didn’t come with nutrition information."
-                            : "Add calories, protein and more for one serving.")
-                } actions: {
-                    if let onAdd {
-                        Button("Add Nutrition", systemImage: "plus", action: onAdd)
-                            .buttonStyle(.dsPrimary(.small))
-                    }
+                            : "Add calories, protein and more for one serving."
+                    )
+                    .foregroundStyle(DS.Colors.secondaryText)
+                }
+                if let onAdd {
+                    Button("Add Nutrition", systemImage: "plus", action: onAdd)
+                        .buttonStyle(.dsPrimary(.small))
                 }
             } else {
                 Text("Nutrition Values")

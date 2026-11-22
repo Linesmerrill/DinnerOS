@@ -47,7 +47,8 @@ func TestThaiCurryReadsLikeACook(t *testing.T) {
 		{4, "Curry Powder", "1 ½ tsp", ""},
 		{5, "Coconut Milk", "⅔ cup", ""},
 		{5, "Sweet Thai Chili Sauce", "2 Tbsp", ""},
-		{6, "Lime zest", "", ""},
+		// Zested in step 2: the same zest, not more to measure.
+		{6, "Lime zest", "", "from step 2"},
 		// Half of ¼ oz of herbs isn't something to weigh: what's left reads as
 		// a share of the bunch (decision 631).
 		{6, "Cilantro", "½", ""},

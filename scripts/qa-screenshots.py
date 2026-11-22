@@ -141,8 +141,10 @@ def main():
                 "Household", "Plus paywall")
     for c in configs:
         missing = [r for r in required if r not in screens[c]]
-        if not any(s.startswith("Start Cooking") or "Start Cooking" in s for s in screens[c]):
-            missing.append("Start Cooking")
+        # The cooking screen's steps, on a phone's Steps tab or an iPad's steps column, in every
+        # config (build 122 round 4, Hark's item 15b: the iPads had none).
+        if "Start Cooking › Steps" not in screens[c]:
+            missing.append("Start Cooking › Steps")
         if missing:
             problems.append(f"{c} is missing: {', '.join(missing)}")
     if problems:

@@ -46,6 +46,11 @@ struct CookingView: View {
     @State private var showsWelcome = false
     /// The screen's safe area, which shows iPhone Duo's cover-screen button column.
     @State private var safeArea = EdgeInsets()
+    /// The fades under the bar on the iPad's two panes and under the phone's picker: a row tall
+    /// once rows scroll under them (`DSEdgeFade.height(scrolledUnder:)`).
+    @State private var ingredientsFade = DS.Size.edgeFade
+    @State private var stepsFade = DS.Size.edgeFade
+    @State private var tabFade = DS.Size.edgeFade
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     init(start: CookMeal, meals: [CookMeal]) {
@@ -176,8 +181,12 @@ struct CookingView: View {
                     // Clear of the fade under the bar, so the first row starts whole.
                     .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
                 }
-                // Rows fade out under the bar's buttons instead of being cut at its edge.
-                .dsTopBarEdge(color: DS.Colors.surface)
+                // Rows fade out under the bar's buttons instead of being cut at its edge, over a
+                // whole row once they scroll under it (Hark's review, build 122 item 1e).
+                .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
+                    if fade != ingredientsFade { ingredientsFade = fade }
+                }
+                .dsTopBarEdge(color: DS.Colors.surface, height: ingredientsFade)
                 .frame(width: max(320, geometry.size.width * 0.38))
                 .background(DS.Colors.surface)
                 Divider()
@@ -186,7 +195,10 @@ struct CookingView: View {
                         .padding(DS.Space.xxl)
                         .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
                 }
-                .dsTopBarEdge(color: DS.Colors.background)
+                .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
+                    if fade != stepsFade { stepsFade = fade }
+                }
+                .dsTopBarEdge(color: DS.Colors.background, height: stepsFade)
                 .contentMargins(.bottom, CGFloat(timers.timers.count) * 72, for: .scrollContent)
                 .overlay(alignment: .bottomTrailing) {
                     CookTimerDock(timers: timers, stacked: true)
@@ -232,7 +244,7 @@ struct CookingView: View {
             .padding(.vertical, DS.Space.s)
             .background(DS.Colors.background)
             // Rows fade out under the pinned title and picker instead of being cut at the edge.
-            .dsEdgeFade(.bottom, color: DS.Colors.background)
+            .dsEdgeFade(.bottom, color: DS.Colors.background, height: tabFade)
             .zIndex(1)
             ScrollView {
                 Group {
@@ -252,10 +264,18 @@ struct CookingView: View {
                 // Clear of the fade at the top, so the first row starts whole.
                 .padding(.top, DS.Size.edgeFade - DS.Space.l)
             }
+            .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
+                if fade != tabFade { tabFade = fade }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CookTimerDock(timers: timers, stacked: false)
             }
         }
+    }
+
+    /// A pane's fade under its bar, from how far its rows have scrolled up under it.
+    private static func scrolledUnder(_ geometry: ScrollGeometry) -> CGFloat {
+        DSEdgeFade.height(scrolledUnder: geometry.contentOffset.y + geometry.contentInsets.top)
     }
 
     // MARK: Layout
@@ -451,8 +471,11 @@ struct CookIngredientList: View {
                 }
             case .byStep:
                 let current = session.current(recipe: dish.recipe.id)
-                ForEach(CookStepGroups.shown(dish.stepGroups)) { group in
-                    stepGroup(group, isCurrent: group.index == current)
+                let groups = CookStepGroups.shown(dish.stepGroups)
+                let reminders = CookStepGroups.saveReminderRows(
+                    groups, notes: dish.instructions?.saveForLater ?? [])
+                ForEach(groups) { group in
+                    stepGroup(group, isCurrent: group.index == current, reminders: reminders)
                 }
             }
         }
@@ -460,7 +483,7 @@ struct CookIngredientList: View {
 
     /// One step's ingredients under a bold heading with a green underline; the step you're on
     /// gets a tinted background that reaches past the rows, so the text keeps its edge.
-    private func stepGroup(_ group: CookStepGroup, isCurrent: Bool) -> some View {
+    private func stepGroup(_ group: CookStepGroup, isCurrent: Bool, reminders: Set<String>) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(CookStepGroupTitle.text(group.index))
                 .font(DS.Typography.sectionTitle)
@@ -472,7 +495,7 @@ struct CookIngredientList: View {
                 .padding(.bottom, DS.Space.xs)
                 .accessibilityAddTraits(.isHeader)
             ForEach(group.items) { item in
-                stepItemRow(item)
+                stepItemRow(item, showsSave: reminders.contains(item.id))
                 ForEach(Array(item.parts.enumerated()), id: \.offset) { index, part in
                     stepPartRow(part, index: index, of: item, isLast: index == item.parts.count - 1)
                 }
@@ -517,10 +540,10 @@ struct CookIngredientList: View {
         .contentShape(Rectangle())
     }
 
-    private func stepItemRow(_ item: CookStepItem) -> some View {
+    private func stepItemRow(_ item: CookStepItem, showsSave: Bool) -> some View {
         let isChecked = session.isChecked(item.id, recipe: dish.recipe.id)
         let quiet = isChecked || item.isLeftOut
-        let save = dish.instructions?.saveForLater(ingredientKey: item.ingredientKey)
+        let save = showsSave ? dish.instructions?.saveForLater(ingredientKey: item.ingredientKey) : nil
         return Button {
             session.toggle(item, recipe: dish.recipe.id)
         } label: {
@@ -654,6 +677,22 @@ enum CookStepGroups {
             out[readyIndex] = CookStepGroup(index: 0, items: ready)
         }
         return out
+    }
+
+    /// The rows that carry a "Save ½ Lemon for Pesto" reminder: only the first row of each
+    /// ingredient with a note, so the reminder shows once, where the ingredient first goes in,
+    /// and not again on every step that uses it (build 122, Hark's review item 4).
+    nonisolated static func saveReminderRows(
+        _ groups: [CookStepGroup], notes: [InstructionSaveForLater]
+    ) -> Set<String> {
+        let keys = Set(notes.compactMap(\.ingredientKey).filter { !$0.isEmpty })
+        var seen = Set<String>()
+        var rows = Set<String>()
+        for item in groups.flatMap(\.items) where !item.isLeftOut {
+            guard let key = item.ingredientKey, keys.contains(key), seen.insert(key).inserted else { continue }
+            rows.insert(item.id)
+        }
+        return rows
     }
 }
 

@@ -28,7 +28,7 @@ final class LiveImportQATests: XCTestCase {
         app.navigationBars["Import From a Website"].buttons["Next"].tap()
 
         // The review screen, with the page's title and its ingredients.
-        let name = app.textFields["Recipe name"]
+        let name = app.textFields["Recipe Name"]
         XCTAssertTrue(name.waitForExistence(timeout: 60), "The Fry's recipe didn't reach the review screen")
         XCTAssertEqual(name.value as? String, "Plant-based Calzones")
         XCTAssertFalse(app.buttons["ImportFailedWriteOwn"].exists, "The import failed")

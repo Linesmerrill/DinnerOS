@@ -39,6 +39,12 @@ func TestCategorize(t *testing.T) {
 		"Crushed Tomatoes":          CategoryPantry,
 		"Grape Tomatoes":            CategoryProduce,
 		"Tomato Paste":              CategoryCondiments,
+		// "Frozen" wins over the food it names (Hark's review, build 122: peas under Produce).
+		"Frozen Peas":    CategoryFrozen,
+		"Frozen Spinach": CategoryFrozen,
+		"Frozen Shrimp":  CategoryFrozen,
+		"Peas":           CategoryProduce,
+		"Ice Cream":      CategoryFrozen,
 
 		// Common HelloFresh ingredients.
 		"Cooking Oil":                 CategoryPantry,

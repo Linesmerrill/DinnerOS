@@ -50,6 +50,9 @@ struct RecipeDetailView: View {
     /// The fade under the bar: full while the picker is far below it, none once the picker pins
     /// flush under the bar (it has its own).
     @State private var barFade: CGFloat = DS.Size.edgeFade
+    /// The fade under the pinned picker: a row tall once rows scroll under it.
+    @State private var pickerFade: CGFloat = DS.Size.edgeFade
+    @State private var pickerHeight: CGFloat = 0
     /// The scroll view's own top safe area: where the bar ends.
     @State private var scrollTop: CGFloat = 0
     /// The one-line title's row under the bar's buttons.
@@ -164,7 +167,7 @@ struct RecipeDetailView: View {
                         RecipeNotesForNextTime(notes: notes)
                             .recipeColumn()
                     }
-                    RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
+                    RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection, fadeHeight: pickerFade)
                         // Where it would sit unpinned: the picker only moves its drawing.
                         .onGeometryChange(for: RecipeDetailHeader.Anchor.self) { proxy in
                             RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
@@ -173,6 +176,11 @@ struct RecipeDetailView: View {
                             let fade = RecipeDetailHeader.barFade(pickerTop: anchor.visible, pinLine: pinLine)
                             if fade != barFade { barFade = fade }
                         }
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            if height != pickerHeight { pickerHeight = height }
+                        }
                         .stickyBelowTop(pinLine)
                         .zIndex(1)
                     // Clear of the picker's fade, so the section's first row is whole once the
@@ -180,6 +188,17 @@ struct RecipeDetailView: View {
                     sectionContent
                         .recipeColumn()
                         .padding(.top, DS.Size.edgeFade - DS.Space.xl)
+                        // Once rows scroll up under the pinned picker, its fade grows to a row's
+                        // height, so the top row is never cut by a hard edge (Hark's review,
+                        // build 122 item 1c). Measured here: the picker's own frame moves with it
+                        // once it pins.
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.frame(in: .scrollView).minY
+                        } action: { top in
+                            let fade = RecipeDetailHeader.pickerFade(
+                                sectionTop: top, pinLine: pinLine, pickerHeight: pickerHeight)
+                            if fade != pickerFade { pickerFade = fade }
+                        }
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
@@ -214,6 +233,25 @@ struct RecipeDetailView: View {
             proxy.size.height
         } action: { height in
             pageHeight = height
+        }
+        // A wash of the page's own background behind the status bar, the buttons and (on iPad)
+        // the tab bar while the photo is under them, so their glyphs reach 4.5:1 and the status
+        // bar takes one style over any photo. Pinned to the screen, not the photo: it scrolled
+        // up with the photo and left the buttons and clock on bare photo (Hark's review, build
+        // 122 round 4). The Duo's cover screen has its buttons and clock in a column beside the
+        // page, so it needs none.
+        .overlay(alignment: .top) {
+            if !showsBar && !hasSideColumn {
+                // On iPad the photo starts at the bar's edge (the bar holds the tabs), so the
+                // wash is the page's own solid color there and eases out from the photo's top,
+                // with no line where the photo begins.
+                let photoBelowBar = scrollTop > 0
+                RecipeHeroScrim(
+                    barBottom: barBottom, easeFrom: photoBelowBar ? barBottom : barBottom - DS.Space.xxl,
+                    color: photoBelowBar ? DS.Colors.background : DS.Colors.heroScrim
+                )
+                .ignoresSafeArea(edges: .top)
+            }
         }
         // Once the photo has scrolled away, a solid bar and, under the buttons, the recipe's
         // name on one line. Nothing that scrolls under it shows through or gets cut mid-line;
@@ -386,15 +424,6 @@ struct RecipeDetailView: View {
             )
             .frame(width: geometry.size.width, height: geometry.size.height + stretch)
             .clipped()
-            .overlay(alignment: .top) {
-                // A wash of the page's own background behind the status bar, the buttons and
-                // (on iPad) the tab bar, solid down to the bar's edge, so their glyphs reach
-                // 4.5:1 and the status bar takes one style over any photo. The Duo's cover screen
-                // has its buttons and clock in a column beside the page, so it needs none.
-                if !hasSideColumn {
-                    RecipeHeroScrim(barBottom: barBottom)
-                }
-            }
             .overlay(alignment: .bottomLeading) {
                 if let badge {
                     MenuChip(text: badge.text, systemImage: badge.code.systemImage, isProminent: true)
@@ -834,6 +863,8 @@ enum RecipeDetailTab: String, CaseIterable, Identifiable {
 struct RecipeDetailTabPicker: View {
     let tabs: [RecipeDetailTab]
     @Binding var selection: RecipeDetailTab
+    /// How far the fade under it reaches (`DSEdgeFade.height(scrolledUnder:)`).
+    var fadeHeight: CGFloat = DS.Size.edgeFade
 
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 32
 
@@ -871,7 +902,7 @@ struct RecipeDetailTabPicker: View {
         .frame(maxWidth: .infinity)
         .background(DS.Colors.barBackground)
         // Rows fade out under the pinned picker instead of being cut by a hard line.
-        .dsEdgeFade(.bottom)
+        .dsEdgeFade(.bottom, height: fadeHeight)
     }
 }
 
@@ -1090,6 +1121,13 @@ enum RecipeDetailHeader {
         min(max(pickerTop - pinLine, 0), DS.Size.edgeFade)
     }
 
+    /// The fade under the pinned picker, from where the section under it (`sectionTop`, a stack
+    /// spacing below the picker when nothing has scrolled under it) is now: the content's inset
+    /// at rest, a row once rows scroll under (`DSEdgeFade.height(scrolledUnder:)`).
+    nonisolated static func pickerFade(sectionTop: CGFloat, pinLine: CGFloat, pickerHeight: CGFloat) -> CGFloat {
+        DSEdgeFade.height(scrolledUnder: pinLine + pickerHeight + DS.Space.xl - sectionTop)
+    }
+
     /// The scroll offsets between "the large title sits whole just under the bar" and "the
     /// picker has pinned": a scroll that ends in there settles at one end, so the page never
     /// rests on a sliver of the large title (Hark's review item 6). `nil` when there's no room.
@@ -1160,23 +1198,44 @@ nonisolated struct RecipeHeaderSnap: ScrollTargetBehavior {
     }
 }
 
-/// The wash at the top of the recipe's photo: `DS.Colors.heroScrim`, solid to the bar's edge,
-/// then fading out over `DS.Space.huge`.
-private struct RecipeHeroScrim: View {
+/// The wash at the top of the recipe's photo: `DS.Colors.heroScrim` down to the middle of the
+/// bar's buttons, then easing out to `DS.Size.heroScrimFade` below the bar on a cosine curve, flat
+/// at both ends, so it never ends in a visible band (Hark's review, build 122 round 4).
+struct RecipeHeroScrim: View {
     let barBottom: CGFloat
+    /// Where the ease starts: about the middle of the bar's buttons (half a button above the bar's
+    /// edge), so they still sit on a near-full wash.
+    var easeFrom: CGFloat? = nil
+    /// The wash's color at full strength: `DS.Colors.heroScrim` over a photo under the buttons.
+    var color: Color = DS.Colors.heroScrim
 
     var body: some View {
-        let height = barBottom + DS.Space.huge
+        let height = barBottom + DS.Size.heroScrimFade
         LinearGradient(
-            stops: [
-                .init(color: DS.Colors.heroScrim, location: 0),
-                .init(color: DS.Colors.heroScrim, location: height > 0 ? barBottom / height : 0),
-                .init(color: DS.Colors.heroScrim.opacity(0), location: 1),
-            ],
+            stops: Self.stops(barBottom: barBottom, easeFrom: easeFrom).map {
+                .init(color: color.opacity($0.opacity), location: $0.location)
+            },
             startPoint: .top, endPoint: .bottom
         )
         .frame(height: height)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// How many steps the eased fade is drawn with: enough that no step shows.
+    static let fadeSteps = 12
+
+    /// The wash's opacity (of `heroScrim`) by location, 0 at the top and 1 at the wash's end:
+    /// full down to `easeFrom` (the bar's edge if not given), then a cosine ease to clear.
+    static func stops(barBottom: CGFloat, easeFrom: CGFloat? = nil) -> [(location: CGFloat, opacity: Double)] {
+        let height = barBottom + DS.Size.heroScrimFade
+        guard height > 0 else { return [(0, 1), (1, 0)] }
+        let start = min(max(easeFrom ?? barBottom, 0), max(barBottom, 0)) / height
+        var stops: [(location: CGFloat, opacity: Double)] = [(0, 1)]
+        for step in 0...fadeSteps {
+            let t = Double(step) / Double(fadeSteps)
+            stops.append((start + (1 - start) * CGFloat(t), (1 + cos(.pi * t)) / 2))
+        }
+        return stops
     }
 }

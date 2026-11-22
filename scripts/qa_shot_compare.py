@@ -16,6 +16,9 @@ ios/DinnerOSUITests/QAHelpers.swift); keep the two in step.
 
 A config folder is named <device>-<appearance>, as qa-screenshots.py writes them. Needs Pillow and
 NumPy.
+
+A few pairs are different screens that differ in little (ALLOWED_PAIRS, Hark's review, build 122
+round 4 item 15c): they are never reported. Keep the list in step with QAShotCompare.allowedPairs.
 """
 import itertools
 import os
@@ -41,6 +44,14 @@ MASKS = {
     "ipadL": (24, 20, None),
     "ipadP": (24, 20, None),
 }
+# Pairs of screens, by file name without ".png", that are different screens though under 1% of
+# cells may change: on an iPad the search for one recipe and for another show one result card each
+# in a wide, mostly empty page; the Household tab of a household without Plus differs from the
+# main test household's only in its name, its initials and its Plus line.
+ALLOWED_PAIRS = frozenset({
+    frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
+    frozenset({"household-new-household", "household"}),
+})
 # Pixels per point by device.
 SCALES = {"large": 3, "small": 2, "duo": 3, "ipadL": 2, "ipadP": 2}
 
@@ -105,12 +116,25 @@ def surely_different(means_a, means_b, device, threshold):
     return total > 0 and moved.sum() / total >= threshold
 
 
+def screen_name(path):
+    """'ipadL-dark/menu-search-typed-imported.png' -> 'menu-search-typed-imported'."""
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def is_allowed(first, second):
+    """True for a pair of different screens that may look alike (ALLOWED_PAIRS)."""
+    return frozenset({screen_name(first), screen_name(second)}) in ALLOWED_PAIRS
+
+
 def duplicates(paths, device, threshold=SAME_SCREEN):
-    """Pairs of paths, with the share of cells changed, that show the same screen."""
+    """Pairs of paths, with the share of cells changed, that show the same screen. Allowed pairs
+    are left out."""
     images = {path: load(path, device) for path in paths}
     means = {path: cell_means(pixels) for path, pixels in images.items()}
     found = []
     for first, second in itertools.combinations(sorted(images), 2):
+        if is_allowed(first, second):
+            continue
         if surely_different(means[first], means[second], device, threshold):
             continue
         share = changed_share(images[first], images[second], device)

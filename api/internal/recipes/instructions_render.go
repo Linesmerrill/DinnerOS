@@ -845,6 +845,17 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			}
 			amountShown[hit] = true
 		}
+		// Less than a whole lemon that's never cut into wedges: the squeeze
+		// is what the recipe has, "a squeeze of ½ lemon", not a wedge of a
+		// lemon the list doesn't have (build 122, Hark's review item 4).
+		if squeeze && !m.wedges && m.amount != nil && m.amount.Unit == "count" &&
+			m.amount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) < 0 {
+			squeeze = false
+			if !m.leftOut && !shownBefore && !amountShown[hit] {
+				whole := *m.amount
+				amount = &whole
+			}
+		}
 		if squeeze {
 			// One wedge for the card's smallest box, more for a bigger one.
 			n := ingredients.NewQuantity(1, 1)
@@ -1027,11 +1038,17 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	return out
 }
 
+// noteNumber is a number or a range of them in a card's note: "7-10", "7 to
+// 10", "1½".
+const noteNumber = `[\d½¼¾⅓⅔⅛](?:[\d½¼¾⅓⅔⅛\-–/. ]| to )*?`
+
 var (
 	// " (7-10 minutes for 4 servings)", " (2 cups for 4)"
 	boxNoteRe = regexp.MustCompile(`\s*\(([^()]{1,90}?) for (\d+)(?: servings?)?\)`)
-	// "7-10 minutes", "1½ cups": a number or range, then a word.
-	noteAmountRe = regexp.MustCompile(`^([\d½¼¾⅓⅔⅛][\d½¼¾⅓⅔⅛\-–/. ]*?)\s*([A-Za-z]+)$`)
+	// "7-10 minutes", "7 to 10 minutes", "1½ cups": a number or range, then
+	// a word. The app serves ranges with "to" (copytext.Ranges), so a step a
+	// household saved back reads that way too.
+	noteAmountRe = regexp.MustCompile(`^(` + noteNumber + `)\s*([A-Za-z]+)$`)
 )
 
 // boxNotes settles the notes a card writes for its other box size in text
@@ -1064,7 +1081,7 @@ func boxNotes(text string, servings, base int) string {
 			continue
 		}
 		unit := strings.TrimSuffix(strings.ToLower(note[2]), "s")
-		before := regexp.MustCompile(`(?i)([\d½¼¾⅓⅔⅛][\d½¼¾⅓⅔⅛\-–/. ]*?)(\s*` + regexp.QuoteMeta(unit) + `s?\b)`)
+		before := regexp.MustCompile(`(?i)(` + noteNumber + `)(\s*` + regexp.QuoteMeta(unit) + `s?\b)`)
 		if useNote {
 			if all := before.FindAllStringSubmatchIndex(prefix, -1); len(all) > 0 {
 				last := all[len(all)-1]

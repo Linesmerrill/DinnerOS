@@ -41,6 +41,8 @@ struct NotificationsView: View {
                     Text(message)
                 }
         }
+        // As tall as the list, with no empty space under a few rows (build 122, Hark's item 16).
+        .dsFittedSheet(background: DS.Colors.groupedBackground)
         .task { await notifications.load() }
     }
 
@@ -88,6 +90,7 @@ struct NotificationsView: View {
         .refreshable {
             await notifications.refresh()
         }
+        .dsSheetScrollContent(isOn: !notifications.items.isEmpty)
     }
 
     /// One row for a notification and any repeats of it (`NotificationGrouping`); its actions

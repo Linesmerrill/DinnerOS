@@ -3,22 +3,27 @@ import UIKit
 
 extension View {
     /// Every way to put the keyboard away on a long form: drag the form down, tap outside the
-    /// field, or tap Done above the keyboard.
-    func keyboardDismissal() -> some View {
-        modifier(KeyboardDismissal())
+    /// field, or tap Done above the keyboard. `showsDone: false` leaves Done out: an iPad sheet's
+    /// Done floated beside the sheet, and the iPad keyboard has its own hide key (build 122).
+    func keyboardDismissal(showsDone: Bool = true) -> some View {
+        modifier(KeyboardDismissal(showsDone: showsDone))
     }
 }
 
 private struct KeyboardDismissal: ViewModifier {
+    let showsDone: Bool
+
     func body(content: Content) -> some View {
         content
             .scrollDismissesKeyboard(.interactively)
             .background { TapOutsideToDismiss() }
             .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { Keyboard.dismiss() }
-                        .fontWeight(.semibold)
+                if showsDone {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { Keyboard.dismiss() }
+                            .fontWeight(.semibold)
+                    }
                 }
             }
     }

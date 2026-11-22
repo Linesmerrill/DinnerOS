@@ -10,6 +10,12 @@ struct PlusPurchaseView: View {
     @State private var error: String?
     @State private var notice: String?
     @State private var showsInvite = false
+    @Environment(\.dsSheetStyle) private var sheetStyle
+    /// The height of the offer as laid out, so the sheet can be as tall as it and no taller.
+    @State private var offerHeight: CGFloat?
+    /// The most room the offer has had. The layout is chosen for that, so it stays the same once
+    /// the sheet shrinks to fit it.
+    @State private var layoutHeight: CGFloat?
 
     var body: some View {
         NavigationStack {
@@ -31,8 +37,12 @@ struct PlusPurchaseView: View {
                 PlusInviteView()
             }
         }
-        // A page-sized sheet on iPad, tall enough that every plan, price and term shows at once.
+        // A page-sized sheet on iPad, tall enough that every plan, price and term shows at once
+        // (a form sheet laid the offer out taller than it showed and cut off the button).
         .presentationSizing(.page)
+        // On a phone as tall as the offer; on an iPad the offer spreads out to fill the sheet. No
+        // empty space under it either way (build 122, Hark's review item 16).
+        .dsFittedSheet()
     }
 
     /// How much of the screen the offer can take before the purchase controls.
@@ -60,8 +70,22 @@ struct PlusPurchaseView: View {
                 offerContent(offer, density: .full, includesPurchase: !pinsPurchaseBar)
             }
             .dsBottomBar(isShown: pinsPurchaseBar) { purchaseBar(offer) }
+            // Scrolling: the sheet stays full height.
+            .onAppear { offerHeight = nil }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // A phone's sheet shrinks to the offer: keep the layout chosen for the most room it had.
+        .frame(
+            height: DSSheetFit.fills(style: sheetStyle, horizontal: horizontalSizeClass) ? nil : layoutHeight,
+            alignment: .top
+        )
+        // The room the sheet gives, whatever the layout above asks for.
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.height
+        } action: { height in
+            layoutHeight = max(layoutHeight ?? 0, height)
+        }
+        .dsSheetContent(height: offerHeight)
     }
 
     /// A phone pins the purchase controls when the page has to scroll; an iPad keeps them under
@@ -71,23 +95,32 @@ struct PlusPurchaseView: View {
     /// The whole offer, purchase controls included, with no scrolling.
     private func page(_ offer: PlusOffer, density: Density) -> some View {
         offerContent(offer, density: density, includesPurchase: true)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.height
+            } action: {
+                offerHeight = $0
+            }
     }
 
     private func offerContent(_ offer: PlusOffer, density: Density, includesPurchase: Bool) -> some View {
-        VStack(alignment: .leading, spacing: density == .full ? DS.Space.xxl : DS.Space.l) {
+        let gap = density == .full ? DS.Space.xxl : DS.Space.l
+        return VStack(alignment: .leading, spacing: 0) {
             // A household that entered an invite code sees what's left before its free month.
             if let progress = plus.status?.referralProgress, progress.isPending {
                 ReferralProgressContent(progress: progress)
                     .padding(DS.Space.ml)
                     .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
+                DSSheetGap(min: gap)
             } else if let month = plus.openFreeMonth, !(plus.status?.active ?? false) {
                 // An earned free month: redeeming it is how it starts (decision 755).
                 FreeMonthCard(month: month)
                     .padding(DS.Space.ml)
                     .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
+                DSSheetGap(min: gap)
             }
             header(offer, density: density)
             if density != .small {
+                DSSheetGap(min: gap)
                 VStack(alignment: .leading, spacing: density == .full ? DS.Space.m : DS.Space.xs) {
                     ForEach(offer.benefits, id: \.self) { benefit in
                         Label {
@@ -100,7 +133,9 @@ struct PlusPurchaseView: View {
                 }
                 .font(density == .full ? DS.Typography.body : DS.Typography.subheadline)
             }
+            DSSheetGap(min: gap)
             plans(offer, density: density)
+            DSSheetGap(min: gap)
             VStack(spacing: density == .full ? DS.Space.xxl : DS.Space.s) {
                 if density == .full {
                     Text(offer.freeText)
@@ -113,6 +148,7 @@ struct PlusPurchaseView: View {
             }
             .frame(maxWidth: .infinity)
             if includesPurchase {
+                DSSheetGap(min: gap)
                 VStack(spacing: DS.Space.sm) { purchaseBar(offer) }
                     .frame(maxWidth: .infinity)
             }

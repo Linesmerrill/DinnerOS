@@ -76,10 +76,14 @@ func TestIntegrationAutopilotEndpoints(t *testing.T) {
 	eventService := events.NewService(events.ServiceOptions{Store: events.NewMongoStore(db), Recipes: recipeService})
 	ratingService := ratings.NewService(ratings.ServiceOptions{Store: ratings.NewMongoStore(db), Recipes: recipeService, Events: eventService})
 	planService := planning.NewService(planning.NewMongoStore(db), recipeService).WithEvents(eventService, nil)
+	clock := beforeTestWeeks
 	svc := NewService(ServiceOptions{
 		Store: NewMongoStore(db), Provider: baseline.New(baseline.Options{}),
 		Households: fakeHouseholds{hh: {ID: hh, DefaultServings: 2, TimeZone: "America/Denver"}},
 		Recipes:    recipeService, Ratings: ratingService, Events: eventService, Plans: planService,
+		// The day before the weeks planned here, so every one of their days
+		// is still to come: past days aren't suggested.
+		Now: func() time.Time { return clock },
 	})
 
 	imported, err := recipeService.Import(ctx, hh, syntheticCatalog(500))
@@ -209,6 +213,8 @@ func TestIntegrationAutopilotEndpoints(t *testing.T) {
 		t.Errorf("stored context = %+v", c)
 	}
 
+	// The reset is stamped now, after the events above were stored.
+	clock = time.Now()
 	rec = call(http.MethodDelete, "/learning", "")
 	wantStatus(t, rec, http.StatusOK, "")
 	if reset := decodeBody[LearningResponse](t, rec); len(reset.Adjustments) != 0 || reset.ResetAt == nil {

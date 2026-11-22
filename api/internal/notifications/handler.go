@@ -66,7 +66,7 @@ type NotificationResponse struct {
 	Banner    bool      `json:"banner"`
 	CreatedAt time.Time `json:"createdAt"`
 	// GroupedIDs, when there are two or more, are the notifications this one
-	// stands for: repeats shown as one ("3 invites counted"). Reading or
+	// stands for: repeats shown as one ("3 of your invites counted"). Reading or
 	// dismissing this ID covers all of them.
 	GroupedIDs []string `json:"groupedIds,omitempty"`
 }

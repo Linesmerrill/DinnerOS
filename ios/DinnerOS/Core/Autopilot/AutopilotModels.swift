@@ -919,11 +919,11 @@ nonisolated struct AutopilotProposal: Decodable, Equatable, Sendable, Identifiab
     let attempt: Int
     let modelVersion: String
     let requestedMeals: Int
-    let plannedMeals: Int
+    var plannedMeals: Int
     let candidateCount: Int
     let coldStart: Bool
-    let slots: [AutopilotSlot]
-    let unfilled: [AutopilotUnfilled]
+    var slots: [AutopilotSlot]
+    var unfilled: [AutopilotUnfilled]
     let messages: [AutopilotText]
     let swapCount: Int
     let excludedSlotIDs: [String]
@@ -949,6 +949,30 @@ nonisolated struct AutopilotProposal: Decodable, Equatable, Sendable, Identifiab
 
     func slot(id: String) -> AutopilotSlot? {
         slots.first { $0.id == id }
+    }
+
+    /// The proposal without its meals and open days dated before `today` (`YYYY-MM-DD`). The
+    /// API leaves them out too; this keeps a proposal loaded earlier in the week, or one from an
+    /// older server, from offering a day that's already gone (build 122 review: Tuesday to
+    /// Thursday suggested on a Saturday).
+    func upcoming(today: String) -> AutopilotProposal {
+        func isPast(_ date: String) -> Bool { !date.isEmpty && date < today }
+        guard slots.contains(where: { isPast($0.date) }) || unfilled.contains(where: { isPast($0.date) }) else {
+            return self
+        }
+        var copy = self
+        copy.slots.removeAll { isPast($0.date) }
+        copy.unfilled.removeAll { isPast($0.date) }
+        copy.plannedMeals = copy.slots.count
+        return copy
+    }
+
+    /// `date` as the API writes a day (`YYYY-MM-DD`) in `timeZone`.
+    static func dayKey(_ date: Date, in timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
 
     private enum CodingKeys: String, CodingKey {

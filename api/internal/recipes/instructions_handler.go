@@ -13,6 +13,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
@@ -282,7 +283,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 		Ingredients:         make([]IngredientStateResponse, 0, len(in.Ingredients)),
 	}
 	for _, st := range in.Ingredients {
-		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: st.Name, SwapName: st.SwapName}
+		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: copytext.IngredientName(st.Name), SwapName: copytext.IngredientName(st.SwapName)}
 		if st.Amount != nil {
 			sr.AmountText = st.Amount.Text()
 		}
@@ -299,16 +300,17 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 	}
 	for _, step := range in.Steps {
 		sr := InstructionStepResponse{
-			Index: step.Index, Text: step.Text, OriginalText: step.Original, ImageURL: step.ImageURL, LeftOut: step.LeftOut,
+			Index: step.Index, Text: copytext.Ranges(step.Text), OriginalText: copytext.Ranges(step.Original), ImageURL: step.ImageURL, LeftOut: step.LeftOut,
 			Segments: make([]StepSegmentResponse, 0, len(step.Segments)),
 			Notes:    make([]InstructionNoteResponse, 0, len(step.Notes)),
 			Timers:   make([]StepTimerResponse, 0, len(step.Timers)),
 		}
 		for _, t := range step.Timers {
+			t.Text = copytext.Ranges(t.Text)
 			sr.Timers = append(sr.Timers, StepTimerResponse(t))
 		}
 		if sr.Text == "" {
-			sr.Text = step.Original
+			sr.Text = copytext.Ranges(step.Original)
 		}
 		for _, seg := range step.Segments {
 			var index *int
@@ -316,7 +318,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 				index = &seg.Ingredient
 			}
 			sr.Segments = append(sr.Segments, StepSegmentResponse{
-				Kind: string(seg.Kind), Text: seg.Text, IngredientID: seg.IngredientID, IngredientIndex: index, Name: seg.Name,
+				Kind: string(seg.Kind), Text: copytext.Ranges(seg.Text), IngredientID: seg.IngredientID, IngredientIndex: index, Name: seg.Name,
 				Amount: instructionAmount(seg.Amount), Part: seg.Part, Spicy: seg.Spicy, Substituted: seg.Substituted,
 				SpecialtyID: seg.SpecialtyID, SpecialtyName: seg.SpecialtyName, LeftOut: seg.LeftOut,
 			})
@@ -350,7 +352,7 @@ func checklistResponse(c Checklist) ChecklistResponse {
 	out := ChecklistResponse{All: make([]CookIngredientResponse, 0, len(c.All)), ByStep: make([]CookStepGroupResponse, 0, len(c.ByStep))}
 	for _, ci := range c.All {
 		r := CookIngredientResponse{
-			ID: ci.ID, Index: ci.Index, Name: ci.Name, AmountText: ci.AmountText, LeftOut: ci.LeftOut,
+			ID: ci.ID, Index: ci.Index, Name: copytext.IngredientName(ci.Name), AmountText: ci.AmountText, LeftOut: ci.LeftOut,
 			IngredientKey: ci.IngredientKey, Parts: make([]CookPartResponse, 0, len(ci.Parts)), Components: orEmpty(ci.Components),
 		}
 		for _, p := range ci.Parts {
@@ -362,11 +364,20 @@ func checklistResponse(c Checklist) ChecklistResponse {
 		gr := CookStepGroupResponse{Index: g.Index, Items: make([]CookStepItemResponse, 0, len(g.Items))}
 		for _, it := range g.Items {
 			gr.Items = append(gr.Items, CookStepItemResponse{
-				ID: it.ID, IngredientIndex: it.IngredientIndex, Name: it.Name, AmountText: it.AmountText, Prep: it.Prep,
-				Parts: orEmpty(it.Parts), LeftOut: it.LeftOut, IngredientKey: it.IngredientKey,
+				ID: it.ID, IngredientIndex: it.IngredientIndex, Name: copytext.IngredientName(it.Name), AmountText: it.AmountText, Prep: it.Prep,
+				Parts: ingredientNames(it.Parts), LeftOut: it.LeftOut, IngredientKey: it.IngredientKey,
 			})
 		}
 		out.ByStep = append(out.ByStep, gr)
+	}
+	return out
+}
+
+// ingredientNames are names in the app's Title Case ("Scallion Whites").
+func ingredientNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		out = append(out, copytext.IngredientName(n))
 	}
 	return out
 }

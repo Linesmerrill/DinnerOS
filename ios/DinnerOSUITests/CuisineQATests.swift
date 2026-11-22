@@ -21,7 +21,7 @@ final class CuisineQATests: XCTestCase {
         if write.waitForExistence(timeout: 3) { write.tap() }
         let typeIt = app.buttons["Type It Myself"]
         if typeIt.waitForExistence(timeout: 3) { typeIt.tap() }
-        let nameField = app.textFields["Recipe name"]
+        let nameField = app.textFields["Recipe Name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5), "The typed recipe form didn’t open")
         nameField.tap()
         nameField.typeText(name)

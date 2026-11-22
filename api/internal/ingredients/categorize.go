@@ -42,6 +42,9 @@ var categoryRules = []categoryRule{
 	{CategoryOther, false, []string{"skewers", "wooden skewers", "parchment", "foil", "toothpicks", "oven ready tray"}},
 	{CategorySpices, false, []string{"harissa powder", "dashi powder", "truffle zest"}},
 	{CategoryProduce, false, []string{"salad kit", "mixed greens"}},
+	// "Frozen" says which aisle before any food word does: "Frozen Peas" are bought, and
+	// kept, as frozen food, not produce (build 122).
+	{CategoryFrozen, false, []string{"frozen", "ice cream"}},
 
 	{CategoryPantry, false, []string{"stock concentrate", "stock", "broth", "bouillon", "cream sauce base", "cheese roux concentrate", "roux concentrate", "coconut milk", "coconut cream"}},
 	{CategorySpices, false, []string{"garlic powder", "onion powder", "chili powder", "chipotle powder", "curry powder", "chili flakes", "red pepper flakes", "ground ginger", "spice blend", "seasoning", "spice", "cumin", "paprika", "turmeric", "cinnamon", "oregano", "dried thyme", "dried rosemary", "dried oregano", "nutmeg", "coriander", "garam masala", "za'atar", "sumac", "cayenne", "bay leaf"}},
@@ -53,7 +56,6 @@ var categoryRules = []categoryRule{
 	{CategoryProduce, false, []string{"green beans", "snap peas", "sweet potato", "sweet potatoes", "grape tomatoes", "cherry tomatoes"}},
 	{CategoryPantry, false, []string{"rice", "pasta", "spaghetti", "penne", "rigatoni", "cavatappi", "linguine", "fettuccine", "couscous", "farro", "barley", "bulgur", "noodles", "ramen", "lo mein", "orzo", "quinoa", "flour", "cornstarch", "sugar", "oil", "beans", "chickpeas", "lentils", "crushed tomatoes", "diced tomatoes", "peanuts", "cashews", "almonds", "walnuts", "pecans", "pistachios", "pine nuts", "olives", "sesame seeds", "seeds", "nuts", "raisins", "dried cranberries", "oats", "cocoa", "chocolate", "baking powder", "baking soda", "yeast", "cornmeal", "vanilla"}},
 	{CategoryProduce, false, []string{"scallions", "green onion", "green onions", "onion", "onions", "shallot", "shallots", "garlic", "ginger", "lime", "limes", "lemon", "lemons", "orange", "oranges", "apple", "apples", "mango", "pineapple", "peach", "pear", "berries", "banana", "bananas", "grapes", "strawberries", "blueberries", "raspberries", "kiwi", "avocado", "cilantro", "parsley", "basil", "mint", "dill", "thyme", "rosemary", "chives", "sage", "tomato", "tomatoes", "potato", "potatoes", "zucchini", "squash", "carrot", "carrots", "cabbage", "coleslaw mix", "lettuce", "kale", "spinach", "arugula", "broccoli", "cauliflower", "brussels sprouts", "peas", "asparagus", "mushroom", "mushrooms", "bell pepper", "green pepper", "long green pepper", "jalapeno", "poblano", "chili pepper", "cucumber", "celery", "corn", "bok choy", "radish", "radishes", "beet", "beets", "eggplant", "fennel", "leek", "edamame", "tomatillo", "tomatillos", "parsnip", "parsnips"}},
-	{CategoryFrozen, false, []string{"frozen", "ice cream"}},
 	{CategoryBeverages, false, []string{"juice", "wine", "beer", "soda", "coffee", "tea"}},
 }
 

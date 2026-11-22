@@ -59,8 +59,15 @@ func (s *Service) saveForLaterIn(ctx context.Context, householdID string, p Plan
 		}
 		answered = got
 	}
-	// One plate of the meal being cooked, and every other meal still to come.
+	// One plate of the meal being cooked, and every meal after it in the week
+	// that's still to come. Only later meals: two meals sharing a lemon each
+	// said to save some for the other (build 122, Hark's review item 4), so
+	// the week's first meal keeps some back and the later one just uses it.
 	// A meal planned twice is cooked once at a time.
+	place := map[string]int{}
+	for i, m := range groceryMeals(p) {
+		place[m.RecipeID] = i
+	}
 	cooking := false
 	kept := make([]Entry, 0, len(p.Entries))
 	for _, e := range p.Entries {
@@ -70,7 +77,7 @@ func (s *Service) saveForLaterIn(ctx context.Context, householdID string, p Plan
 			}
 			continue
 		}
-		if _, done := answered[e.ID]; !done {
+		if _, done := answered[e.ID]; !done && place[e.RecipeID] > place[recipeID] {
 			kept = append(kept, e)
 		}
 	}

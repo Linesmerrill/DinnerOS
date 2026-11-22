@@ -61,6 +61,33 @@ struct RecipeHeaderEdgeTests {
         #expect(RecipeDetailHeader.barFade(pickerTop: -40, pinLine: 100) == 0)
     }
 
+    /// The fade under a pinned bar (the recipe page's picker, the cooking screen's panes) starts
+    /// at the content's inset and grows to a whole row as rows scroll under it, so the top row
+    /// never sits half under a hard edge (Hark's review, build 122 items 1c and 1e).
+    @Test func theFadeUnderAPinnedBarGrowsToARow() {
+        #expect(DSEdgeFade.height(scrolledUnder: -20) == DS.Size.edgeFade)
+        #expect(DSEdgeFade.height(scrolledUnder: 0) == DS.Size.edgeFade)
+        #expect(DSEdgeFade.height(scrolledUnder: 10) == DS.Size.edgeFade + 10)
+        #expect(DSEdgeFade.height(scrolledUnder: 500) == DS.Size.rowEdgeFade)
+        #expect(DS.Size.rowEdgeFade > DS.Size.edgeFade)
+    }
+
+    /// The picker's fade: its usual height while the section sits where it lays out under the
+    /// picker (a stack spacing below it), a row once the section has scrolled up under it.
+    @Test func thePickerFadeGrowsOnceRowsScrollUnderIt() {
+        let resting = 100 + 40 + DS.Space.xl
+        #expect(
+            RecipeDetailHeader.pickerFade(sectionTop: resting + 300, pinLine: 100, pickerHeight: 40) == DS.Size.edgeFade
+        )
+        #expect(RecipeDetailHeader.pickerFade(sectionTop: resting, pinLine: 100, pickerHeight: 40) == DS.Size.edgeFade)
+        #expect(
+            RecipeDetailHeader.pickerFade(sectionTop: resting - 10, pinLine: 100, pickerHeight: 40)
+                == DS.Size.edgeFade + 10)
+        #expect(
+            RecipeDetailHeader.pickerFade(sectionTop: resting - 400, pinLine: 100, pickerHeight: 40)
+                == DS.Size.rowEdgeFade)
+    }
+
     // MARK: Ratings only once it's been cooked
 
     private let thisWeek = ISOWeek("2026-W47")!

@@ -367,7 +367,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		TimeBand: TimeBandOf(r.CookMinutes(), bands), Calories: facts.Calories, ProteinGrams: facts.ProteinGrams,
 		ID: r.ID, HouseholdID: r.HouseholdID, Source: r.Source, SourceRecipeID: r.SourceRecipeID,
 		SourceAliases: orEmpty(r.SourceAliases), SourceURL: r.SourceURL,
-		Name: copytext.Title(r.Name), Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
+		Name: copytext.Title(r.Name), Headline: r.Headline, Description: copytext.Description(r.Description), ImageURL: r.ImageURL, IsAddon: r.IsAddon,
 		Servings: orEmpty(r.Servings), PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, CookMinutes: r.CookMinutes(), Difficulty: r.Difficulty,
 		Tags: orEmpty(r.Tags), Utensils: orEmpty(r.Utensils), Allergens: orEmpty(r.Allergens),
 		Nutrition:   make([]NutrientResponse, 0, len(r.Nutrition)),
@@ -394,12 +394,12 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		resp.Nutrition = append(resp.Nutrition, NewNutrientResponse(n))
 	}
 	for _, s := range r.Steps {
-		s.Text = CleanStepText(s.Text)
+		s.Text = ServedStepText(s.Text)
 		resp.Steps = append(resp.Steps, StepResponse(s))
 	}
 	for _, line := range r.Ingredients {
 		lr := RecipeIngredientResponse{
-			IngredientID: line.IngredientID, Name: line.Name, Category: line.Category, ImageURL: line.ImageURL, PantryStaple: line.PantryStaple,
+			IngredientID: line.IngredientID, Name: copytext.IngredientName(line.Name), Category: line.Category, ImageURL: line.ImageURL, PantryStaple: line.PantryStaple,
 			Note: line.Note, Amounts: make([]AmountResponse, 0, len(line.Amounts)),
 		}
 		for _, a := range line.Amounts {

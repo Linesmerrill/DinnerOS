@@ -492,6 +492,10 @@ func (s *Service) Generate(ctx context.Context, householdID, userID, week string
 	if err != nil {
 		return Proposal{}, err
 	}
+	// Only today and later: a day already gone is no day to suggest dinner
+	// for (build 122 review: Tuesday to Thursday offered on a Saturday).
+	today := s.now().In(data.location()).Format(time.DateOnly)
+	in.Preferences.PlanDays = upcomingPlanDays(in.Preferences.PlanDays, w, planning.Day(in.WeekStart), today)
 	req := autopilot.WeekRequest{Input: in, Attempt: 1}
 	pending := hasPrevious && previous.Status == StatusProposed
 	if hasPrevious {
@@ -530,6 +534,7 @@ func (s *Service) Generate(ctx context.Context, householdID, userID, week string
 	for _, m := range res.Messages {
 		p.Messages = append(p.Messages, Message{Code: m.Code, Text: m.Text})
 	}
+	p = withoutPastDays(p, w, planning.Day(in.WeekStart), today)
 	s.attachProposalPairings(ctx, &p, plan, "")
 	saved, err := s.store.SaveProposal(ctx, p)
 	if errors.Is(err, ErrConflict) {
@@ -564,7 +569,67 @@ func (s *Service) Proposal(ctx context.Context, householdID, week string) (Propo
 	if err != nil {
 		return Proposal{}, err
 	}
-	return s.withoutRemovedRecipes(ctx, p), nil
+	return s.withoutPastDays(ctx, w, s.withoutRemovedRecipes(ctx, p)), nil
+}
+
+// upcomingPlanDays narrows the days Autopilot may plan (every day when none
+// are set) to those dated today or later. With none left it answers a day
+// outside the week's dates, never an empty list, which the provider reads as
+// every day; withoutPastDays then drops whatever was planned.
+func upcomingPlanDays(planDays []autopilot.Day, w planning.Week, first planning.Day, today string) []autopilot.Day {
+	if len(planDays) == 0 {
+		planDays = autopilot.Days
+	}
+	out := make([]autopilot.Day, 0, len(planDays))
+	for _, d := range planDays {
+		if date := w.DateOn(first, planning.Day(d)); date == "" || date >= today {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		// The last day of the week: the closest there is, and dropped
+		// afterwards with the rest of a week that's over.
+		days := planning.DaysFrom(first)
+		out = append(out, autopilot.Day(days[len(days)-1]))
+	}
+	return out
+}
+
+// withoutPastDays leaves out a pending proposal's meals and open days dated
+// before today in the household's time zone. A proposal made on Monday kept
+// offering Tuesday to Thursday on Saturday (build 122 review). Decided
+// proposals are history and stay as they were.
+func withoutPastDays(p Proposal, w planning.Week, first planning.Day, today string) Proposal {
+	if p.Status != StatusProposed {
+		return p
+	}
+	past := func(day string) bool {
+		date := w.DateOn(first, planning.Day(day))
+		return date != "" && date < today
+	}
+	kept := slices.DeleteFunc(slices.Clone(p.Slots), func(sl Slot) bool { return past(sl.Day) })
+	if len(kept) < len(p.Slots) {
+		p.Slots, p.Planned = kept, len(kept)
+	}
+	p.Unfilled = slices.DeleteFunc(slices.Clone(p.Unfilled), func(u Unfilled) bool { return past(u.Day) })
+	return p
+}
+
+// withoutPastDays is withoutPastDays at the household's today, or p as it is
+// when the household can't be read.
+func (s *Service) withoutPastDays(ctx context.Context, w planning.Week, p Proposal) Proposal {
+	if p.Status != StatusProposed || s.households == nil {
+		return p
+	}
+	h, err := s.households.GetHousehold(ctx, p.HouseholdID)
+	if err != nil {
+		return p
+	}
+	loc, err := time.LoadLocation(h.TimeZone)
+	if err != nil {
+		loc = time.UTC
+	}
+	return withoutPastDays(p, w, planning.Day(h.FirstDay()), s.now().In(loc).Format(time.DateOnly))
 }
 
 // withoutRemovedRecipes leaves out a pending proposal's meals whose recipe
@@ -594,7 +659,7 @@ func (s *Service) withoutRemovedRecipes(ctx context.Context, p Proposal) Proposa
 func (s *Service) pending(ctx context.Context, householdID string, w planning.Week, version int64) (Proposal, error) {
 	p, err := s.store.GetProposal(ctx, householdID, w.String())
 	if err == nil {
-		p = s.withoutRemovedRecipes(ctx, p)
+		p = s.withoutPastDays(ctx, w, s.withoutRemovedRecipes(ctx, p))
 	}
 	switch {
 	case err != nil:

@@ -121,7 +121,7 @@ func TestChecklistReadsTheStepsLikeACook(t *testing.T) {
 		t.Errorf("lime wedges = %+v", it)
 	}
 	// What's left of the blend, measured: never "the rest" (decision 631).
-	if it := item(t, c, 3, "Southwest Spice Blend"); it.Prep != "" || it.AmountText != "2 ¾ tsp" {
+	if it := item(t, c, 3, "Southwest Spice Blend"); it.Prep != "from Have Ready" || it.AmountText != "2 ¾ tsp" {
 		t.Errorf("rest of the blend = %+v", it)
 	}
 	if it := item(t, c, 3, "Lime wedge"); it.AmountText != "1" {

@@ -18,7 +18,7 @@ final class AddRecipeQATests: XCTestCase {
         app.buttons["Add a Recipe"].tap()
         snap(app, "01 Add a Recipe, choices")
         app.buttons["AddChoice-write"].tap()
-        let nameField = app.textFields["Recipe name"]
+        let nameField = app.textFields["Recipe Name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         snap(app, "02 Review form, empty")
 

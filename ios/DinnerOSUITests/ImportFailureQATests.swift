@@ -48,7 +48,7 @@ final class ImportFailureQATests: XCTestCase {
 
         // Write Your Own: the blank form, with the link kept as where the recipe came from.
         writeOwn.tap()
-        XCTAssertTrue(app.textFields["Recipe name"].waitForExistence(timeout: 5), "Write Your Own has no form")
+        XCTAssertTrue(app.textFields["Recipe Name"].waitForExistence(timeout: 5), "Write Your Own has no form")
         let source = app.descendants(matching: .any)["DraftSourceLink"].firstMatch
         XCTAssertTrue(source.waitForExistence(timeout: 5), "The form doesn’t keep the link")
         XCTAssertEqual(source.value as? String, link)

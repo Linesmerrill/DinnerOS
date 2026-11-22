@@ -110,3 +110,29 @@ func TestSaveForLaterFindsTheMealsWeekAndCooksOneAtATime(t *testing.T) {
 		t.Errorf("onion = %q", onion.Text)
 	}
 }
+
+// Two meals sharing an ingredient never each say to save some for the other
+// (build 122, Hark's review item 4): the week's earlier meal keeps some back,
+// and the later one just uses its own share.
+func TestSaveForLaterOnlyKeepsForLaterMeals(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := settleService(t)
+	svc.events = nil
+	mustAdd(t, svc, hhAda, userAda, "2026-W47", NewEntry{RecipeID: recipeTacos, Day: "mon", Servings: 2})
+	mustAdd(t, svc, hhAda, userAda, "2026-W47", NewEntry{RecipeID: recipeSoup, Day: "thu", Servings: 2})
+
+	first, err := svc.SaveForLater(ctx, hhAda, recipeTacos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := notesByName(first)["Garlic"].Text; got != "Use 2 cloves. Save 3 cloves for Onion Soup on Thursday." {
+		t.Errorf("tacos garlic = %q", got)
+	}
+	later, err := svc.SaveForLater(ctx, hhAda, recipeSoup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(later) != 0 {
+		t.Errorf("soup notes = %+v, want none: Monday's tacos come first", later)
+	}
+}

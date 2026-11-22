@@ -219,6 +219,9 @@ func TestBoxNotesSettleForTheSizeBeingCooked(t *testing.T) {
 	}{
 		{"Cook, 5-7 minutes (7-10 minutes for 4 servings).", 2, 2, "Cook, 5-7 minutes."},
 		{"Cook, 5-7 minutes (7-10 minutes for 4 servings).", 4, 2, "Cook, 7-10 minutes."},
+		// A step saved back from the app reads its ranges with "to".
+		{"Cook, 5 to 7 minutes (7 to 10 minutes for 4 servings).", 4, 2, "Cook, 7 to 10 minutes."},
+		{"Cook, 5 to 7 minutes (7 to 10 minutes for 4 servings).", 2, 2, "Cook, 5 to 7 minutes."},
 		{"Reserve 2 cups pasta water (4 cups for 4 servings), then drain.", 6, 2, "Reserve 4 cups pasta water, then drain."},
 		{"Adjust rack to middle position (middle and top positions for 4 servings).", 2, 2, "Adjust rack to middle position."},
 		{"Adjust rack to middle position (middle and top positions for 4 servings).", 4, 2, "Adjust rack to middle position (middle and top positions for 4 servings)."},

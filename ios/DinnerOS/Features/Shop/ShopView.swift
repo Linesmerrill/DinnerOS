@@ -294,6 +294,8 @@ private struct ShopWeekList: View {
                 RequestStoreRow { isRequestingStore = true }
             }
         }
+        // Clear of the Open in Walmart bar's fade, so the last row comes out of it whole.
+        .contentMargins(.bottom, DS.Size.rowEdgeFade, for: .scrollContent)
         // A centered column on iPad, like the bar under it (build 121, review 2).
         .dsReadableForm()
         // Choosing in Walmart, for every line without a product or one line's re-choose.
@@ -730,45 +732,75 @@ private struct NeedsProductRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        let layout =
-            dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
-            : AnyLayout(HStackLayout(spacing: DS.Space.m))
-        layout {
-            VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                Text(line.name)
-                if !line.quantityText.isEmpty {
-                    Text(line.quantityText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        if dynamicTypeSize.isAccessibilitySize {
+            stacked
+        } else {
+            // Beside the text while every line of it fits on one line; otherwise the text takes
+            // the row's full width and the buttons go under it, so a note like "1 for this meal ·
+            // Also in Pesto Bow Tie Pasta" never wraps into a narrow column (Hark's review,
+            // build 122 round 4, iPhone SE).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: DS.Space.m) {
+                    details
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: DS.Space.s)
+                    buttons(pushesRemove: false)
                 }
-                if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
-                    Text(alsoCalled)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                if let mealNote {
-                    Text(mealNote)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                stacked
             }
-            .accessibilityElement(children: .combine)
-            if !dynamicTypeSize.isAccessibilitySize {
-                Spacer(minLength: DS.Space.s)
+        }
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            details
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: DS.Space.m) {
+                buttons(pushesRemove: true)
             }
-            if canChoose {
-                // Its own full width in every row: a long name never squeezes it smaller than
-                // the others (build 121).
-                Button("Choose Product", action: choose)
-                    .buttonStyle(.dsSecondary(.small))
-                    .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
-                    .layoutPriority(1)
-                    .accessibilityLabel("Choose Product for \(line.name)")
+        }
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
+            Text(line.name)
+            if !line.quantityText.isEmpty {
+                Text(line.quantityText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            if let remove {
-                ShopRemoveMenu(options: remove)
+            if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
+                Text(alsoCalled)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
+            if let mealNote {
+                Text(mealNote)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Choose Product, then the remove menu; `pushesRemove` puts the menu at the trailing edge
+    /// when the buttons have a line of their own.
+    @ViewBuilder
+    private func buttons(pushesRemove: Bool) -> some View {
+        if canChoose {
+            // Its own full width in every row: a long name never squeezes it smaller than
+            // the others (build 121).
+            Button("Choose Product", action: choose)
+                .buttonStyle(.dsSecondary(.small))
+                .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
+                .layoutPriority(1)
+                .accessibilityLabel("Choose Product for \(line.name)")
+        }
+        if let remove {
+            if pushesRemove {
+                Spacer(minLength: 0)
+            }
+            ShopRemoveMenu(options: remove)
         }
     }
 }
@@ -1714,7 +1746,9 @@ private struct ShopHandoffBar: View {
         .padding(DS.Space.l)
         .dsReadableWidth()
         .background(DS.Colors.groupedBackground)
-        .overlay(alignment: .top) { Divider() }
+        // A row passing under the bar fades away whole instead of being cut by a hard line;
+        // the list keeps the same height clear at its end (Hark's review, build 122 round 4).
+        .dsEdgeFade(.top, color: DS.Colors.groupedBackground, height: DS.Size.rowEdgeFade)
         .onChange(of: usuals?.prompt == nil) { _, closed in
             guard closed, sendsAfterUsuals else { return }
             sendsAfterUsuals = false

@@ -72,7 +72,7 @@ struct RecipeEditView: View {
                     }
                     if draft.canChangePhoto {
                         Section("Name") {
-                            TextField("Recipe name", text: $draft.name)
+                            TextField("Recipe Name", text: $draft.name)
                                 .font(.title3.weight(.semibold))
                                 .textInputAutocapitalization(.words)
                                 .submitLabel(.done)

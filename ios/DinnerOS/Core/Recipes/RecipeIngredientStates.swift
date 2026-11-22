@@ -63,10 +63,13 @@ nonisolated enum RecipeIngredientStates {
     ///
     /// They're matched by position — the server lists the recipe's ingredients in the same
     /// order — and only when the names agree, so instructions loaded for an older copy of the
-    /// recipe can't cross out the wrong line.
+    /// recipe can't cross out the wrong line. Case doesn't count: a recipe saved before the
+    /// server sent names in Title Case (build 122) still matches.
     static func make(lines: [IngredientLine], instructions: RecipeInstructions?) -> [RecipeIngredientState] {
         lines.enumerated().map { index, line in
-            guard let state = instructions?.ingredient(at: index), state.name == line.name else {
+            guard let state = instructions?.ingredient(at: index),
+                state.name.caseInsensitiveCompare(line.name) == .orderedSame
+            else {
                 return RecipeIngredientState(line: line, ingredientKey: nil, leftOut: nil, component: nil)
             }
             // The server's amount reads a packet as a kitchen measure ("2 Tbsp" of tomato paste),

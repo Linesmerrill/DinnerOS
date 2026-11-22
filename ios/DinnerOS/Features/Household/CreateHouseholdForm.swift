@@ -19,7 +19,7 @@ struct CreateHouseholdForm: View {
     var body: some View {
         Form {
             Section {
-                TextField("Household name", text: $name)
+                TextField("Household Name", text: $name)
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .focused($isNameFocused)

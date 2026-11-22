@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -84,6 +85,9 @@ func TestIntegrationPairings(t *testing.T) {
 		Store: NewMongoStore(db), Provider: baseline.New(baseline.Options{}),
 		Households: fakeHouseholds{hh: {ID: hh, DefaultServings: 2, TimeZone: "America/Denver"}},
 		Recipes:    recipeService, Ratings: ratingService, Events: eventService, Plans: planService,
+		// The day before the weeks planned here, so every one of their days
+		// is still to come: past days aren't suggested.
+		Now: func() time.Time { return beforeTestWeeks },
 	})
 	// The grocery list picks up accepted grocery pairings, as cmd/server wires it.
 	planService.WithExtras(svc)

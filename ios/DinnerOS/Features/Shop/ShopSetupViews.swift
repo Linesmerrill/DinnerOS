@@ -733,7 +733,7 @@ struct StoreFinderZIPRow: View {
 
     var body: some View {
         HStack(spacing: DS.Space.m) {
-            TextField("ZIP Code", text: $finder.zip, prompt: Text("ZIP code"))
+            TextField("ZIP Code", text: $finder.zip, prompt: Text("ZIP Code"))
                 .keyboardType(.numberPad)
                 .textContentType(.postalCode)
                 .submitLabel(.search)

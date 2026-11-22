@@ -160,6 +160,45 @@ enum QAShotCompare {
         return Double(count) / Double(total)
     }
 
+    /// Pairs of screens, by checklist name as published (`slug`), that are different screens
+    /// though under 1% of cells may change: on an iPad the search for one recipe and for another
+    /// show one result card each in a wide, mostly empty page; the Household tab of a household
+    /// without Plus differs from the main test household's only in its name, initials and Plus
+    /// line (build 122 round 4, Hark's item 15c). scripts/qa_shot_compare.py ALLOWED_PAIRS is the
+    /// same list.
+    static let allowedPairs: Set<Set<String>> = [
+        ["menu-search-typed-imported", "menu-search-typed-typed-by-hand"],
+        ["household-new-household", "household"],
+    ]
+
+    /// The published file name for a checklist name, as scripts/qa-screenshots.py makes it:
+    /// "Menu › search typed, imported (light)" -> "menu-search-typed-imported".
+    static func slug(_ name: String) -> String {
+        var screen = name
+        for mode in [" (light)", " (dark)"] where screen.hasSuffix(mode) {
+            screen = String(screen.dropLast(mode.count))
+        }
+        var out = ""
+        var pendingDash = false
+        for scalar in screen.lowercased().unicodeScalars {
+            if ("a"..."z").contains(scalar) || ("0"..."9").contains(scalar) {
+                if pendingDash, !out.isEmpty { out.append("-") }
+                out.unicodeScalars.append(scalar)
+                pendingDash = false
+            } else {
+                pendingDash = true
+            }
+        }
+        return String(out.prefix(80))
+    }
+
+    /// Whether two checklist names are an allowed look-alike pair.
+    static func isAllowedPair(_ first: String, _ second: String) -> Bool {
+        let a = slug(first)
+        let b = slug(second)
+        return a != b && allowedPairs.contains([a, b])
+    }
+
     static func isSameScreen(_ a: QAShotImage, _ b: QAShotImage) -> Bool {
         !surelyDifferent(a, b, share: sameScreen) && changedShare(a, b, enough: sameScreen) < sameScreen
     }
@@ -305,7 +344,8 @@ extension XCTestCase {
     @MainActor
     func keep(_ shot: QAShot, _ name: String, unique: Bool = true) {
         if unique, publishesScreenshots, let image = shot.image {
-            for earlier in QAShots.kept where QAShotCompare.isSameScreen(image, earlier.image) {
+            for earlier in QAShots.kept
+            where !QAShotCompare.isAllowedPair(name, earlier.name) && QAShotCompare.isSameScreen(image, earlier.image) {
                 let share = QAShotCompare.changedShare(image, earlier.image)
                 XCTFail(
                     "QA-DUPLICATE: “\(name)” is the same screen as “\(earlier.name)” "
@@ -443,6 +483,24 @@ extension XCTestCase {
                 app.swipeUp(velocity: .slow)
             }
             swipes += 1
+        }
+    }
+
+    /// Waits for a page that was just pushed to finish arriving: its back button can be tapped
+    /// and stays put across two looks 0.3 seconds apart. A shot taken mid push caught the round
+    /// back button still turning into its final shape, a rectangle inside the circle (build 122
+    /// round 4, Hark's item 7). Gives up after about 3 seconds; the shot is taken either way.
+    @MainActor
+    func waitForPushToSettle(_ app: XCUIApplication) {
+        let back = backButton(app)
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline, !(back.exists && back.isHittable) { usleep(100_000) }
+        var last = back.exists ? back.frame : .zero
+        while Date() < deadline {
+            usleep(300_000)
+            let now = back.exists ? back.frame : .zero
+            if now == last, !now.isEmpty { return }
+            last = now
         }
     }
 

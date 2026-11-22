@@ -43,7 +43,7 @@ final class ScreensQATests: XCTestCase {
         shot(app, "First run › Join with a Code")
         back(app)
         app.staticTexts["Create a Household"].tap()
-        let name = app.textFields["Household name"]
+        let name = app.textFields["Household Name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         shot(app, "First run › New Household")
         name.tap()
@@ -62,6 +62,7 @@ final class ScreensQATests: XCTestCase {
         if first.waitForExistence(timeout: 5) {
             first.tap()
             sleep(3)
+            waitForPushToSettle(app)
             shot(app, "Recipe page › starter (Shared Recipes)")
             back(app)
         } else {
@@ -81,8 +82,10 @@ final class ScreensQATests: XCTestCase {
         // The paywall: this household has no Plus.
         app.buttons["Household"].firstMatch.tap()
         sleep(2)
-        // No shot: it's the Household tab the sweep keeps, with another name on it (Hark's
-        // review, build 122 item 13a: under 1% of the screen differs).
+        // A household without Plus: "No Plus Yet" and the way to Plus. On an iPad it differs from
+        // the sweep's Household tab in under 1% of the screen, so the pair is allowed
+        // (QAShotCompare.allowedPairs; build 122 round 4, Hark's item 15a).
+        shot(app, "Household › new household")
         let plus = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Plus'")).firstMatch
         if plus.waitForExistence(timeout: 5) {
             plus.tap()
@@ -167,6 +170,7 @@ final class ScreensQATests: XCTestCase {
             }
             card.tap()
             XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn’t open")
+            waitForPushToSettle(app)
             shot(app, "Recipe page › \(kind)")
             // Each tab, picked by its accessibility identifier and checked selected (build 121: a
             // tap by label landed on Customize, Description or a rating tag), then scrolled so its
@@ -369,8 +373,8 @@ final class ScreensQATests: XCTestCase {
         sleep(1)
     }
 
-    /// Pantry › Add Item, with the keyboard up and the Amount field focused (Hark's review, build
-    /// 121 item 3: the keyboard mustn't cover it). The + button is "Add Item"; "Add an Item" is
+    /// Pantry › Add Item as it opens, with the keyboard up on the Name field (Hark's review, build
+    /// 121 item 3: the keyboard mustn't cover it; build 122 round 4: Name comes first). The + button is "Add Item"; "Add an Item" is
     /// the empty pantry's button (build 122 looked only for that, and the shot went missing).
     @MainActor
     private func pantryAddAnItem(_ app: XCUIApplication) {
@@ -385,29 +389,24 @@ final class ScreensQATests: XCTestCase {
             return
         }
         button.tap()
-        let amount = app.textFields["pantry.amount"].firstMatch
-        guard amount.waitForExistence(timeout: 5) else {
-            problems.append("Pantry › Add an Item: no Amount field")
+        // The sheet opens on the name, with the keyboard up (Hark's review, build 122 round 4).
+        let name = app.textFields["pantry.name"].firstMatch
+        guard name.waitForExistence(timeout: 5) else {
+            problems.append("Pantry › Add an Item: no Name field")
             back(app)
             return
         }
-        // The sheet starts on the name field: move to Amount.
-        amount.tap()
         let keyboard = app.keyboards.firstMatch
-        let focused = { (amount.value(forKey: "hasKeyboardFocus") as? Bool) == true }
-        for _ in 0..<3 where !(keyboard.exists && focused()) {
-            sleep(1)
-            if !focused() { amount.tap() }
-        }
-        guard keyboard.waitForExistence(timeout: 3), focused() else {
-            snap(app, "Pantry › Add an Item: Amount not focused (\(mode))", unique: false)
-            problems.append("Pantry › Add an Item: the keyboard isn’t up on Amount")
+        let focused = { (name.value(forKey: "hasKeyboardFocus") as? Bool) == true }
+        guard keyboard.waitForExistence(timeout: 5), focused() else {
+            snap(app, "Pantry › Add an Item: Name not focused (\(mode))", unique: false)
+            problems.append("Pantry › Add an Item: the sheet didn’t open with the keyboard up on Name")
             back(app)
             return
         }
         waitStill(app)
-        if amount.frame.maxY > keyboard.frame.minY {
-            problems.append("Pantry › Add an Item: the keyboard covers the Amount field")
+        if name.frame.maxY > keyboard.frame.minY {
+            problems.append("Pantry › Add an Item: the keyboard covers the Name field")
         }
         shot(app, "Pantry › Add an Item")
         back(app)

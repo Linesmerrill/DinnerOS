@@ -96,7 +96,7 @@ func TestHaveReadyShowsAllTheButter(t *testing.T) {
 		t.Fatalf("Have Ready butter rows = %+v, want one", rows)
 	}
 	b := rows[0]
-	if b.AmountText != "3 Tbsp" || b.Prep != "for steps 1, 2 and 3" ||
+	if b.AmountText != "3 Tbsp" || b.Prep != "for steps 1 and 2" ||
 		strings.Join(b.Parts, "|") != "1 Tbsp for step 1, melted|2 Tbsp for step 2, softened" {
 		t.Errorf("butter = %+v", b)
 	}

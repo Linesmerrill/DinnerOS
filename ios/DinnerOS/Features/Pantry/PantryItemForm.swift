@@ -96,6 +96,7 @@ struct PantryItemFields: View {
         Section {
             TextField("Note", text: $draft.note, prompt: Text("Optional"), axis: .vertical)
                 .lineLimit(1...4)
+                .accessibilityIdentifier("pantry.note")
             if let error = draft.noteError {
                 FormErrorLabel(message: error)
             }
@@ -218,8 +219,12 @@ struct PantryEditSheet: View {
                     }
                 }
             }
-            .keyboardDismissal()
+            .keyboardDismissal(showsDone: !PantrySheetLayout.isPad)
             .dsReadableForm()
+            .dsKeyboardBar(color: DS.Colors.groupedBackground)
+            // Cancel and Save stay put as the long form scrolls (on iPhone Duo's cover screen the
+            // bar slid away with them), and rows fade out under it (build 122 round 4).
+            .dsSolidBarFade(color: DS.Colors.groupedBackground)
             .task {
                 if pantry.settings == nil {
                     _ = try? await pantry.loadSettings()
@@ -338,6 +343,12 @@ struct PantryAlsoCountsAsSection: View {
     }
 }
 
+/// How the pantry's sheets fit the device.
+enum PantrySheetLayout {
+    /// On iPad the keyboard has its own hide key, and a Done above it floated outside the sheet.
+    @MainActor static var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+}
+
 /// Adds an ingredient, suggesting catalog matches while the name is typed.
 struct PantryAddSheet: View {
     @Environment(PantryStore.self) private var pantry
@@ -353,6 +364,9 @@ struct PantryAddSheet: View {
     @State private var errorMessage: String?
     @FocusState private var isNameFocused: Bool
     @FocusState private var isAmountFocused: Bool
+
+    /// How long the sheet takes to come up before the name takes the keyboard.
+    private static let focusDelay: Duration = .milliseconds(450)
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -408,7 +422,9 @@ struct PantryAddSheet: View {
                     draft: $draft, name: nameIsSettled ? trimmedName : "", category: selectedIngredient?.category,
                     amountFocus: $isAmountFocused)
             }
-            .keyboardDismissal()
+            // The Note and its help text can scroll clear of the fade above the keyboard.
+            .contentMargins(.bottom, DS.Size.formEndRoom, for: .scrollContent)
+            .keyboardDismissal(showsDone: !PantrySheetLayout.isPad)
             .dsReadableForm()
             // Rows fade out under the sheet's bar instead of being cut by it, and the keyboard's
             // Done sits on a strip of its own, never on the field being typed in (build 122).
@@ -427,9 +443,13 @@ struct PantryAddSheet: View {
             }
             .disabled(isSaving)
             .interactiveDismissDisabled(isSaving)
-            // No keyboard on open: it covered the Amount field on a small iPhone and shrank the
-            // iPad sheet until it cut the Storage picker in half (build 121). Tapping the name
-            // brings it up.
+            // The name comes first, so the sheet opens on it with the keyboard up (Hark's
+            // review, build 122 round 4).
+            .task {
+                // Once the sheet is up, so the keyboard comes up with its Done row.
+                try? await Task.sleep(for: Self.focusDelay)
+                isNameFocused = true
+            }
             .task(id: name) {
                 let model =
                     suggestions

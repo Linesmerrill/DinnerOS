@@ -19,6 +19,7 @@ struct AutopilotStoreTests {
     }
 
     private let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .mon)
+    private static let sundayBeforeWeek = Date(timeIntervalSince1970: 1_789_300_800)  // 2026-09-13 12:00 UTC
 
     private func makeHarness(server: FakeAutopilotServer = FakeAutopilotServer()) async throws -> Harness {
         let transport = StubTransport { request in server.handle(request) }
@@ -28,6 +29,9 @@ struct AutopilotStoreTests {
         await session.restore()
         let prompts = InMemoryAutopilotPrompts()
         let store = AutopilotStore(session: session, api: AutopilotAPI(client: client), prompts: prompts)
+        // The Sunday before the fixtures' week, so none of its days has gone by yet.
+        store.now = { Self.sundayBeforeWeek }
+        store.timeZone = { .gmt }
         let recorder = PlanRecorder()
         store.planDidChange = { recorder.plans.append($0) }
         return Harness(store: store, server: server, prompts: prompts, plans: recorder)
@@ -311,6 +315,35 @@ struct AutopilotStoreTests {
         #expect(harness.plans.plans.first?.entries.first?.isFromAutopilot == true)
         #expect(store.proposal?.status == .accepted)
         #expect(store.pendingProposal == nil)
+    }
+
+    /// A day that's gone by is never offered, even when a proposal loaded earlier in the week
+    /// (or an older server) still has it, and accepting leaves it out (build 122 review: Tuesday
+    /// to Thursday suggested on a Saturday).
+    @Test func pastDaysAreNeitherShownNorAccepted() async throws {
+        let harness = try await generated()
+        let store = harness.store
+        #expect(store.pendingProposal?.slots.map(\.id) == ["mon", "wed", "sun"])
+
+        // Thursday, September 17: Monday, Tuesday and Wednesday are gone.
+        store.now = { Self.sundayBeforeWeek.addingTimeInterval(4 * 86_400) }
+        let shown = try #require(store.pendingProposal)
+        #expect(shown.slots.map(\.id) == ["sun"])
+        #expect(shown.plannedMeals == 1)
+        #expect(store.includedSlots.map(\.id) == ["sun"])
+
+        _ = try await store.accept()
+        let body = try #require(
+            harness.server.body(of: "POST /households/household-1/autopilot/weeks/2026-W38/proposal/accept"))
+        #expect(body["excludeSlotIds"] as? [String] == ["mon", "wed"])
+    }
+
+    @Test func dayKeyIsTheDateInTheHouseholdsTimeZone() throws {
+        // 2026-09-14 03:00 UTC is still Sunday evening in Denver.
+        let date = Date(timeIntervalSince1970: 1_789_354_800)
+        #expect(AutopilotProposal.dayKey(date, in: .gmt) == "2026-09-14")
+        let denver = try #require(TimeZone(identifier: "America/Denver"))
+        #expect(AutopilotProposal.dayKey(date, in: denver) == "2026-09-13")
     }
 
     /// A slot's pairings start checked when the proposal includes them (the household's

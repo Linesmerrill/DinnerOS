@@ -48,7 +48,7 @@ struct MenuSectionView: View {
                     .padding(.horizontal, DS.Space.l)
                 }
                 .scrollIndicators(.hidden)
-                .carouselInSafeArea()
+                .carouselInSafeArea(fadesEdges: true)
                 .scrollTargetBehavior(.viewAligned)
             }
         }

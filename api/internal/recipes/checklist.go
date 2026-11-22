@@ -129,6 +129,10 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 		byIndex[ci.Index] = ci
 	}
 	used := map[string]bool{}
+	// The first step that measured each ingredient out, for a later mention
+	// with no amount: the same pasta, now cooked (build 122, Hark's review
+	// item 5).
+	measuredIn := map[int]int{}
 	var groups []CookStepGroup
 	for _, step := range steps {
 		var items []CookStepItem
@@ -254,6 +258,19 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			}
 			clause = ""
 		}
+		// "Toss the hot pasta" after "Boil 8 oz pasta": the pasta from step
+		// 1, not more of it to measure out.
+		for i, it := range items {
+			if from, ok := measuredIn[it.IngredientIndex]; ok && it.AmountText == "" && !it.LeftOut &&
+				!strings.Contains(it.Prep, "to taste") {
+				items[i].Prep = strings.TrimPrefix(it.Prep+", from step "+fmt.Sprint(from), ", ")
+			}
+		}
+		for _, it := range items {
+			if _, ok := measuredIn[it.IngredientIndex]; !ok && it.AmountText != "" && it.IngredientIndex != NoIngredient {
+				measuredIn[it.IngredientIndex] = step.Index
+			}
+		}
 		if len(items) > 0 {
 			groups = append(groups, CookStepGroup{Index: step.Index, Items: items})
 		}
@@ -267,7 +284,9 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 	// cut up or soften, cream cheese to soften. One row each, with the whole
 	// recipe's amount, and a line per step when several steps share it ("3
 	// Tbsp Butter: 1 Tbsp for step 1, melted; 2 Tbsp for step 2, softened").
-	// They stay in their own steps too, to check off when they go in.
+	// Each is listed once: a row here isn't repeated in its steps, where
+	// its lines are checked off as it goes in (build 122, Hark's review
+	// item 5).
 	stepText := map[int]string{}
 	for _, st := range steps {
 		stepText[st.Index] = strings.ToLower(st.Text)
@@ -299,6 +318,12 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 	}
 	for _, idx := range order {
 		us := uses[idx]
+		// "Spread with softened butter" after "bring 2 Tbsp butter to room
+		// temperature" is the same butter: only the steps that measure it
+		// out count, so the row says "for steps 1 and 2", not "1, 2 and 5".
+		if slices.ContainsFunc(us, func(u use) bool { return u.amount != "" }) {
+			us = slices.DeleteFunc(slices.Clone(us), func(u use) bool { return u.amount == "" })
+		}
 		later, allMelted := false, true
 		var stepNums []int
 		for _, u := range us {
@@ -343,6 +368,27 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 		}
 		ahead[idx] = row
 	}
+	// Butter to cut up or soften ahead is listed once, in Have Ready with a
+	// line per step, not again in its steps. A blend mixed first keeps its
+	// rows in the steps, each step's share of the mix (decision 631), and
+	// says it's the mix.
+	kept := groups[:0]
+	for _, g := range groups {
+		g.Items = slices.DeleteFunc(g.Items, func(it CookStepItem) bool {
+			_, isAhead := ahead[it.IngredientIndex]
+			return it.IngredientIndex != NoIngredient && isAhead
+		})
+		for i, it := range g.Items {
+			if ci, ok := byIndex[it.IngredientIndex]; ok && len(ci.Components) > 0 && !it.LeftOut &&
+				it.IngredientIndex != NoIngredient {
+				g.Items[i].Prep = strings.TrimPrefix(it.Prep+", from Have Ready", ", ")
+			}
+		}
+		if len(g.Items) > 0 {
+			kept = append(kept, g)
+		}
+	}
+	groups = kept
 	ready := make([]CookStepItem, 0, len(all))
 	for _, ci := range all {
 		row := readyItem(ci)

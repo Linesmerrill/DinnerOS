@@ -264,7 +264,7 @@ struct InviteCodeSetupSection: View {
                     plus.clearSavedInvite()
                 }
             } else {
-                TextField("Invite code", text: $code)
+                TextField("Invite Code", text: $code)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
                     .submitLabel(.done)

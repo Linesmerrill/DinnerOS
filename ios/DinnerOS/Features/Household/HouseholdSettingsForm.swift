@@ -52,7 +52,7 @@ struct HouseholdSettingsSections: View {
             if settings.canEdit {
                 LabeledContent("Name") {
                     TextField(
-                        "Household name", text: binding(\.name, delay: HouseholdSettingsAutosave.typingDelay)
+                        "Household Name", text: binding(\.name, delay: HouseholdSettingsAutosave.typingDelay)
                     )
                     .multilineTextAlignment(.trailing)
                     .textInputAutocapitalization(.words)

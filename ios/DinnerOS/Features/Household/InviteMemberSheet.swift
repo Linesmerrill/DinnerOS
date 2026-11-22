@@ -68,7 +68,7 @@ struct InviteMemberSheet: View {
     private var form: some View {
         Form {
             Section {
-                TextField("Email address", text: $email)
+                TextField("Email Address", text: $email)
                     .keyboardType(.emailAddress)
                     .textContentType(.emailAddress)
                     .textInputAutocapitalization(.never)

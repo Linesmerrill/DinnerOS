@@ -53,6 +53,8 @@ struct CatalogRecipeDetailView: View {
                 }
             }
             .padding(DS.Space.l)
+            // Clear of the Add to Library bar's fade, so the last step comes out of it whole.
+            .padding(.bottom, DS.Size.rowEdgeFade)
             .dsReadableWidth()
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -63,7 +65,10 @@ struct CatalogRecipeDetailView: View {
         // Add to Library stays above the tab bar, in the readable column on iPad.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if recipe != nil, isInLibrary || canAdd {
-                DSBottomBar { addButton }
+                // Rows and headings fade into the bar instead of being cut by a hard line
+                // (Hark's review, build 122 round 4); the page keeps that height clear at its end.
+                DSBottomBar(showsDivider: false) { addButton }
+                    .dsEdgeFade(.top, height: DS.Size.rowEdgeFade)
             }
         }
         // The small title only once the large one has scrolled off: one title at a time.

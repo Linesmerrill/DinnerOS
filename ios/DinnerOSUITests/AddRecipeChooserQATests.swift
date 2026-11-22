@@ -45,7 +45,7 @@ final class AddRecipeChooserQATests: XCTestCase {
 
         // Write Your Own: the blank form.
         app.buttons["AddChoice-write"].tap()
-        XCTAssertTrue(app.textFields["Recipe name"].waitForExistence(timeout: 5), "Write Your Own has no form")
+        XCTAssertTrue(app.textFields["Recipe Name"].waitForExistence(timeout: 5), "Write Your Own has no form")
         XCTAssertTrue(app.navigationBars["Write Your Own"].exists)
         snap(app, "Add a Recipe, Write Your Own (\(mode))")
         back(app, from: "Write Your Own")

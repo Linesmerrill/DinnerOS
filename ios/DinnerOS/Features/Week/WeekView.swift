@@ -71,6 +71,23 @@ struct WeekView: View {
     }
 
     private func planList(_ plan: Plan) -> some View {
+        ScrollViewReader { proxy in
+            dayList(plan)
+                // Opens on today, with the meals still waiting for a day just above it, not on
+                // days already gone: on a Saturday the week's meals were below the fold under
+                // five empty days (build 122 review 4). On the week's first day the top of the
+                // list already is today.
+                .task(id: plans.week) {
+                    guard let today = plans.today, today != plans.weekStartsOn else { return }
+                    await Task.yield()
+                    proxy.scrollTo(plan.entries(on: nil).isEmpty ? today.rawValue : Self.unscheduledID, anchor: .top)
+                }
+        }
+    }
+
+    private static let unscheduledID = "unscheduled"
+
+    private func dayList(_ plan: Plan) -> some View {
         List {
             if let refreshError = plans.refreshError {
                 FormErrorLabel(message: refreshError)
@@ -86,42 +103,60 @@ struct WeekView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
-                    Section {
-                        let entries = plan.entries(on: day)
-                        if entries.isEmpty {
-                            Text("Nothing planned")
-                                .foregroundStyle(.tertiary)
-                        }
-                        ForEach(entries) { entry in
-                            row(entry)
-                        }
-                    } header: {
-                        DayHeader(
-                            title: day.title(in: plans.week, weekStartsOn: plans.weekStartsOn),
-                            isToday: day == plans.today)
-                    }
-                }
-                let unscheduled = plan.entries(on: nil)
-                if !unscheduled.isEmpty {
-                    Section {
-                        ForEach(unscheduled) { entry in
-                            row(entry)
-                        }
-                    } header: {
-                        Text("Unscheduled")
-                    } footer: {
-                        Text("Planned for this week without a day.")
-                    }
-                }
+                let days = PlanDay.week(startingOn: plans.weekStartsOn)
+                // Meals without a day sit just above today (the week's first day when it isn't
+                // this week), so they open in view instead of under every day of the week.
+                let split = plans.today.flatMap { days.firstIndex(of: $0) } ?? 0
+                ForEach(days[..<split]) { day in daySection(day, in: plan) }
+                unscheduledSection(plan)
+                ForEach(days[split...]) { day in daySection(day, in: plan) }
             }
         }
+        // A centered column on an iPad, like Pantry and Shop, not rows the width of the screen.
+        .dsReadableForm()
         .refreshable {
             async let week: Void = plans.reload()
             await autopilot.reloadWeek()
             await week
         }
         .sensoryFeedback(.success, trigger: events.outcomes)
+    }
+
+    private func daySection(_ day: PlanDay, in plan: Plan) -> some View {
+        Section {
+            let entries = plan.entries(on: day)
+            if entries.isEmpty {
+                Text("Nothing planned")
+                    .foregroundStyle(DS.Colors.quietText)
+            }
+            ForEach(entries) { entry in
+                row(entry)
+            }
+        } header: {
+            DayHeader(
+                title: day.title(in: plans.week, weekStartsOn: plans.weekStartsOn),
+                isToday: day == plans.today
+            )
+            // On the header, so today opens with its date showing above its meals.
+            .id(day.rawValue)
+        }
+    }
+
+    @ViewBuilder
+    private func unscheduledSection(_ plan: Plan) -> some View {
+        let unscheduled = plan.entries(on: nil)
+        if !unscheduled.isEmpty {
+            Section {
+                ForEach(unscheduled) { entry in
+                    row(entry)
+                }
+            } header: {
+                Text("Pick a Day")
+                    .id(Self.unscheduledID)
+            } footer: {
+                Text("Planned for this week without a day.")
+            }
+        }
     }
 
     /// The household said it's away this week, so an empty week is the plan.

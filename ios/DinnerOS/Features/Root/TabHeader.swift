@@ -30,9 +30,25 @@ extension View {
     /// the screen's edge draws into the safe area beside it, so on the iPhone Duo's cover screen
     /// the week strip, carousels and chips ran under the status icons and side buttons (build
     /// 121). Clips only sideways: shadows and badges above and below still show.
-    func carouselInSafeArea() -> some View {
+    ///
+    /// With `fadesEdges`, a card running past the row's inset fades out across that inset at
+    /// each side instead of being cut by the screen's edge (build 122 review 4). At rest the
+    /// first and last cards sit inside the inset, so the fade only ever touches a card that's
+    /// partly scrolled out.
+    func carouselInSafeArea(fadesEdges: Bool = false) -> some View {
         mask {
-            Rectangle().padding(.vertical, -DS.Space.huge)
+            HStack(spacing: 0) {
+                if fadesEdges {
+                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: DS.Space.l)
+                }
+                Rectangle()
+                if fadesEdges {
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: DS.Space.l)
+                }
+            }
+            .padding(.vertical, -DS.Space.huge)
         }
     }
 }

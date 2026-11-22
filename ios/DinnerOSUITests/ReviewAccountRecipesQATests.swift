@@ -59,7 +59,7 @@ final class ReviewAccountRecipesQATests: XCTestCase {
             app.buttons["Next"].firstMatch.tap()
 
             // The review: name, servings, times and cuisine as read, then the photo.
-            let nameField = app.textFields["Recipe name"].firstMatch
+            let nameField = app.textFields["Recipe Name"].firstMatch
             XCTAssertTrue(nameField.waitForExistence(timeout: 20), "\(name): the review didn’t open")
             XCTAssertEqual(nameField.value as? String, name)
             let cuisineRow = app.buttons["RecipeCuisine"].firstMatch

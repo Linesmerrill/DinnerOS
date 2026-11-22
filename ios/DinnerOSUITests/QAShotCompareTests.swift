@@ -119,4 +119,23 @@ final class QAShotCompareTests: XCTestCase {
         XCTAssertEqual(QAShotCompare.mask(width: 466, height: 678, pad: false).rail?.x, 382)
         XCTAssertEqual(QAShotCompare.mask(width: 440, height: 956, pad: false).bottom, 34)
     }
+
+    func testNamesBecomeThePublishedFileNames() {
+        XCTAssertEqual(QAShotCompare.slug("Menu › search typed, imported (light)"), "menu-search-typed-imported")
+        XCTAssertEqual(QAShotCompare.slug("Household › new household"), "household-new-household")
+        XCTAssertEqual(QAShotCompare.slug("Start Cooking › Steps"), "start-cooking-steps")
+    }
+
+    /// Two searches on an iPad, one result card each, differ in under 1% of cells but are
+    /// different screens (Hark's review, build 122 round 4 item 15c): the pair is allowed, both
+    /// ways round, and only that pair.
+    func testAnAllowedPairIsNotADuplicate() {
+        let imported = "Menu › search typed, imported (dark)"
+        let byHand = "Menu › search typed, typed by hand (dark)"
+        XCTAssertTrue(QAShotCompare.isAllowedPair(imported, byHand))
+        XCTAssertTrue(QAShotCompare.isAllowedPair(byHand, imported))
+        XCTAssertTrue(QAShotCompare.isAllowedPair("Household", "Household › new household"))
+        XCTAssertFalse(QAShotCompare.isAllowedPair(imported, "Menu"))
+        XCTAssertFalse(QAShotCompare.isAllowedPair(imported, imported))
+    }
 }

@@ -327,7 +327,7 @@ struct RecipeDraftReviewForm: View {
             }
             RecipePhotoSection(model: photo, imageURL: $store.draft.imageURL)
             Section("Recipe") {
-                TextField("Recipe name", text: $store.draft.name)
+                TextField("Recipe Name", text: $store.draft.name)
                     .font(.title3.weight(.semibold))
                     .textInputAutocapitalization(.words)
                     .submitLabel(store.draft.fromURL ? .done : .next)

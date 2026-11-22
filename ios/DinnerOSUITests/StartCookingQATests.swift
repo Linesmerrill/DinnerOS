@@ -68,6 +68,14 @@ final class StartCookingQATests: XCTestCase {
                 ? app.segmentedControls.buttons["Ingredients"].firstMatch : app.buttons["Ingredients"].firstMatch
             ingredients.tap()
             sleep(1)
+        } else {
+            // An iPad: the steps column beside the ingredients, scrolled to the later steps, so
+            // every config has the steps (build 122 round 4, Hark's item 15b: the iPads had
+            // none; the top of this screen is ScreensQATests' "Cooking › imported").
+            scrollCooking(app, column: 0.75)
+            XCTAssertTrue(openedCooking(recipe, in: app), "Scrolling the steps left \(recipe)’s cooking screen")
+            snap(app, "Start Cooking › Steps")
+            scrollBackCooking(app, column: 0.75)
         }
 
         // Partway down the cooking screen, when there's more of it than fits.
@@ -91,14 +99,27 @@ final class StartCookingQATests: XCTestCase {
         XCTAssertTrue(start.waitForExistence(timeout: 10), "Done didn’t go back to the recipe")
     }
 
-    /// Scrolls the cooking screen up by about half a screen, dragging in its left part: the
-    /// ingredients on an iPad, the whole page on a phone. A drag on the screen rather than in a
-    /// scroll view found by query: the recipe page's scroll view is still there under it.
+    /// Scrolls the cooking screen up by about half a screen, dragging at `column` across it: the
+    /// left part is the ingredients on an iPad and the whole page on a phone, the right part an
+    /// iPad's steps. A drag on the screen rather than in a scroll view found by query: the recipe
+    /// page's scroll view is still there under it.
     @MainActor
-    private func scrollCooking(_ app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.8))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3))
+    private func scrollCooking(_ app: XCUIApplication, column: CGFloat = 0.3) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.8))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.3))
         start.press(forDuration: 0.05, thenDragTo: end)
+        sleep(1)
+    }
+
+    /// Scrolls a column of the cooking screen back to its top, with drags that start mid-screen
+    /// (a fast downward swipe on iPadOS 26 can make the app a window).
+    @MainActor
+    private func scrollBackCooking(_ app: XCUIApplication, column: CGFloat) {
+        for _ in 0..<2 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.3))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.8))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
         sleep(1)
     }
 

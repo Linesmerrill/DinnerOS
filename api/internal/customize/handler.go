@@ -13,6 +13,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
@@ -117,13 +118,13 @@ func newCustomizationsResponse(o Options) CustomizationsResponse {
 	resp := CustomizationsResponse{RecipeID: o.RecipeID, Servings: o.Servings, Groups: make([]GroupResponse, 0, len(o.Groups))}
 	for _, g := range o.Groups {
 		gr := GroupResponse{
-			IngredientKey: g.Line.Key, IngredientName: g.Line.Name, AmountText: AmountText(g.Line.Quantity, g.Line.Unit),
+			IngredientKey: g.Line.Key, IngredientName: copytext.IngredientName(g.Line.Name), AmountText: AmountText(g.Line.Quantity, g.Line.Unit),
 			Quantity: g.Line.Quantity.String(), Unit: g.Line.Unit, ImageURL: optional(g.ImageURL),
 			SelectedChoiceID: optional(g.Selected), Choices: make([]ChoiceResponse, 0, len(g.Choices)),
 		}
 		for _, c := range g.Choices {
 			gr.Choices = append(gr.Choices, ChoiceResponse{
-				ID: c.ID, Label: c.Label, IngredientName: c.IngredientName, AmountText: AmountText(c.Quantity, c.Unit),
+				ID: c.ID, Label: c.Label, IngredientName: copytext.IngredientName(c.IngredientName), AmountText: AmountText(c.Quantity, c.Unit),
 				Quantity: c.Quantity.String(), Unit: c.Unit, ImageURL: optional(c.ImageURL), Kind: c.Kind, Badge: optional(c.Badge),
 			})
 		}

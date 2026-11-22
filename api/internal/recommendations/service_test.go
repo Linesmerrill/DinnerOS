@@ -369,6 +369,8 @@ func TestWeekConstraints(t *testing.T) {
 
 	t.Run("busy week uses effective cook time", func(t *testing.T) {
 		env := newTestEnv(t)
+		// Monday morning, so all five weeknights are still to come.
+		env.svc.now = func() time.Time { return beforeTestWeeks.AddDate(0, 0, 1) }
 		if _, err := env.svc.SaveWeekContext(ctx, hhA, userAda, testWeek, WeekContext{MaxMinutes: 20, MealsPerWeek: 5}); err != nil {
 			t.Fatal(err)
 		}

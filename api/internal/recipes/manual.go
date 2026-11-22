@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 )
 
 // Manual entry limits. They are generous for a real recipe and small enough
@@ -182,7 +183,7 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 		SourceURL:      safeHTTPURL(d.SourceURL),
 		Name:           name,
 		Headline:       clip(d.Headline, maxDraftLine),
-		Description:    clip(d.Description, MaxDraftTextBytes),
+		Description:    clip(copytext.Description(d.Description), MaxDraftTextBytes),
 		ImageURL:       draftPhoto(d.ImageURL),
 		Servings:       []int{servings},
 		PrepMinutes:    d.PrepMinutes,
@@ -347,7 +348,7 @@ func ParseText(text string) Draft {
 			d.Steps = append(d.Steps, clip(bulletRe.ReplaceAllString(line, ""), MaxDraftTextBytes))
 		}
 	}
-	d.Description = clip(strings.Join(intro, "\n"), MaxDraftTextBytes)
+	d.Description = clip(copytext.Description(strings.Join(intro, "\n")), MaxDraftTextBytes)
 
 	if m := servesRe.FindStringSubmatch(text); m != nil {
 		d.Servings = atoiClamped(cmpFirst(m[1], m[2]), maxDraftServings)

@@ -151,6 +151,8 @@ final class AppDependencies {
             session: session, api: client.map { PlusAPI(client: $0) },
             purchaser: PlusPurchasers.make(apiKey: configuration.revenueCatAPIKey))
         self.plus = plus
+        // Suggestions are for today on, in the household's time zone.
+        autopilot.timeZone = { [households] in households.current?.household.planningTimeZone ?? .autoupdatingCurrent }
         // Planning a week is part of Plus: a tapped Plan the Week opens the purchase screen.
         autopilot.plusRequired = { [plus] in plus.showsPurchase = true }
         let location = CoreLocationSource()

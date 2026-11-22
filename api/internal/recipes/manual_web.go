@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 )
 
 // Web fetch limits.
@@ -367,7 +369,7 @@ func draftFromSchema(obj map[string]any) Draft {
 	d := Draft{
 		// Names carry entities too ("Grandma&#8217;s Mac &amp; Cheese").
 		Name:        clip(stripTags(jsonString(obj["name"])), maxDraftName),
-		Description: clip(stripTags(jsonString(obj["description"])), MaxDraftTextBytes),
+		Description: clip(copytext.Description(stripTags(jsonString(obj["description"]))), MaxDraftTextBytes),
 		ImageURL:    safeHTTPURL(firstImage(obj["image"])),
 		Cuisines:    labels(jsonStrings(obj["recipeCuisine"])),
 		Tags:        labels(append(jsonStrings(obj["recipeCategory"]), jsonStrings(obj["keywords"])...)),

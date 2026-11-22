@@ -17,7 +17,7 @@ final class SaveThenOpenQATests: XCTestCase {
         app.buttons["Week Menu"].tap()
         app.buttons["Add a Recipe"].tap()
         app.buttons["AddChoice-write"].tap()
-        let nameField = app.textFields["Recipe name"]
+        let nameField = app.textFields["Recipe Name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.tap()
         nameField.typeText(name)

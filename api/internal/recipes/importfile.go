@@ -9,6 +9,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 )
 
 // ImportVersion is the supported version of the recipe import contract.
@@ -178,7 +179,7 @@ func buildRecipe(r ImportRecipe, ingredientID func(ImportIngredient) string) Rec
 		SourceURL:      strings.TrimSpace(r.SourceURL),
 		Name:           strings.TrimSpace(r.Name),
 		Headline:       strings.TrimSpace(r.Headline),
-		Description:    strings.TrimSpace(r.Description),
+		Description:    copytext.Description(r.Description),
 		ImageURL:       strings.TrimSpace(r.ImageURL),
 		IsAddon:        r.IsAddon,
 		PrepMinutes:    r.PrepMinutes,

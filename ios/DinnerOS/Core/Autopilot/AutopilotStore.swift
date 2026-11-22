@@ -53,11 +53,16 @@ final class AutopilotStore {
     var isConfigured: Bool { profile?.configured == true }
     var limits: AutopilotLimits { vocabulary?.limits ?? .defaults }
 
-    /// The shown week's proposal while it can still be swapped, accepted, or dismissed.
+    /// The shown week's proposal while it can still be swapped, accepted, or dismissed, from
+    /// today on: a day that's already gone is never offered.
     var pendingProposal: AutopilotProposal? {
         guard let proposal, proposal.isPending else { return nil }
-        return proposal
+        return proposal.upcoming(today: AutopilotProposal.dayKey(now(), in: timeZone()))
     }
+
+    /// The household's time zone, which decides when a day is gone.
+    @ObservationIgnored var timeZone: () -> TimeZone = { .autoupdatingCurrent }
+    @ObservationIgnored var now: () -> Date = { Date() }
 
     /// The slots accepting would add.
     var includedSlots: [AutopilotSlot] {
@@ -452,8 +457,9 @@ final class AutopilotStore {
     /// proposal first (it reloads, and `notice` says so).
     @discardableResult
     func accept() async throws -> AutopilotAcceptResult? {
-        guard let proposal = pendingProposal else { return nil }
-        let excluded = proposal.slots.map(\.id).filter { excludedSlotIDs.contains($0) }
+        guard let saved = self.proposal, let proposal = pendingProposal else { return nil }
+        // A day gone by is left out too, in case the server still has it.
+        let excluded = saved.slots.map(\.id).filter { excludedSlotIDs.contains($0) || proposal.slot(id: $0) == nil }
         // Sent explicitly, never left out: the review sheet shows a toggle per pairing, so
         // the checked ones are exactly what to add.
         let pairings = chosenPairings

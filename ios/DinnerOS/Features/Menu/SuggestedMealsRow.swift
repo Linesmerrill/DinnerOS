@@ -79,7 +79,7 @@ struct SuggestedMealsRow: View {
                         card(slot)
                             .frame(maxHeight: .infinity)
                             .containerRelativeFrame(.horizontal) { width, _ in
-                                width < 600 ? width * 0.62 : min(width * 0.5, max(280, (width - 48) / 4))
+                                Self.cardWidth(in: width, count: slots.count)
                             }
                     }
                 }
@@ -90,9 +90,21 @@ struct SuggestedMealsRow: View {
                 .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
-            .carouselInSafeArea()
+            .carouselInSafeArea(fadesEdges: true)
             .scrollTargetBehavior(.viewAligned)
         }
+    }
+
+    /// A card's width in a row `width` wide. A phone shows one card and a peek of the next. A
+    /// wider screen shows several at a readable size, narrowed so a short week's cards all fit
+    /// inside the margins: on an iPad in portrait the third ran off the edge (build 122 review 4).
+    static func cardWidth(in width: CGFloat, count: Int) -> CGFloat {
+        guard width >= 600 else { return width * 0.62 }
+        let usual = min(width * 0.5, max(280, (width - 48) / 4))
+        guard count > 0 else { return usual }
+        let cards = CGFloat(count)
+        let fitting = (width - 2 * DS.Space.l - (cards - 1) * DS.Space.m) / cards
+        return fitting >= DS.Size.carouselCardMinWidth ? min(usual, fitting) : usual
     }
 
     private func card(_ slot: AutopilotSlot) -> some View {

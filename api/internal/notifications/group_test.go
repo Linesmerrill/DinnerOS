@@ -46,7 +46,7 @@ func TestRepeatedInvitesCountedReadAsOne(t *testing.T) {
 	for _, n := range page.Items {
 		titles = append(titles, n.Title)
 	}
-	want := []string{"Butter is running low", "Your free month is ready", "3 invites counted"}
+	want := []string{"Butter is running low", "Your free month is ready", "3 of your invites counted"}
 	if !slices.Equal(titles, want) {
 		t.Fatalf("titles = %q, want %q", titles, want)
 	}
@@ -54,7 +54,7 @@ func TestRepeatedInvitesCountedReadAsOne(t *testing.T) {
 	if g.Body != "3 households joined from your invites." || g.ID != ids[2] || !slices.Equal(g.GroupIDs, []string{ids[2], ids[1], ids[0]}) {
 		t.Errorf("group = %+v", g)
 	}
-	if r := newResponse(g, userA); len(r.GroupedIDs) != 3 || r.Title != "3 invites counted" {
+	if r := newResponse(g, userA); len(r.GroupedIDs) != 3 || r.Title != "3 of your invites counted" {
 		t.Errorf("response = %+v", r)
 	}
 	if page.Items[1].GroupIDs != nil {
@@ -64,7 +64,7 @@ func TestRepeatedInvitesCountedReadAsOne(t *testing.T) {
 		t.Errorf("UnreadCount = %d, %v; want 3 (the group counts once)", n, err)
 	}
 	banners, err := svc.Banners(ctx, actor)
-	if err != nil || len(banners) != 2 || banners[1].Title != "3 invites counted" {
+	if err != nil || len(banners) != 2 || banners[1].Title != "3 of your invites counted" {
 		t.Errorf("banners = %+v, %v", banners, err)
 	}
 
@@ -130,7 +130,7 @@ func TestCreateMakesApostrophesCurly(t *testing.T) {
 }
 
 // A group is counted across the household, not per page: build 121 showed
-// "45", "50" and "9 invites counted" cards out of order.
+// "45", "50" and "9 of your invites counted" cards out of order.
 func TestAGroupShowsOnceWithItsFullCountAcrossPages(t *testing.T) {
 	svc, _ := newTestService()
 	ctx := context.Background()
@@ -164,7 +164,7 @@ func TestAGroupShowsOnceWithItsFullCountAcrossPages(t *testing.T) {
 		}
 		q.Before = page.NextCursor
 	}
-	want := []string{"Milk is running low", "60 invites counted", "Butter is running low"}
+	want := []string{"Milk is running low", "60 of your invites counted", "Butter is running low"}
 	if !slices.Equal(titles, want) {
 		t.Errorf("titles = %q, want %q", titles, want)
 	}
@@ -172,7 +172,7 @@ func TestAGroupShowsOnceWithItsFullCountAcrossPages(t *testing.T) {
 		t.Errorf("UnreadCount = %d, %v; want 3", n, err)
 	}
 	banners, err := svc.Banners(ctx, actor)
-	if err != nil || len(banners) != 1 || banners[0].Title != "60 invites counted" {
+	if err != nil || len(banners) != 1 || banners[0].Title != "60 of your invites counted" {
 		t.Errorf("banners = %d, %v", len(banners), err)
 	}
 }

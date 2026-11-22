@@ -105,10 +105,40 @@ nonisolated enum RecipeFormat {
             of: #"([0-9])\s*([½⅓⅔¼¾⅛⅜⅝⅞])"#, with: "$1 $2", options: .regularExpression)
     }
 
-    /// A name as the household typed it, with a capital first letter: "sugar" reads "Sugar".
+    /// An ingredient name in Title Case, the way the server sends it (copytext.IngredientName):
+    /// "bow tie pasta" reads "Bow Tie Pasta", "cream of mushroom soup" reads "Cream of Mushroom
+    /// Soup". A word with a capital inside it is the household's own spelling ("iPhone", "BBQ").
+    /// A note after the name ("Lemon, zested") stays as written. Covers recipes saved before the
+    /// server did this.
     static func displayName(_ name: String) -> String {
-        guard let first = name.first, first.isLowercase else { return name }
-        return first.uppercased() + name.dropFirst()
+        let head: Substring
+        let tail: Substring
+        if let comma = name.range(of: ", ") {
+            (head, tail) = (name[..<comma.lowerBound], name[comma.lowerBound...])
+        } else {
+            (head, tail) = (Substring(name), "")
+        }
+        var first = true
+        let words = head.split(separator: " ", omittingEmptySubsequences: false).map { word -> String in
+            guard !word.isEmpty else { return "" }
+            defer { first = false }
+            if !first, minorWords.contains(word.lowercased()) { return String(word) }
+            return word.split(separator: "-", omittingEmptySubsequences: false).map(capitalFirst).joined(separator: "-")
+        }
+        return words.joined(separator: " ") + tail
+    }
+
+    private static let minorWords: Set<String> = [
+        "a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with", "&",
+    ]
+
+    /// `word` with its first letter capitalized, unless a later letter already is.
+    private static func capitalFirst(_ word: Substring) -> String {
+        guard let index = word.firstIndex(where: \.isLetter), word[index].isLowercase,
+            word[word.startIndex..<index].allSatisfy({ "(\"“".contains($0) }),
+            !word[word.index(after: index)...].contains(where: \.isUppercase)
+        else { return String(word) }
+        return String(word[..<index]) + word[index].uppercased() + String(word[word.index(after: index)...])
     }
 
     private static func decimal(_ value: Double, locale: Locale) -> String {

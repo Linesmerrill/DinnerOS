@@ -58,6 +58,14 @@ type inputData struct {
 	resetBy string
 }
 
+// location is the household's time zone, UTC when it has none.
+func (d inputData) location() *time.Location {
+	if d.loc == nil {
+		return time.UTC
+	}
+	return d.loc
+}
+
 // slot converts a provider slot into a proposal slot.
 func (d inputData) slot(s autopilot.Slot) Slot {
 	r := d.byID[s.ItemID]

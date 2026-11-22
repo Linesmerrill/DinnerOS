@@ -100,6 +100,27 @@ class CompareTests(unittest.TestCase):
         self.assertFalse(compare.surely_different(compare.cell_means(a), compare.cell_means(b), "large", 0.01))
         self.assertEqual(len(compare.duplicates([self.save("p.png", page), self.save("n.png", near)], "large")), 1)
 
+    def test_an_allowed_pair_is_never_reported(self):
+        # On an iPad, two searches with one result card each differ in under 1% of cells.
+        page = paint(screen("ipadL", 1210, 834), "ipadL", 300, 200, 400, 120, (200, 120, 40))
+        other = paint(page.copy(), "ipadL", 320, 330, 8, 8, (0, 0, 0))
+        self.folder = tempfile.mkdtemp(prefix="ipadL-light-")
+        self.save("menu-search-typed-imported.png", page)
+        self.save("menu-search-typed-typed-by-hand.png", other)
+        self.assertEqual(compare.folder_duplicates(self.folder), [])
+        # The same two images under other names are still a duplicate.
+        self.save("menu.png", page)
+        found = compare.folder_duplicates(self.folder)
+        names = sorted({os.path.basename(p) for pair in found for p in pair[:2]})
+        self.assertEqual(names, ["menu-search-typed-imported.png", "menu-search-typed-typed-by-hand.png", "menu.png"])
+        self.assertEqual(len(found), 2)
+
+    def test_allowed_pairs_go_both_ways_and_only_as_a_pair(self):
+        self.assertTrue(compare.is_allowed("a/household.png", "a/household-new-household.png"))
+        self.assertTrue(compare.is_allowed("a/household-new-household.png", "a/household.png"))
+        self.assertFalse(compare.is_allowed("a/household.png", "a/menu-search-typed-imported.png"))
+        self.assertFalse(compare.is_allowed("a/household.png", "a/household.png"))
+
     def test_the_device_comes_from_the_folder_name(self):
         self.assertEqual(compare.device_of("ipadL-dark"), "ipadL")
         kept = compare.kept_cells("ipadL", 834, 1210)

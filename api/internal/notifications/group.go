@@ -8,7 +8,7 @@ import (
 )
 
 // A group is repeats of one kind of notification the app shows as one: three
-// "Your invite counted" read as "3 invites counted". Grouping happens on read,
+// "Your invite counted" read as "3 of your invites counted". Grouping happens on read,
 // so every notification is still stored (and pushed) on its own, and marking
 // the group read or dismissing it covers every notification in it.
 type group struct {
@@ -22,7 +22,7 @@ const groupInvitesCounted = "plus.referral:referrer"
 
 var groups = map[string]group{
 	groupInvitesCounted: {
-		title: func(n int) string { return fmt.Sprintf("%d invites counted", n) },
+		title: func(n int) string { return fmt.Sprintf("%d of your invites counted", n) },
 		body:  func(n int) string { return fmt.Sprintf("%d households joined from your invites.", n) },
 	},
 }

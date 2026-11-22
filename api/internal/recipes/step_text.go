@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/platform/copytext"
 )
 
 // Cards write "1⁄2" with a fraction slash; the app shows fractions as one
@@ -85,4 +87,11 @@ func CleanStepText(s string) string {
 		}
 	}
 	return blankLineRe.ReplaceAllString(strings.Join(out, "\n"), "\n")
+}
+
+// ServedStepText is a step as the app shows it: cleaned (CleanStepText), with
+// ranges read out ("30-60 seconds" reads "30 to 60 seconds"). Ranges change
+// only on the way out, after anything that reads the text's own numbers.
+func ServedStepText(s string) string {
+	return copytext.Ranges(CleanStepText(s))
 }

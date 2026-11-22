@@ -176,7 +176,7 @@ struct YourMealsSection: View {
                 .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
-            .carouselInSafeArea()
+            .carouselInSafeArea(fadesEdges: true)
             .scrollTargetBehavior(.viewAligned)
         }
     }

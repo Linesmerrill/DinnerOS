@@ -19,10 +19,14 @@
 // its words gets new words and, when needed, new ingredients, on the starter,
 // its unedited copies and its Shared Recipes entry.
 //
+// Labels: -labels drops a scraper's label from the start of every recipe's
+// and Shared Recipes entry's description ("Web Description: Fun fact: …"
+// reads "Fun fact: …", build 122). It needs no starter household.
+//
 //	MONGODB_URI=... MONGODB_DATABASE=dinneros STARTER_RECIPES_HOUSEHOLD_ID=<id> \
 //	  go run ./cmd/ownstarters -rewrites 'out-*.json'                  # dry run
 //	  go run ./cmd/ownstarters -images https://dinneros.app/img/recipes -image-ids ids.txt -apply
-//	  go run ./cmd/ownstarters -fixes cmd/ownstarters/fixes/build-122.json -apply
+//	  go run ./cmd/ownstarters -fixes cmd/ownstarters/fixes/build-122.json -labels -apply
 //
 // It never prints the URI or any recipe text.
 package main
@@ -92,17 +96,19 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	imageIDs := flags.String("image-ids", "", "file listing the starter ids that have a new photo")
 	fixesFile := flags.String("fixes", "", "JSON file of starter fixes (fixes.go)")
 	dropPhotos := flags.Bool("drop-photos", false, "remove the photo of starters without a new one")
+	labels := flags.Bool("labels", false, "drop scraped labels like \"Web Description:\" from descriptions")
 	apply := flags.Bool("apply", false, "write the changes (default is a dry run)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	if *rewrites == "" && *images == "" && *fixesFile == "" && !*labels {
+		return errors.New("give -rewrites, -images, -fixes, -labels, or more than one")
+	}
+	needStarter := *rewrites != "" || *images != "" || *fixesFile != ""
 	starterID := strings.TrimSpace(getenv("STARTER_RECIPES_HOUSEHOLD_ID"))
 	starter, err := mongodb.ParseID(starterID)
-	if err != nil {
+	if err != nil && needStarter {
 		return errors.New("STARTER_RECIPES_HOUSEHOLD_ID must be the starter household's id")
-	}
-	if *rewrites == "" && *images == "" && *fixesFile == "" {
-		return errors.New("give -rewrites, -images, -fixes, or more than one")
 	}
 	if (*images == "") != (*imageIDs == "") {
 		return errors.New("-images and -image-ids go together")
@@ -155,6 +161,16 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	verb := "would update"
 	if *apply {
 		verb = "updated"
+	}
+	if *labels {
+		r, e, err := stripLabels(ctx, client.Database(), *apply)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "database %q: labels: %s the description of %d recipes and %d Shared Recipes entries\n", database, verb, r, e)
+		if !needStarter {
+			return nil
+		}
 	}
 	fmt.Fprintf(out, "database %q: %s text of %d starters and %d copies (%d edited copies left alone); photos of %d starters and %d copies; %d photos dropped\n",
 		database, verb, res.Starters, res.Copies, res.SkippedEdited, res.Images, res.CopyImages, res.Dropped)

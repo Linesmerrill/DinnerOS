@@ -29,7 +29,7 @@ final class ReviewPathQATests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Create a Household"].waitForExistence(timeout: 15))
         app.staticTexts["Create a Household"].tap()
-        let name = app.textFields["Household name"]
+        let name = app.textFields["Household Name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
         name.typeText("Review Kitchen")

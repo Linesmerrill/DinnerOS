@@ -59,7 +59,7 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(saved.waitForExistence(timeout: 15), "Setup didn’t keep the invite code")
         snap(app, "Setup, invite code saved (\(mode))")
         app.staticTexts["Create a Household"].tap()
-        let name = app.textFields["Household name"]
+        let name = app.textFields["Household Name"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
         name.typeText(newName)
