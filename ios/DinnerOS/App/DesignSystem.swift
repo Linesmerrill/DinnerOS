@@ -159,6 +159,9 @@ nonisolated enum DS {
         /// How far content fades out at a pinned bar's edge (`DSEdgeFade`), so a row passing under
         /// the bar fades away instead of being cut in half by a hard line (build 122).
         static let edgeFade: CGFloat = 32
+        /// The fade under a form's solid bar: shorter than a section header's space above its
+        /// title, so a header lined up with the bar's edge still reads whole (build 122).
+        static let formEdgeFade: CGFloat = 16
     }
 
     /// Button heights. Each style has one fixed height per size; it scales with Dynamic Type.
@@ -544,7 +547,8 @@ extension View {
     /// For a scrolling pane under a system navigation bar: fills the bar's area with `color` and
     /// hangs a `DSEdgeFade` below it, so rows fade out under the bar instead of showing through
     /// its buttons or being cut by its edge. Pad the pane's content `height` at the top so its
-    /// first row starts clear of the fade (build 122).
+    /// first row starts clear of the fade (build 122). For two panes of different colors under
+    /// one bar (the iPad cooking screen); a single form uses `dsSolidBarFade`.
     func dsTopBarEdge(color: Color = DS.Colors.barBackground, height: CGFloat = DS.Size.edgeFade) -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
             Color.clear
@@ -552,6 +556,22 @@ extension View {
                 .background { color.ignoresSafeArea(edges: .top) }
                 .dsEdgeFade(.bottom, color: color, height: height)
         }
+    }
+
+    /// A form under a navigation bar: the bar itself turns solid `color` (drawn by the system,
+    /// behind its buttons) and a `DSEdgeFade` hangs below it, so rows fade out under the bar and
+    /// nothing draws over Cancel or the title. The bar stays put as the form scrolls: on iPhone
+    /// Duo's cover screen it otherwise slid away, taking Cancel with it (build 122).
+    func dsSolidBarFade(color: Color, height: CGFloat = DS.Size.formEdgeFade) -> some View {
+        modifier(DSPinnedNavigationBar())
+            .toolbarBackground(color, for: .navigationBar)
+            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear
+                    .frame(height: 0)
+                    .dsEdgeFade(.bottom, color: color, height: height)
+            }
+            .environment(\.dsTopFade, height)
     }
 
     /// While the keyboard is up, fills the row the keyboard's floating Done sits in with `color`
@@ -565,6 +585,7 @@ extension View {
 private struct DSKeyboardBar: ViewModifier {
     let color: Color
     @State private var isKeyboardUp = false
+    @Environment(\.dsTopFade) private var topFade
 
     func body(content: Content) -> some View {
         content
@@ -589,13 +610,13 @@ private struct DSKeyboardBar: ViewModifier {
             // Once the keyboard is in place, the field being typed in comes up whole above the
             // bar's fade (a form leaves it partly under Done).
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
-                DSKeyboardReveal.revealFocusedField()
+                DSKeyboardReveal.revealFocusedField(topFade: topFade)
             }
             .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)) { _ in
-                if isKeyboardUp { DSKeyboardReveal.revealFocusedField() }
+                if isKeyboardUp { DSKeyboardReveal.revealFocusedField(topFade: topFade) }
             }
             .onReceive(NotificationCenter.default.publisher(for: UITextView.textDidBeginEditingNotification)) { _ in
-                if isKeyboardUp { DSKeyboardReveal.revealFocusedField() }
+                if isKeyboardUp { DSKeyboardReveal.revealFocusedField(topFade: topFade) }
             }
     }
 }
@@ -603,39 +624,80 @@ private struct DSKeyboardBar: ViewModifier {
 /// Finds the field being typed in and works out how far to scroll so it shows whole between a
 /// form's top and the keyboard's Done strip.
 enum DSKeyboardReveal {
-    /// Scrolls the field being typed in so it shows whole between the fades under the top bar
-    /// and above the keyboard's Done bar.
-    @MainActor static func revealFocusedField() {
+    /// Scrolls so the card holding the field being typed in (every row of its section) shows
+    /// whole between the bar's fade and the fade above the keyboard's Done bar, and so no header
+    /// or card is left half under the top bar.
+    @MainActor static func revealFocusedField(topFade: CGFloat) {
         guard let field = focusedField(), let scrollView = scrollView(containing: field),
             let window = field.window
         else { return }
-        let fieldFrame = field.convert(field.bounds, to: window)
         let frame = scrollView.convert(scrollView.bounds, to: window)
-        let top = frame.minY + scrollView.adjustedContentInset.top + DS.Size.edgeFade
+        let top = frame.minY + scrollView.adjustedContentInset.top
         let bottom = frame.maxY - scrollView.adjustedContentInset.bottom - DS.Size.edgeFade
-        guard bottom > top,
-            let move = shift(field: fieldFrame.minY...fieldFrame.maxY, visible: top...bottom, margin: DS.Space.s)
-        else { return }
+        var card = field.convert(field.bounds, to: window)
+        var pieces: [ClosedRange<CGFloat>] = []
+        if let list = scrollView as? UICollectionView, let section = section(of: field, in: list) {
+            let everything = CGRect(origin: .zero, size: list.contentSize)
+            let all = list.collectionViewLayout.layoutAttributesForElements(in: everything) ?? []
+            var cards: [Int: CGRect] = [:]
+            for item in all where item.frame.height > 0 {
+                let onScreen = list.convert(item.frame, to: window)
+                if item.representedElementCategory == .cell {
+                    cards[item.indexPath.section] = cards[item.indexPath.section]?.union(onScreen) ?? onScreen
+                } else {
+                    pieces.append(onScreen.minY...onScreen.maxY)
+                }
+            }
+            pieces += cards.values.map { $0.minY...$0.maxY }
+            if let whole = cards[section] { card = whole }
+        }
         let lowest = -scrollView.adjustedContentInset.top
         let highest = max(
             scrollView.contentSize.height + scrollView.adjustedContentInset.bottom - scrollView.bounds.height, lowest)
-        var offset = scrollView.contentOffset
-        offset.y = min(max(offset.y + move, lowest), highest)
-        scrollView.setContentOffset(offset, animated: true)
+        let offset = scrollView.contentOffset.y
+        guard
+            let move = shift(
+                card: card.minY...card.maxY, pieces: pieces, visible: top...bottom, topFade: topFade,
+                margin: DS.Space.s, allowed: (lowest - offset)...(highest - offset))
+        else { return }
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offset + move), animated: true)
     }
 
-    /// How far to scroll down (positive) or up (negative) so `field` sits inside `visible`, with
-    /// `margin` to spare; nil when it already does. A field taller than the space lines up its top.
+    /// How far to scroll (positive moves content up) so `card` sits whole between `topFade` below
+    /// the bar and `margin` above the bottom of `visible`, choosing, of the moves that do, the
+    /// smallest that leaves no piece (a header, footer or card) straddling the bar's edge at
+    /// `visible`'s top. Nil when nothing needs to move. Moves stay inside `allowed`.
     static func shift(
-        field: ClosedRange<CGFloat>, visible: ClosedRange<CGFloat>, margin: CGFloat
+        card: ClosedRange<CGFloat>, pieces: [ClosedRange<CGFloat>], visible: ClosedRange<CGFloat>,
+        topFade: CGFloat, margin: CGFloat, allowed: ClosedRange<CGFloat>
     ) -> CGFloat? {
-        if field.upperBound > visible.upperBound - margin {
-            let down = field.upperBound - (visible.upperBound - margin)
-            // Never past the point where the field's top would go above the visible top.
-            return min(down, max(field.lowerBound - (visible.lowerBound + margin), 0)).nonZero
+        let edge = visible.lowerBound
+        // At least this far, so the card's bottom clears the bottom; at most this far, so its top
+        // stays clear of the fade under the bar.
+        let least = card.upperBound - (visible.upperBound - margin)
+        let most = card.lowerBound - (edge + topFade)
+        func straddles(_ move: CGFloat) -> Bool {
+            pieces.contains { $0.lowerBound - move < edge && $0.upperBound - move > edge }
         }
-        if field.lowerBound < visible.lowerBound + margin {
-            return (field.lowerBound - (visible.lowerBound + margin)).nonZero
+        func fits(_ move: CGFloat) -> Bool {
+            move >= least && move <= most && allowed.contains(move)
+        }
+        if fits(0) && !straddles(0) { return nil }
+        let candidates: [CGFloat] = [0] + pieces.flatMap { [$0.lowerBound - edge, $0.upperBound - edge] }
+        if let best = candidates.filter({ fits($0) && !straddles($0) }).min(by: { abs($0) < abs($1) }) {
+            return best.nonZero
+        }
+        // No clean stop: just bring the card in, its top first when it can't all fit.
+        if fits(0) { return nil }
+        let move = least > most ? most : max(least, min(0, most))
+        return min(max(move, allowed.lowerBound), allowed.upperBound).nonZero
+    }
+
+    @MainActor private static func section(of view: UIView, in list: UICollectionView) -> Int? {
+        var current: UIView? = view
+        while let candidate = current {
+            if let cell = candidate as? UICollectionViewCell { return list.indexPath(for: cell)?.section }
+            current = candidate.superview
         }
         return nil
     }
@@ -675,4 +737,21 @@ enum DSKeyboardReveal {
 extension CGFloat {
     /// Nil for zero, so "no move needed" reads as nil.
     fileprivate var nonZero: CGFloat? { self == 0 ? nil : self }
+}
+
+extension EnvironmentValues {
+    /// How tall the fade under the bar is (`dsSolidBarFade`), so the keyboard's reveal keeps the
+    /// field being typed in clear of it.
+    @Entry var dsTopFade: CGFloat = DS.Size.edgeFade
+}
+
+/// Keeps the navigation bar from minimizing as the content scrolls (iOS 27).
+private struct DSPinnedNavigationBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27.0, *) {
+            content.toolbarMinimizationBehavior(.never, for: .navigationBar)
+        } else {
+            content
+        }
+    }
 }
