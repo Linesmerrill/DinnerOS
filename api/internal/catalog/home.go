@@ -22,8 +22,8 @@ import (
 const SectionSize = 12
 
 // editorialReserve is how many recipes the rows built on saves and ratings
-// leave unclaimed (at least one, at most half of what's left), so Chef’s
-// Picks always has some.
+// leave unclaimed between them (at least one, at most half the catalog), so
+// Chef’s Picks always has some.
 const editorialReserve = 3
 
 // trendingWindow is how far back Trending counts saves.
@@ -100,6 +100,7 @@ func (s *Service) Home(ctx context.Context, householdID string) (Home, error) {
 	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(claimRank(cols[a]), claimRank(cols[b])) })
 	rows := map[int]Section{}
 	shownAbove := nearIndex{}
+	reserve := max(1, min(editorialReserve, len(pool)/2))
 	for _, i := range order {
 		c := cols[i]
 		items, err := s.fill(ctx, c, pool, sig)
@@ -112,8 +113,7 @@ func (s *Service) Home(ctx context.Context, householdID string) (Home, error) {
 			// left for Chef’s Picks: on a small catalog where every recipe
 			// has a save or a rating, it would otherwise take them all and
 			// the headline row would vanish.
-			fresh := len(freshOnly(pool, shownAbove))
-			left := fresh - max(1, min(editorialReserve, fresh/2))
+			left := len(freshOnly(pool, shownAbove)) - reserve
 			row = row[:max(0, min(len(row), left))]
 		}
 		if len(row) == 0 {

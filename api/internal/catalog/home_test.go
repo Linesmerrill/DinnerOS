@@ -653,10 +653,10 @@ func TestChefsPicksKeepsSomeWhenEverythingIsTrending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := itemNames(section(t, home, "chefs-picks").Items); len(got) == 0 {
-		t.Errorf("chefs-picks is empty")
+	if got := itemNames(section(t, home, "chefs-picks").Items); len(got) != 1 {
+		t.Errorf("chefs-picks = %v, want the one left over", got)
 	}
-	if got := itemNames(section(t, home, "trending").Items); len(got) == 0 {
+	if got := itemNames(section(t, home, "trending").Items); len(got) != 2 {
 		t.Errorf("trending is empty")
 	}
 }
