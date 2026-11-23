@@ -460,6 +460,9 @@ final class BiometricSignInQATests: XCTestCase {
             if offer.exists { offer.buttons["Not Now"].tap() }
             // The one-time "Thanks for testing" sheet can also come up after signInIfNeeded looked.
             if app.buttons["Thanks"].exists { app.buttons["Thanks"].tap() }
+            // A person new this run sees the welcome once, which can come up after a relaunch
+            // (build 123, the Duo): Start Planning only closes it.
+            if app.buttons["Start Planning"].exists { app.buttons["Start Planning"].tap() }
             (household.waitForExistence(timeout: 5) ? household : householdTab(app)).tap()
             _ = app.navigationBars["Household"].waitForExistence(timeout: 4)
         }
