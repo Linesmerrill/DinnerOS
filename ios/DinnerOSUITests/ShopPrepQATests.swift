@@ -42,6 +42,15 @@ final class ShopPrepQATests: XCTestCase {
         XCTAssertTrue(card.label.contains("2 bags to freeze"), "The freeze card doesn’t say 2 bags: \(card.label)")
         XCTAssertFalse(card.label.contains("12 bags"), "The freeze card counts 1 oz bags: \(card.label)")
         XCTAssertTrue(card.label.contains("Ground Beef"), "Ground Beef’s extra isn’t on the card: \(card.label)")
+        // The row says the bag size, the extra, and what was on hand (Hark, build 122).
+        XCTAssertTrue(
+            card.label.contains("Ground Pork, 2 bags, 10 ounces each. Plus 3 ounces extra. You already have 9 ounces"),
+            "The pork row doesn’t say the bag size and what’s on hand: \(card.label)")
+        // "Too little to freeze" comes after Ground Beef, the item it's about.
+        XCTAssertTrue(
+            card.label.contains("Ground Beef, 6 ounces extra. Too little to freeze"),
+            "The note isn’t under Ground Beef: \(card.label)")
+        XCTAssertTrue(app.staticTexts["2 bags, 10 oz each"].exists || card.label.contains("10 ounces each"))
         sleep(1)
         snap(app, "Shop › Freeze card (\(mode))")
         app.terminate()

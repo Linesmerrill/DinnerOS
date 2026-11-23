@@ -111,14 +111,36 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
     /// The extra, "6 oz", for a card that is only extra.
     var extraText: String? { isExtraOnly ? leftoverText : nil }
 
-    /// The banner row's one word on what to do with it: "2 bags" to freeze, "4 oz extra" when
-    /// there's less than a bag, or "Keep 10 oz" when it doesn't freeze.
+    /// True when the bag count is the API's suggestion, so its ready-made banner words fit.
+    private var isSuggestedCount: Bool { bags == (card.portions?.portions ?? 0) || !card.freezable }
+
+    /// The banner row's short line on what to do with it: "2 bags, 10 oz each" to freeze,
+    /// "4 oz extra" when there's less than a bag, or "Keep 10 oz" when it doesn't freeze. The
+    /// API's words when it sent them; the same words built here for an older server.
     var glanceText: String {
+        if isSuggestedCount, let text = card.glanceText, !text.isEmpty { return text }
         if hasBags {
-            return bags == 1 ? String(localized: "1 bag") : String(localized: "\(bags) bags")
+            return bags == 1
+                ? String(localized: "1 bag, \(bagText)") : String(localized: "\(bags) bags, \(bagText) each")
         }
         if let leftoverText { return String(localized: "\(leftoverText) extra") }
         return String(localized: "Keep \(keepText)")
+    }
+
+    /// The small line under the banner row: the extra and what was already on hand, "Plus
+    /// 3 oz extra. You already have 9 oz.", or why less than a bag isn't frozen. `nil` when
+    /// there's nothing to add.
+    var glanceNote: String? {
+        if isSuggestedCount, card.glanceText?.isEmpty == false {
+            guard let note = card.glanceNote, !note.isEmpty else { return nil }
+            return note
+        }
+        if isExtraOnly { return PrepBannerPresentation.extrasNote }
+        guard hasBags else { return nil }
+        var parts: [String] = []
+        if let leftoverText { parts.append(String(localized: "Plus \(leftoverText) extra.")) }
+        if let had = card.onHandText, !had.isEmpty { parts.append(String(localized: "You already have \(had).")) }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     /// "1 bag to freeze", for the banner and the count announcement.
@@ -189,9 +211,11 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
         var out: [String] = []
         for (i, word) in words.enumerated() {
             let one = i > 0 && words[i - 1] == "1"
-            switch word {
-            case "oz": out.append(one ? String(localized: "ounce") : String(localized: "ounces"))
-            case "lb": out.append(one ? String(localized: "pound") : String(localized: "pounds"))
+            // "9 oz." at the end of a sentence keeps its period.
+            let mark = word.hasSuffix(".") || word.hasSuffix(",") ? String(word.suffix(1)) : ""
+            switch word.dropLast(mark.count) {
+            case "oz": out.append((one ? String(localized: "ounce") : String(localized: "ounces")) + mark)
+            case "lb": out.append((one ? String(localized: "pound") : String(localized: "pounds")) + mark)
             default: out.append(word)
             }
         }
@@ -232,7 +256,18 @@ nonisolated struct PrepBannerPresentation: Equatable, Sendable {
         Array(presentations.filter(\.isExtraOnly).prefix(Self.maxRows - rows.count))
     }
 
-    /// The line over the extras.
+    /// One row as VoiceOver reads it, its note included: "Ground Pork, 2 bags, 10 ounces each.
+    /// Plus 3 ounces extra. You already have 9 ounces".
+    private static func spokenRow(_ row: PrepCardPresentation) -> String {
+        var text = "\(row.card.name), \(PrepCardPresentation.spoken(row.glanceText))"
+        if let note = row.glanceNote {
+            let spoken = PrepCardPresentation.spoken(note)
+            text += ". " + (spoken.hasSuffix(".") ? String(spoken.dropLast()) : spoken)
+        }
+        return text
+    }
+
+    /// The line under an item with less than a bag, the API's word when it sends one.
     static let extrasNote = String(localized: "Too little to freeze. Cook it in or toss it.")
 
     /// "1 bag to freeze" when anything is being frozen; otherwise what the rows are.
@@ -276,11 +311,7 @@ nonisolated struct PrepBannerPresentation: Equatable, Sendable {
     var accessibilityLabel: String {
         if listsItems {
             var parts = [String(localized: "Put the groceries away"), countTitle]
-            parts += rows.map { "\($0.card.name), \(PrepCardPresentation.spoken($0.glanceText))" }
-            if !extraRows.isEmpty {
-                parts.append(String(Self.extrasNote.dropLast()))
-                parts += extraRows.map { "\($0.card.name), \(PrepCardPresentation.spoken($0.extraText ?? ""))" }
-            }
+            parts += (rows + extraRows).map(Self.spokenRow)
             if let moreText { parts.append(moreText) }
             return parts.joined(separator: ". ")
         }

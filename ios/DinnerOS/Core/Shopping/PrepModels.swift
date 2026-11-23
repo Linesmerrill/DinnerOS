@@ -87,6 +87,14 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     let frozen: Bool
     /// The card's one line of guidance, ready to show.
     let instruction: String
+    /// The banner row's short version at the suggested bag count, ready to show: "2 bags,
+    /// 10 oz each", and the line under it, "Plus 3 oz extra. You already have 9 oz." (empty
+    /// when there's nothing to add). Older servers leave them out.
+    let glanceText: String?
+    let glanceNote: String?
+    /// What the pantry already had toward the week's meals, "9 oz". Older servers leave it out;
+    /// empty when nothing.
+    let onHandText: String?
     let reminderText: String
     /// What to write on each bag, one line each: "Ground Pork, 10 oz", "Frozen Sep 27",
     /// "Best by Dec 27, 2026". Older servers leave it out; empty when nothing is frozen.
@@ -116,7 +124,7 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, category, unit, bought, boughtValue, boughtText, needed, neededValue,
             neededText, surplus, surplusValue, surplusPercent, surplusText, freezable, frozen,
-            instruction, reminderText, bagLabel, meals, portions, frozenPortions, answeredAt, suggestions
+            instruction, glanceText, glanceNote, onHandText, reminderText, bagLabel, meals, portions, frozenPortions, answeredAt, suggestions
         case imageURLString = "imageUrl"
         case handoffID = "handoffId"
         case lineID = "lineId"

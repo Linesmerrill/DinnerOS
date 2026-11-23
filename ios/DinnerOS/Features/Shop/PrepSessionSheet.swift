@@ -633,17 +633,10 @@ struct PrepSessionBanner: View {
                     .accessibilityHint(Text("Opens the checklist for putting the groceries away"))
             }
             VStack(alignment: .leading, spacing: DS.Space.sm) {
-                ForEach(presentation.rows, id: \.card.id) { row in
-                    itemRow(row, trailing: row.glanceText, isFreezer: row.hasBags)
-                }
-                if !presentation.extraRows.isEmpty {
-                    Text(PrepBannerPresentation.extrasNote)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, presentation.rows.isEmpty ? 0 : 4)
-                    ForEach(presentation.extraRows, id: \.card.id) { row in
-                        itemRow(row, trailing: row.extraText ?? "", isFreezer: false)
-                    }
+                // Each row carries its own note, so "Too little to freeze" sits under the item
+                // it's about, never between two (build 122).
+                ForEach(presentation.rows + presentation.extraRows, id: \.card.id) { row in
+                    itemRow(row)
                 }
                 if let more = presentation.moreText {
                     Text(more)
@@ -661,17 +654,26 @@ struct PrepSessionBanner: View {
         }
     }
 
-    private func itemRow(_ row: PrepCardPresentation, trailing: String, isFreezer: Bool) -> some View {
-        HStack(spacing: DS.Space.sm) {
+    /// The photo, the name, what to do with it ("2 bags, 10 oz each") and, under that, the
+    /// extra and what was on hand. Stacked, not trailing, so the size fits on an iPhone SE.
+    private func itemRow(_ row: PrepCardPresentation) -> some View {
+        HStack(alignment: .top, spacing: DS.Space.sm) {
             PrepIngredientTile(url: row.card.imageURL, category: row.card.category, size: min(rowPhotoSize, 52))
-            Text(row.card.name)
-                .font(.subheadline)
-                .lineLimit(2)
-            Spacer(minLength: DS.Space.s)
-            Text(trailing)
-                .font(PrepStyle.readout(.subheadline))
-                .foregroundStyle(isFreezer ? PrepStyle.ice : .secondary)
-                .multilineTextAlignment(.trailing)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.card.name)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                Text(row.glanceText)
+                    .font(PrepStyle.readout(.subheadline))
+                    .foregroundStyle(row.hasBags ? DS.Colors.accent : DS.Colors.secondaryText)
+                if let note = row.glanceNote {
+                    Text(note)
+                        .font(.footnote)
+                        .foregroundStyle(DS.Colors.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -711,7 +713,7 @@ struct PrepSessionBanner: View {
                 if let detail = presentation.detailText {
                     Text(detail)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(presentation.detailIsFreezer ? PrepStyle.ice : .secondary)
+                        .foregroundStyle(presentation.detailIsFreezer ? DS.Colors.accent : DS.Colors.secondaryText)
                 }
             } else {
                 Text(session.headline)

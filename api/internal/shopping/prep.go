@@ -702,9 +702,8 @@ func prepInstruction(card PrepCard) string {
 	}
 	// Bought to top up what the pantry had: say so, or "Keep 1 oz out" reads
 	// as the whole dinner.
-	if had := new(big.Rat).Sub(ratOfExact(card.Pack.MealNeed), ratOfExact(card.Pack.Needed)); card.Pack.MealNeed != "" &&
-		had.Sign() > 0 {
-		keep += fmt.Sprintf(" with the %s you already have", amountText(had.RatString(), card.Pack.Unit))
+	if had := prepOnHand(card); had != "" {
+		keep += fmt.Sprintf(" with the %s you already have", had)
 	}
 	leftover := ""
 	if ratOfExact(card.Portions.Leftover).Sign() > 0 {
@@ -719,6 +718,57 @@ func prepInstruction(card PrepCard) string {
 	default:
 		return fmt.Sprintf("%s, then freeze %d bags of %s, one per future dinner.%s", keep, n, each, leftover)
 	}
+}
+
+// prepGlance is the card's short version for the Shop and Pantry banner, at
+// the suggested bag count: what to do with it ("2 bags, 10 oz each", "6 oz
+// extra", "Keep 10 oz") and a note under it with the extra and what the
+// pantry already had ("Plus 3 oz extra. You already have 9 oz."). A card with
+// less than a bag says why it isn't frozen under its own row (build 122: the
+// note sat between two rows and read as the one above's).
+func prepGlance(card PrepCard) (text, note string) {
+	unit := card.Pack.Unit
+	keep := "Keep " + amountText(card.Pack.Needed, unit)
+	if !card.Pack.Freezable {
+		return keep, ""
+	}
+	leftover := leftoverText(card.Portions.Leftover, unit)
+	switch n := card.Portions.Portions; {
+	case n <= 0:
+		if leftover == "" {
+			return keep, ""
+		}
+		return leftover + " extra", PrepExtrasNote
+	case n == 1:
+		text = "1 bag, " + amountText(card.Portions.PortionSize, unit)
+	default:
+		text = fmt.Sprintf("%d bags, %s each", n, amountText(card.Portions.PortionSize, unit))
+	}
+	var notes []string
+	if leftover != "" {
+		notes = append(notes, fmt.Sprintf("Plus %s extra.", leftover))
+	}
+	if had := prepOnHand(card); had != "" {
+		notes = append(notes, fmt.Sprintf("You already have %s.", had))
+	}
+	return text, strings.Join(notes, " ")
+}
+
+// PrepExtrasNote is what the banner says under an item with less than a bag
+// left over.
+const PrepExtrasNote = "Too little to freeze. Cook it in or toss it."
+
+// prepOnHand is what the pantry already had toward the week's meals, "9 oz",
+// or empty when the pack wasn't bought to top anything up.
+func prepOnHand(card PrepCard) string {
+	if card.Pack.MealNeed == "" {
+		return ""
+	}
+	had := new(big.Rat).Sub(ratOfExact(card.Pack.MealNeed), ratOfExact(card.Pack.Needed))
+	if had.Sign() <= 0 {
+		return ""
+	}
+	return amountText(had.RatString(), card.Pack.Unit)
 }
 
 // bagLabel is what to write on each bag frozen today, so a freezer with

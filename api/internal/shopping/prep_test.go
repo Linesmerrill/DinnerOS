@@ -343,6 +343,36 @@ func TestKeptOutThroughIsTheLastKeptOutMeal(t *testing.T) {
 // dinner, so the list bought a 1.5 lb pack to top up 0.88 oz. A dinner is
 // still 10 oz: two bags of 10 oz and about 3 oz extra, not twelve bags of
 // under an ounce (the cap on 26).
+func TestPrepGlance(t *testing.T) {
+	meat := LineSource{Category: ingredients.CategoryMeatSeafood}
+	for _, tc := range []struct {
+		name       string
+		card       PrepCard
+		text, note string
+	}{
+		{"one bag, nothing extra",
+			PrepCard{Pack: BulkPack{LineSource: meat, Unit: "oz", Needed: "10", Freezable: true},
+				Portions: PortionPlan{Portions: 1, PortionSize: "10"}},
+			"1 bag, 10 oz", ""},
+		{"less than a bag says why under its own row",
+			PrepCard{Pack: BulkPack{LineSource: meat, Unit: "oz", Needed: "10", Freezable: true},
+				Portions: PortionPlan{Leftover: "6"}},
+			"6 oz extra", "Too little to freeze. Cook it in or toss it."},
+		{"doesn't freeze",
+			PrepCard{Pack: BulkPack{LineSource: LineSource{Category: ingredients.CategoryProduce}, Unit: "oz", Needed: "10"}},
+			"Keep 10 oz", ""},
+		{"three bags and an extra, nothing on hand",
+			PrepCard{Pack: BulkPack{LineSource: meat, Unit: "oz", Needed: "10", MealNeed: "10", Freezable: true},
+				Portions: PortionPlan{Portions: 3, PortionSize: "10", Leftover: "4"}},
+			"3 bags, 10 oz each", "Plus 4 oz extra."},
+	} {
+		text, note := prepGlance(tc.card)
+		if text != tc.text || note != tc.note {
+			t.Errorf("%s: %q / %q, want %q / %q", tc.name, text, note, tc.text, tc.note)
+		}
+	}
+}
+
 func TestPrepPortionsATopUpPackByTheWholeDinner(t *testing.T) {
 	line := boughtLine("l7", "Ground Pork", ingredients.CategoryMeatSeafood, providers.CoveragePerWeek,
 		&PackageSize{Quantity: "3/2", Unit: "lb"}, 1, Amount{"22/25", "oz"})
@@ -366,6 +396,16 @@ func TestPrepPortionsATopUpPackByTheWholeDinner(t *testing.T) {
 	want := "Keep 1 oz out for Monday's Sesame-Soy Pork Bowls with the 9 oz you already have, then freeze 2 bags of 10 oz, one per future dinner. 3 oz left over. Throw it in for a little more protein, or toss it."
 	if got := prepInstruction(card); got != want {
 		t.Errorf("instruction:\n got %q\nwant %q", got, want)
+	}
+
+	// The banner row says the bag size, the extra, and what was on hand
+	// (Hark, build 122: "2 bags" alone said neither).
+	text, note := prepGlance(card)
+	if text != "2 bags, 10 oz each" || note != "Plus 3 oz extra. You already have 9 oz." {
+		t.Errorf("glance = %q / %q", text, note)
+	}
+	if got := prepCardResponse(card); got.GlanceText != text || got.GlanceNote != note || got.OnHandText != "9 oz" {
+		t.Errorf("response glance = %q / %q, on hand %q", got.GlanceText, got.GlanceNote, got.OnHandText)
 	}
 
 	// Without a pantry top-up the dinner is still what the list bought for.

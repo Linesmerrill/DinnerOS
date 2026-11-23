@@ -140,14 +140,37 @@ struct PrepPresentationTests {
         #expect(banner.moreText == nil)
         // Each item says what to do with it, so the member knows which is which at a glance.
         #expect(banner.rows.map(\.card.name) == ["Ground Pork", "Chicken Thighs"])
-        #expect(banner.rows.map(\.glanceText) == ["4 bags", "3 bags"])
-        // Less than a bag isn't something to put away: it's listed apart, as an amount.
+        // Each says the bag size too, and the extra under it (Hark, build 122: "2 bags" alone).
+        #expect(banner.rows.map(\.glanceText) == ["4 bags, 10 oz each", "3 bags, 12 oz each"])
+        #expect(banner.rows.map(\.glanceNote) == ["Plus 4 oz extra.", nil])
+        // Less than a bag isn't something to put away: it's listed last, with why under it.
         #expect(banner.extraRows.map(\.card.name) == ["Ground Beef"])
         #expect(banner.extraRows.map(\.extraText) == ["4 oz"])
+        #expect(banner.extraRows.map(\.glanceText) == ["4 oz extra"])
+        #expect(banner.extraRows.map(\.glanceNote) == ["Too little to freeze. Cook it in or toss it."])
         let spoken =
-            "Put the groceries away. 7 bags to freeze. Ground Pork, 4 bags. Chicken Thighs, 3 bags. "
-            + "Too little to freeze. Cook it in or toss it. Ground Beef, 4 ounces"
+            "Put the groceries away. 7 bags to freeze. Ground Pork, 4 bags, 10 ounces each. Plus 4 ounces extra. "
+            + "Chicken Thighs, 3 bags, 12 ounces each. "
+            + "Ground Beef, 4 ounces extra. Too little to freeze. Cook it in or toss it"
         #expect(banner.accessibilityLabel == spoken)
+    }
+
+    /// The API's own words win at the suggested count: the bag size, the extra, and what the
+    /// pantry already had (the Ground Pork topped up from 9 oz).
+    @Test func theBannerUsesTheAPIsWordsAndSaysWhatsOnHand() throws {
+        let json = PrepPreviewData.severalBagsJSON.replacingOccurrences(
+            of: #""instruction":"""#,
+            with: #""glanceText":"2 bags, 10 oz each","glanceNote":"Plus 3 oz extra. You already have 9 oz.","#
+                + #""onHandText":"9 oz","instruction":"""#)
+        let card = try #require(PrepPreviewData.session(json)?.cards.first)
+        let suggested = try presentation(card)
+        #expect(suggested.glanceText == "2 bags, 10 oz each")
+        #expect(suggested.glanceNote == "Plus 3 oz extra. You already have 9 oz.")
+        // Another count builds its own words, still saying what's on hand.
+        let two = try presentation(card, bags: 2)
+        #expect(two.glanceText == "2 bags, 10 oz each")
+        #expect(two.glanceNote == "Plus 24 oz extra. You already have 9 oz.")
+        #expect(PrepCardPresentation.spoken("You already have 9 oz.") == "You already have 9 ounces.")
     }
 
     @Test func aBannerWithOnlyExtrasFreezesNothing() throws {
