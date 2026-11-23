@@ -151,7 +151,9 @@ struct MainTabView: View {
                             .tabBarBacking(.top)
                     }
             }
-            .tabBarBacking(.bottom)
+            // Every Household page is a grouped list: the band is its gray, so it never shows as
+            // a white strip cutting off the last card (Hark's build 122 round 5, item 12).
+            .tabBarBacking(.bottom, color: DS.Colors.groupedBackground)
         }
     }
 

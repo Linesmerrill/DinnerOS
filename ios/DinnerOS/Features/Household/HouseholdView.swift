@@ -170,7 +170,7 @@ struct HouseholdView: View {
         .dsReadableForm()
         // The shared tab header: a small title in the bar, with the household's name one step
         // down in the card, so the tab never shows two large titles (build 121).
-        .tabBarEdge()
+        .tabBarEdge(DS.Colors.groupedBackground)
         .tabHeader(String(localized: "Household"))
         .notificationsToolbar()
         .task { await loadAccount() }
@@ -198,7 +198,12 @@ struct HouseholdView: View {
         List {
             content()
         }
+        // Room at the end so the last card scrolls clear of the fade above the screen's bottom
+        // band, and the fade itself, so a card passing under the band fades out instead of
+        // being cut flat by it (the Account page on the Duo, Hark's build 122 round 5, item 12).
+        .contentMargins(.bottom, DS.Size.tabBarScrimFade, for: .scrollContent)
         .dsReadableForm()
+        .tabBarEdge(DS.Colors.groupedBackground)
         .navigationTitle(title)
         .disabled(isWorking)
         .overlay {
