@@ -189,7 +189,7 @@ final class ScreensQATests: XCTestCase {
                 XCTAssertTrue(
                     picker.isSelected || (picker.value as? String)?.contains("elected") == true,
                     "Recipe page › \(kind): the \(tab) tab isn’t selected")
-                scrollContent(app)
+                pinPicker(picker, in: app)
                 shot(app, "Recipe page › \(kind) › \(tab)")
                 scrollToTop(app)
             }
@@ -522,6 +522,23 @@ final class ScreensQATests: XCTestCase {
         } else {
             app.swipeUp(velocity: .slow)
         }
+        sleep(1)
+    }
+
+    /// Drags the page up just far enough that the tab picker reaches the top and pins, so a
+    /// tab's shot starts at its first row. A fixed scroll ran past the start of a short tab and
+    /// left its first four rows off an iPhone SE (Hark's build 122 round 5, item 10).
+    @MainActor
+    private func pinPicker(_ picker: XCUIElement, in app: XCUIApplication) {
+        let bar = app.navigationBars.firstMatch
+        let top = bar.exists && !bar.frame.isEmpty ? bar.frame.maxY : app.frame.height * 0.12
+        let distance = picker.frame.minY - top
+        guard distance > 8 else { return }
+        let start = app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: app.frame.width * 0.3, dy: min(picker.frame.maxY + 40, app.frame.height * 0.8)))
+        let end = start.withOffset(CGVector(dx: 0, dy: -distance))
+        // Slow, and held at the end, so the page stops where the drag does.
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
         sleep(1)
     }
 
