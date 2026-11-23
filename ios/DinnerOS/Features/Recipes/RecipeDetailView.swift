@@ -61,6 +61,8 @@ struct RecipeDetailView: View {
     @State private var visibleHeight: CGFloat = 0
     /// The bottom bar's inset on the scroll view, for where the scroll can end (`RecipeHeaderSnap`).
     @State private var bottomInset: CGFloat = 0
+    /// Moves the page to the end of the snap zone when a drag stops inside it (`settle`).
+    @State private var scrollPosition = ScrollPosition(edge: .top)
     /// The one-line title's row under the bar's buttons.
     @ScaledMetric(relativeTo: .headline) private var compactTitleHeight: CGFloat = 36
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -246,6 +248,22 @@ struct RecipeDetailView: View {
             .coordinateSpace(.named(RecipeDetailHeader.contentSpace))
         }
         .scrollTargetBehavior(RecipeHeaderSnap(zone: snapZone, bottomInset: bottomInset))
+        .scrollPosition($scrollPosition)
+        // A drag let go without a flick never asks the snap where to stop, and a short tab came
+        // to rest with the large title half under the bar (Hark's review, build 122 round 5):
+        // once the page stops, it settles at the nearer end.
+        .onScrollPhaseChange { _, phase, context in
+            guard phase == .idle else { return }
+            let geometry = context.geometry
+            let reachable = RecipeDetailHeader.reachable(
+                contentHeight: geometry.contentSize.height, containerHeight: geometry.containerSize.height,
+                bottomInset: geometry.contentInsets.bottom)
+            if let target = RecipeDetailHeader.settle(
+                offset: geometry.contentOffset.y, zone: snapZone, reachable: reachable)
+            {
+                withAnimation(.snappy) { scrollPosition.scrollTo(y: target) }
+            }
+        }
         .ignoresSafeArea(edges: .top)
         // Where the bar ends, measured on the scroll view itself so the solid bar and the pinned
         // picker use the same line (on iPad the page's own inset left a 100 pt gap).
@@ -1233,6 +1251,20 @@ enum RecipeDetailHeader {
         return (visibleHeight - pinLine - bottomPadding).rounded(.up)
     }
 
+    /// The zone, ending no further than the page can scroll: a page too short to pin the picker
+    /// settles at its own end.
+    nonisolated static func clamped(_ zone: ClosedRange<CGFloat>, reachable: CGFloat) -> ClosedRange<CGFloat> {
+        zone.lowerBound...max(zone.lowerBound, min(zone.upperBound, reachable))
+    }
+
+    /// Where a page that stopped at `offset` should move to: the nearer end of the zone when it
+    /// stopped inside it, nil when it's already outside or at an end.
+    nonisolated static func settle(offset: CGFloat, zone: ClosedRange<CGFloat>?, reachable: CGFloat) -> CGFloat? {
+        guard let zone else { return nil }
+        let target = snapped(offset, zone: clamped(zone, reachable: reachable), velocity: 0)
+        return abs(target - offset) > 0.5 ? target : nil
+    }
+
     /// The farthest a page scrolls: its content and the bottom bar's inset, less the screen.
     nonisolated static func reachable(contentHeight: CGFloat, containerHeight: CGFloat, bottomInset: CGFloat)
         -> CGFloat
@@ -1296,10 +1328,9 @@ nonisolated struct RecipeHeaderSnap: ScrollTargetBehavior {
         let reachable = RecipeDetailHeader.reachable(
             contentHeight: context.contentSize.height, containerHeight: context.containerSize.height,
             bottomInset: bottomInset)
-        // A page too short to pin the picker settles at its own end.
-        let clamped = zone.lowerBound...max(zone.lowerBound, min(zone.upperBound, reachable))
         target.rect.origin.y = RecipeDetailHeader.snapped(
-            target.rect.origin.y, zone: clamped, velocity: context.velocity.dy)
+            target.rect.origin.y, zone: RecipeDetailHeader.clamped(zone, reachable: reachable),
+            velocity: context.velocity.dy)
     }
 }
 

@@ -128,6 +128,17 @@ struct RecipeHeaderEdgeTests {
         #expect(RecipeDetailHeader.reachable(contentHeight: 1200, containerHeight: 700, bottomInset: 150) == 650)
     }
 
+    /// A drag let go inside the zone, with no flick, settles at the nearer end.
+    @Test func aPageThatStopsInsideTheZoneSettlesAtAnEnd() {
+        let zone: ClosedRange<CGFloat> = 164...351
+        #expect(RecipeDetailHeader.settle(offset: 221, zone: zone, reachable: 397) == 164)
+        #expect(RecipeDetailHeader.settle(offset: 300, zone: zone, reachable: 397) == 351)
+        // Outside the zone, at an end, or no zone: left alone.
+        #expect(RecipeDetailHeader.settle(offset: 100, zone: zone, reachable: 397) == nil)
+        #expect(RecipeDetailHeader.settle(offset: 351, zone: zone, reachable: 397) == nil)
+        #expect(RecipeDetailHeader.settle(offset: 221, zone: nil, reachable: 397) == nil)
+    }
+
     @Test func aLongOrUnscrollablePageKeepsItsHeight() {
         let zone: ClosedRange<CGFloat> = 200...500
         // Long enough already.
