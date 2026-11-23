@@ -80,7 +80,7 @@ struct RecipeDescriptionSection: View {
             RecipeAutopilotSection(recipeID: recipe.id)
             DetailSection("Order History") {
                 if recipe.orderWeeks.isEmpty {
-                    Text("Not Ordered Yet")
+                    Text("Not ordered yet")
                         .foregroundStyle(Color.secondary)
                 } else {
                     Text(RecipeFormat.timesOrdered(recipe.timesOrdered))

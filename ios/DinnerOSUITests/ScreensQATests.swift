@@ -82,7 +82,7 @@ final class ScreensQATests: XCTestCase {
         // The paywall: this household has no Plus.
         app.buttons["Household"].firstMatch.tap()
         sleep(2)
-        // A household without Plus: "No Plus Yet" and the way to Plus. On an iPad it differs from
+        // A household without Plus: "No Plus yet" and the way to Plus. On an iPad it differs from
         // the sweep's Household tab in under 1% of the screen, so the pair is allowed
         // (QAShotCompare.allowedPairs; build 122 round 4, Hark's item 15a).
         shot(app, "Household › new household")

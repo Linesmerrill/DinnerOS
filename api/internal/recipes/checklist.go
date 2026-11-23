@@ -133,6 +133,9 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 	// with no amount: the same pasta, now cooked (build 122, Hark's review
 	// item 5).
 	measuredIn := map[int]int{}
+	// The first step each ingredient shows in at all: "Quarter lemon" in step
+	// 2 is where step 3's lemon wedge comes from.
+	firstIn := map[int]int{}
 	var groups []CookStepGroup
 	for _, step := range steps {
 		var items []CookStepItem
@@ -266,9 +269,21 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 				items[i].Prep = strings.TrimPrefix(it.Prep+", from step "+fmt.Sprint(from), ", ")
 			}
 		}
+		// "a squeeze of lemon" read as 1 lemon wedge after "Quarter lemon":
+		// a wedge of the lemon cut earlier, not another lemon (build 122
+		// round 4, Hark's review).
+		for i, it := range items {
+			from, ok := firstIn[it.IngredientIndex]
+			if ok && !it.LeftOut && isWedge(it.Name) && !strings.Contains(it.Prep, "from step") {
+				items[i].Prep = strings.TrimPrefix(it.Prep+", from step "+fmt.Sprint(from), ", ")
+			}
+		}
 		for _, it := range items {
 			if _, ok := measuredIn[it.IngredientIndex]; !ok && it.AmountText != "" && it.IngredientIndex != NoIngredient {
 				measuredIn[it.IngredientIndex] = step.Index
+			}
+			if _, ok := firstIn[it.IngredientIndex]; !ok && it.IngredientIndex != NoIngredient {
+				firstIn[it.IngredientIndex] = step.Index
 			}
 		}
 		if len(items) > 0 {
@@ -734,4 +749,10 @@ func singularName(name string) string {
 		return name[:len(name)-1]
 	}
 	return name
+}
+
+// isWedge is true for a lime or lemon wedge item ("Lemon wedge", "Lime wedges").
+func isWedge(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, " wedge") || strings.HasSuffix(lower, " wedges")
 }

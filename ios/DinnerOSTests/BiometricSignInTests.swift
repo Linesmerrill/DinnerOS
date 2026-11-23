@@ -174,7 +174,7 @@ struct BiometricLockMachineTests {
         #expect(BiometryKind(.opticID)?.name == "Optic ID")
         #expect(BiometryKind(.none) == nil)
         #expect(BiometryKind.touchID.offerTitle == "Use Touch ID to sign in next time?")
-        #expect(BiometryKind.faceID.toggleTitle == "Sign In with Face ID")
+        #expect(BiometryKind.faceID.toggleTitle == "Sign in with Face ID")
     }
 
     private func locked() -> BiometricLockMachine {

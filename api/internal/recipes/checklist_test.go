@@ -117,18 +117,19 @@ func TestChecklistReadsTheStepsLikeACook(t *testing.T) {
 	if it := item(t, c, 2, "Red Onion"); it.AmountText != "¼" {
 		t.Errorf("onion share = %+v", it)
 	}
-	if it := item(t, c, 2, "Lime wedges"); it.AmountText != "2" || it.Prep != "juiced" {
+	if it := item(t, c, 2, "Lime wedges"); it.AmountText != "2" || it.Prep != "juiced, from step 1" {
 		t.Errorf("lime wedges = %+v", it)
 	}
 	// What's left of the blend, measured: never "the rest" (decision 631).
 	if it := item(t, c, 3, "Southwest Spice Blend"); it.Prep != "from Have Ready" || it.AmountText != "2 ¾ tsp" {
 		t.Errorf("rest of the blend = %+v", it)
 	}
-	if it := item(t, c, 3, "Lime wedge"); it.AmountText != "1" {
+	// A wedge of the lime quartered in step 1, which says so (build 122 round 4).
+	if it := item(t, c, 3, "Lime wedge"); it.AmountText != "1" || it.Prep != "from step 1" {
 		t.Errorf("squeeze = %+v", it)
 	}
 	// Four wedges, two juiced and one squeezed: one left to serve.
-	if it := item(t, c, 4, "Lime wedge"); it.Prep != "" || it.AmountText != "1" {
+	if it := item(t, c, 4, "Lime wedge"); it.Prep != "from step 1" || it.AmountText != "1" {
 		t.Errorf("serving wedges = %+v", it)
 	}
 	for _, g := range c.ByStep {

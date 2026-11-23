@@ -70,9 +70,9 @@ struct PantryItemFields: View {
             .pickerStyle(.segmented)
             DatePicker("Put Away", selection: $draft.storedOn, in: ...Date.now, displayedComponents: .date)
             if draft.hasExpiry {
-                DatePicker("Best By", selection: $draft.expiryDate, displayedComponents: .date)
+                DatePicker("Best by", selection: $draft.expiryDate, displayedComponents: .date)
             } else {
-                LabeledContent("Best By") {
+                LabeledContent("Best by") {
                     if let suggestion,
                         let date = PantryDate.date(from: suggestion.bestBy, timeZone: .autoupdatingCurrent)
                     {

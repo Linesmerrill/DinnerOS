@@ -43,8 +43,9 @@ nonisolated enum BiometryKind: String, Equatable, Sendable {
         String(localized: "Sign in with \(name)")
     }
 
+    /// The Account toggle, in the same sentence case as the sign-in button (build 122 round 4).
     var toggleTitle: String {
-        String(localized: "Sign In with \(name)")
+        String(localized: "Sign in with \(name)")
     }
 }
 

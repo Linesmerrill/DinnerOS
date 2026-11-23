@@ -225,7 +225,7 @@ struct HouseholdView: View {
     /// where `BuildChannel.showsCompWording` allows it, never in a Release build.
     private var plusLine: String? {
         guard let plus, plus.isEnabled, let status = plus.status else { return nil }
-        guard status.active else { return String(localized: "No Plus Yet") }
+        guard status.active else { return String(localized: "No Plus yet") }
         return PlusText.status(status, channel: BuildChannelStore.shared.channel)
     }
 

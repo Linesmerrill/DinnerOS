@@ -166,9 +166,9 @@ enum QAShotCompare {
     /// without Plus differs from the main test household's only in its name, initials and Plus
     /// line (build 122 round 4, Hark's item 15c). scripts/qa_shot_compare.py ALLOWED_PAIRS is the
     /// same list.
-    static let allowedPairs: Set<Set<String>> = [
-        ["menu-search-typed-imported", "menu-search-typed-typed-by-hand"],
-        ["household-new-household", "household"],
+    static let allowedPairs: [String: Set<String>] = [
+        "Menu search, one card each": ["menu-search-typed-imported", "menu-search-typed-typed-by-hand"],
+        "Household with and without Plus": ["household-new-household", "household"],
     ]
 
     /// The published file name for a checklist name, as scripts/qa-screenshots.py makes it:
@@ -196,7 +196,7 @@ enum QAShotCompare {
     static func isAllowedPair(_ first: String, _ second: String) -> Bool {
         let a = slug(first)
         let b = slug(second)
-        return a != b && allowedPairs.contains([a, b])
+        return a != b && allowedPairs.values.contains([a, b])
     }
 
     static func isSameScreen(_ a: QAShotImage, _ b: QAShotImage) -> Bool {

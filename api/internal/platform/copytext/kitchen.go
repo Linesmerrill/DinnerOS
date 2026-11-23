@@ -8,7 +8,7 @@ import (
 )
 
 // The app's casing rule (build 122, Hark's review item 16): names and labels
-// are Title Case ("Jasmine Rice", "Household Name", "Best By"); text that is a
+// are Title Case ("Jasmine Rice", "Household Name"); text that is a
 // sentence or a status stays a sentence ("Best by Jul 21, 2027", "3 of your
 // invites counted"). These helpers apply the rule to words the app didn't
 // write: ingredient names a household typed, step text and descriptions a

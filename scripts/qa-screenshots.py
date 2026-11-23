@@ -26,9 +26,24 @@ REPO = "Linesmerrill/DinnerOS"
 # sign-in screen with and without Face ID, and Start Cooking on a scrolled recipe.
 TESTS = ("AppSweepQATests", "ScreensQATests", "testSignInScreenWithFaceID", "StartCookingQATests",
          "testComingBackFromTheBackgroundNeverAsksForFaceID", "ShopComponentQATests", "ShopPrepQATests")
-# Shots that run on one config only, and must be in the set somewhere (Nov 22: Face ID never
-# asks on the way back; a sauce with every item had is still made).
-REQUIRED_ONCE = ("Face ID › Back from the background", "Shop › Sauce with every item had", "Shop › Freeze card")
+# Screens every config must have.
+REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop", "Pantry", "Pantry › Add an Item",
+            "Household", "Plus paywall",
+            # The cooking screen's steps, on a phone's Steps tab or an iPad's steps column (build 122
+            # round 4, Hark's item 15b: the iPads had none).
+            "Start Cooking › Steps",
+            # Nov 22's three, in every config since Hark's build 122 round 4 review (item 1).
+            "Face ID › Back from the background", "Shop › Sauce with every item had", "Shop › Freeze card",
+            # Both recipe pages scroll everywhere, the upright iPad included (the same review).
+            "Recipe page › typed by hand › scrolled", "Recipe page › imported › scrolled")
+# Required screens a config may lack, each with its reason. The hand-typed recipe's page fits on
+# the upright iPad's screen, so there's nothing to scroll and a "scrolled" shot would be a copy of
+# the top (Hark's review, build 122 round 3 item 13c; the publisher refuses copies). Allowed only
+# here: on any other config the shot is required.
+COVERAGE_EXCEPTIONS = {
+    (f"ipadP-{mode}", "Recipe page › typed by hand › scrolled"): "Hand-typed recipe page fits on the upright iPad"
+    for mode in ("light", "dark")
+}
 DEVICES = {
     "large": ("iPhone 17 Pro Max", "portrait"),
     "small": ("iPhone SE", "portrait"),
@@ -141,18 +156,10 @@ def main():
     screens = collections.defaultdict(set)
     for m in manifest:
         screens[m["config"]].add(re.sub(r" \((light|dark)\)$", "", m["screen"]))
-    required = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop", "Pantry", "Pantry › Add an Item",
-                "Household", "Plus paywall")
     for c in configs:
-        missing = [r for r in required if r not in screens[c]]
-        # The cooking screen's steps, on a phone's Steps tab or an iPad's steps column, in every
-        # config (build 122 round 4, Hark's item 15b: the iPads had none).
-        if "Start Cooking › Steps" not in screens[c]:
-            missing.append("Start Cooking › Steps")
+        missing = [r for r in REQUIRED if r not in screens[c] and (c, r) not in COVERAGE_EXCEPTIONS]
         if missing:
             problems.append(f"{c} is missing: {', '.join(missing)}")
-    everywhere = set().union(*screens.values()) if screens else set()
-    problems += [f"no {r} shot in any config" for r in REQUIRED_ONCE if r not in everywhere]
     if problems:
         print("\n".join(problems), file=sys.stderr)
         if os.environ.get("MISSING_OK") != "1":
@@ -169,6 +176,12 @@ def main():
         print("\n".join(duplicates), file=sys.stderr)
         sys.exit(f"{len(duplicates)} pair(s) of screenshots show the same screen: not publishing")
     print("No duplicate screens")
+    # The named exceptions, so the review sees each one (Hark's build 122 round 4 review, item 10).
+    for name, pair in qa_shot_compare.ALLOWED_PAIRS.items():
+        print(f"Allowed look-alikes, {name}: {' and '.join(sorted(pair))}")
+    for (config, screen), reason in sorted(COVERAGE_EXCEPTIONS.items()):
+        if screen not in screens[config]:
+            print(f"Not shot on {config}, {screen}: {reason}")
     archive = shutil.make_archive(out, "zip", out)
     print(f"Folder: {out}\nZip: {archive} ({os.path.getsize(archive) // 1_000_000} MB)")
     if os.environ.get("DRY_RUN") == "1":

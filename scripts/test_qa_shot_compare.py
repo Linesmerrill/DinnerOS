@@ -121,6 +121,11 @@ class CompareTests(unittest.TestCase):
         self.assertFalse(compare.is_allowed("a/household.png", "a/menu-search-typed-imported.png"))
         self.assertFalse(compare.is_allowed("a/household.png", "a/household.png"))
 
+    def test_each_allowed_pair_is_named(self):
+        self.assertEqual(compare.allowed_name("a/menu-search-typed-typed-by-hand.png", "b/menu-search-typed-imported.png"),
+                         "Menu search, one card each")
+        self.assertIsNone(compare.allowed_name("a/menu.png", "a/menu-search-typed-imported.png"))
+
     def test_the_device_comes_from_the_folder_name(self):
         self.assertEqual(compare.device_of("ipadL-dark"), "ipadL")
         kept = compare.kept_cells("ipadL", 834, 1210)

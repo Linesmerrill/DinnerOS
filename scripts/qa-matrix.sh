@@ -189,6 +189,9 @@ runs_on() {
     local config=$1 test=$2
     case $test in
     AppSweepQATests/SWEEP | ScreensQATests/* | BiometricSignInQATests/testSignInScreenWithFaceID | StartCookingQATests) return 0 ;;
+    # Nov 22's three screens, in every config since Hark's build 122 round 4 review (item 1): back
+    # from the background, a sauce with every item had, the freeze card.
+    BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID | ShopComponentQATests | ShopPrepQATests) return 0 ;;
     esac
     local placed
     case $test in
@@ -217,14 +220,6 @@ runs_on() {
     BiometricSignInQATests/testFakeFaceID) placed=ipadP-light ;;
     BiometricSignInQATests/testSimulatorFaceID) placed=duo-dark ;;
     BiometricSignInQATests/testFaceIDSignInLoop) placed=duo-light ;;
-    # Face ID only unlocks sign-in (Nov 22): back from the background never asks, on the
-    # landscape iPad.
-    BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID) placed=ipadL-light ;;
-    # Skipping every item of a sauce still makes it (Nov 22), on the large iPhone in dark, as
-    # Merrill saw it.
-    ShopComponentQATests) placed=large-dark ;;
-    # The freeze card counts whole dinners (Nov 22), on the small iPhone in dark.
-    ShopPrepQATests) placed=small-dark ;;
     # The App Review account (decision 752) is one account, so its test runs once, and only
     # when the review account's email and password are exported for it.
     ReviewAccountQATests)

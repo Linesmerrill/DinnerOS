@@ -48,10 +48,12 @@ MASKS = {
 # cells may change: on an iPad the search for one recipe and for another show one result card each
 # in a wide, mostly empty page; the Household tab of a household without Plus differs from the
 # main test household's only in its name, its initials and its Plus line.
-ALLOWED_PAIRS = frozenset({
-    frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
-    frozenset({"household-new-household", "household"}),
-})
+ALLOWED_PAIRS = {
+    # Two searches, one result card each: on an iPad the rest of the Menu is the same.
+    "Menu search, one card each": frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
+    # A household without Plus differs only in its name, initials and Plus line.
+    "Household with and without Plus": frozenset({"household-new-household", "household"}),
+}
 # Pixels per point by device.
 SCALES = {"large": 3, "small": 2, "duo": 3, "ipadL": 2, "ipadP": 2}
 
@@ -121,9 +123,16 @@ def screen_name(path):
     return os.path.splitext(os.path.basename(path))[0]
 
 
+def allowed_name(first, second):
+    """The name of the exception (ALLOWED_PAIRS) for a pair of different screens that may look
+    alike, or None."""
+    pair = frozenset({screen_name(first), screen_name(second)})
+    return next((name for name, allowed in ALLOWED_PAIRS.items() if allowed == pair), None)
+
+
 def is_allowed(first, second):
     """True for a pair of different screens that may look alike (ALLOWED_PAIRS)."""
-    return frozenset({screen_name(first), screen_name(second)}) in ALLOWED_PAIRS
+    return allowed_name(first, second) is not None
 
 
 def duplicates(paths, device, threshold=SAME_SCREEN):
