@@ -54,7 +54,7 @@ struct CatalogRecipeDetailView: View {
             }
             .padding(DS.Space.l)
             // Clear of the Add to Library bar's fade, so the last step comes out of it whole.
-            .padding(.bottom, DS.Size.rowEdgeFade)
+            .padding(.bottom, DS.Size.edgeFade)
             .dsReadableWidth()
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -67,8 +67,10 @@ struct CatalogRecipeDetailView: View {
             if recipe != nil, isInLibrary || canAdd {
                 // Rows and headings fade into the bar instead of being cut by a hard line
                 // (Hark's review, build 122 round 4); the page keeps that height clear at its end.
+                // The usual fade, not a row's: at a row's height it sat over "20 min · Serves 2"
+                // on a short phone with the page at rest, at about 1.7:1 (build 122 round 5).
                 DSBottomBar(showsDivider: false) { addButton }
-                    .dsEdgeFade(.top, height: DS.Size.rowEdgeFade)
+                    .dsEdgeFade(.top)
             }
         }
         // The small title only once the large one has scrolled off: one title at a time.
@@ -146,7 +148,7 @@ struct CatalogRecipeDetailView: View {
         }
         Text(Self.details(for: recipe))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DS.Colors.secondaryText)
         if let description = recipe.description, !description.isEmpty {
             Text(description)
                 .font(.body)

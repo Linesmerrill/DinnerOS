@@ -355,7 +355,9 @@ struct MenuChipBar: View {
             .padding(.horizontal, DS.Space.l)
         }
         .scrollIndicators(.hidden)
-        .carouselInSafeArea()
+        // A chip running past the screen's edge fades out across the inset instead of being cut
+        // off there (an iPhone SE and the Duo's cover screen, build 122 review 5).
+        .carouselInSafeArea(fadesEdges: true)
     }
 
     private var searchChip: some View {
