@@ -64,13 +64,16 @@ type PrepCardResponse struct {
 	// Instruction is the card's one line of guidance, ready to show.
 	Instruction string `json:"instruction"`
 	// GlanceText and GlanceNote are the card's short version for the Shop
-	// and Pantry banner at the suggested bag count, ready to show: "2 bags,
-	// 10 oz each" and "Plus 3 oz extra. You already have 9 oz." The note is
-	// empty when there's nothing to add.
+	// and Pantry banner at the suggested bag count, ready to show: "23 oz
+	// left after this week" and "Freeze 2 bags of 10 oz, 3 oz extra." The
+	// note is empty when there's nothing to add.
 	GlanceText string `json:"glanceText"`
 	GlanceNote string `json:"glanceNote"`
+	// RestText is what the pack leaves once this week's meals are kept out,
+	// "23 oz", the same whatever the bag count; empty when nothing freezes.
+	RestText string `json:"restText"`
 	// OnHandText is what the pantry already had toward the week's meals,
-	// "9 oz", or empty.
+	// "9 oz", or empty. Build 122 showed it in the banner; build 123 doesn't.
 	OnHandText string `json:"onHandText"`
 	// Reminder is none, thaw, or list: which reminder the app may promise.
 	Reminder     string `json:"reminder"`
@@ -196,6 +199,9 @@ func prepCardResponse(c PrepCard) PrepCardResponse {
 	out.BoughtText, out.NeededText = amountText(p.Bought, p.Unit), amountText(p.Needed, p.Unit)
 	out.GlanceText, out.GlanceNote = prepGlance(c)
 	out.OnHandText = prepOnHand(c)
+	if p.Freezable && c.Portions.Portions > 0 {
+		out.RestText = prepRestText(c)
+	}
 	for _, m := range c.Meals {
 		meal := PrepMealResponse{RecipeID: m.RecipeID, RecipeName: m.RecipeName, Past: m.Past}
 		if m.Day != "" {

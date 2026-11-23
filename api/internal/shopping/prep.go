@@ -721,11 +721,14 @@ func prepInstruction(card PrepCard) string {
 }
 
 // prepGlance is the card's short version for the Shop and Pantry banner, at
-// the suggested bag count: what to do with it ("2 bags, 10 oz each", "6 oz
-// extra", "Keep 10 oz") and a note under it with the extra and what the
-// pantry already had ("Plus 3 oz extra. You already have 9 oz."). A card with
-// less than a bag says why it isn't frozen under its own row (build 122: the
-// note sat between two rows and read as the one above's).
+// the suggested bag count: what's left once this week's meals are kept out
+// ("23 oz left after this week") and a note under it that splits that into
+// bags and extra ("Freeze 2 bags of 10 oz, 3 oz extra."), so the two lines
+// add up. A card with less than a bag says why it isn't frozen under its own
+// row (build 122: the note sat between two rows and read as the one above's).
+// Build 123 (Hark): "2 bags, 10 oz each" with "Plus 3 oz extra. You already
+// have 9 oz." added up to nothing a person could check, so what the pantry
+// had stays on the card and out of the banner.
 func prepGlance(card PrepCard) (text, note string) {
 	unit := card.Pack.Unit
 	keep := "Keep " + amountText(card.Pack.Needed, unit)
@@ -733,25 +736,35 @@ func prepGlance(card PrepCard) (text, note string) {
 		return keep, ""
 	}
 	leftover := leftoverText(card.Portions.Leftover, unit)
-	switch n := card.Portions.Portions; {
-	case n <= 0:
+	n := card.Portions.Portions
+	if n <= 0 {
 		if leftover == "" {
 			return keep, ""
 		}
 		return leftover + " extra", PrepExtrasNote
-	case n == 1:
-		text = "1 bag, " + amountText(card.Portions.PortionSize, unit)
-	default:
-		text = fmt.Sprintf("%d bags, %s each", n, amountText(card.Portions.PortionSize, unit))
 	}
-	var notes []string
+	text = prepRestText(card) + " left after this week"
+	each := amountText(card.Portions.PortionSize, unit)
+	if n == 1 {
+		note = "Freeze 1 bag of " + each
+	} else {
+		note = fmt.Sprintf("Freeze %d bags of %s", n, each)
+	}
 	if leftover != "" {
-		notes = append(notes, fmt.Sprintf("Plus %s extra.", leftover))
+		note += ", " + leftover + " extra"
 	}
-	if had := prepOnHand(card); had != "" {
-		notes = append(notes, fmt.Sprintf("You already have %s.", had))
+	return text, note + "."
+}
+
+// prepRestText is what the pack leaves once this week's meals are kept out,
+// "23 oz": the bags plus the extra, whatever the bag count.
+func prepRestText(card PrepCard) string {
+	if ratOfExact(card.Pack.Surplus).Sign() > 0 {
+		return amountText(card.Pack.Surplus, card.Pack.Unit)
 	}
-	return text, strings.Join(notes, " ")
+	rest := new(big.Rat).Mul(big.NewRat(int64(card.Portions.Portions), 1), ratOfExact(card.Portions.PortionSize))
+	rest.Add(rest, ratOfExact(card.Portions.Leftover))
+	return amountText(rest.RatString(), card.Pack.Unit)
 }
 
 // PrepExtrasNote is what the banner says under an item with less than a bag
