@@ -187,6 +187,8 @@ struct CookingView: View {
                     if fade != ingredientsFade { ingredientsFade = fade }
                 }
                 .dsTopBarEdge(color: DS.Colors.surface, height: ingredientsFade)
+                // Rows fade out whole before they reach the bar, never cut in half.
+                .dsRowsFadeAtTopEdge()
                 .frame(width: max(320, geometry.size.width * 0.38))
                 .background(DS.Colors.surface)
                 Divider()
@@ -199,6 +201,7 @@ struct CookingView: View {
                     if fade != stepsFade { stepsFade = fade }
                 }
                 .dsTopBarEdge(color: DS.Colors.background, height: stepsFade)
+                .dsRowsFadeAtTopEdge()
                 .contentMargins(.bottom, CGFloat(timers.timers.count) * 72, for: .scrollContent)
                 .overlay(alignment: .bottomTrailing) {
                     CookTimerDock(timers: timers, stacked: true)
@@ -267,6 +270,9 @@ struct CookingView: View {
             .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
                 if fade != tabFade { tabFade = fade }
             }
+            // Rows fade out whole before they reach the pinned picker, never cut in half (Hark's
+            // review, build 122 round 5: "½ cup Jasmine Rice" on the Duo).
+            .dsRowsFadeAtTopEdge()
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CookTimerDock(timers: timers, stacked: false)
             }
@@ -418,6 +424,7 @@ private struct CookHeader: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+            .dsFadesAtBarEdge()
         }
     }
 }
@@ -449,25 +456,33 @@ struct CookIngredientList: View {
                 .foregroundStyle(DS.Colors.accent)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, DS.Space.s)
+                .dsFadesAtBarEdge()
             if let notes = dish.instructions?.saveForLater, !notes.isEmpty {
                 CookSaveForLaterCard(notes: notes)
                     .padding(.bottom, DS.Space.s)
+                    .dsFadesAtBarEdge()
             }
             switch layout {
             case .all:
                 ForEach(dish.ingredients) { ingredient in
                     ingredientRow(ingredient)
+                        .dsFadesAtBarEdge()
                     ForEach(ingredient.parts) { part in
                         partRow(
                             part, of: ingredient,
-                            isLast: part.id == ingredient.parts.last?.id && ingredient.components.isEmpty)
+                            isLast: part.id == ingredient.parts.last?.id && ingredient.components.isEmpty
+                        )
+                        .dsFadesAtBarEdge()
                     }
                     ForEach(Array(ingredient.components.enumerated()), id: \.offset) { index, component in
                         componentRow(
                             component, id: ingredient.componentID(index),
-                            isLast: index == ingredient.components.count - 1)
+                            isLast: index == ingredient.components.count - 1
+                        )
+                        .dsFadesAtBarEdge()
                     }
                     Divider().padding(.leading, nameInset)
+                        .dsFadesAtBarEdge()
                 }
             case .byStep:
                 let current = session.current(recipe: dish.recipe.id)
@@ -494,12 +509,16 @@ struct CookIngredientList: View {
                 .padding(.top, DS.Space.l)
                 .padding(.bottom, DS.Space.xs)
                 .accessibilityAddTraits(.isHeader)
+                .dsFadesAtBarEdge()
             ForEach(group.items) { item in
                 stepItemRow(item, showsSave: reminders.contains(item.id))
+                    .dsFadesAtBarEdge()
                 ForEach(Array(item.parts.enumerated()), id: \.offset) { index, part in
                     stepPartRow(part, index: index, of: item, isLast: index == item.parts.count - 1)
+                        .dsFadesAtBarEdge()
                 }
                 Divider().padding(.leading, nameInset)
+                    .dsFadesAtBarEdge()
             }
         }
         .padding(.bottom, DS.Space.xxs)
@@ -856,6 +875,7 @@ struct CookStepList: View {
                 .font(DS.Typography.sectionTitle)
                 .foregroundStyle(DS.Colors.accent)
                 .accessibilityAddTraits(.isHeader)
+                .dsFadesAtBarEdge()
             if let steps = dish.instructions?.steps, !steps.isEmpty {
                 ForEach(steps) { step in
                     stepCard(index: step.index, imageURL: step.imageURL, current: current) {
@@ -912,6 +932,8 @@ struct CookStepList: View {
                 .padding(.horizontal, -DS.Space.ml)
         }
         .opacity(current == nil || isCurrent ? 1 : 0.45)
+        // A short step fades out whole under the bar; a tall one keeps the bar's gradient.
+        .dsFadesAtBarEdge()
         .contentShape(Rectangle())
         // Simultaneous, so a time in the text still opens its timer (and marks this step).
         .simultaneousGesture(

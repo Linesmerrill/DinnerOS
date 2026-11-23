@@ -164,7 +164,7 @@ nonisolated enum DS {
         /// the bar fades away instead of being cut in half by a hard line (build 122).
         static let edgeFade: CGFloat = 32
         /// A fade a list row tall, so the row passing under a pinned bar fades away whole rather
-        /// than being sliced: above Open in Walmart and Add to Library, and the most the fade
+        /// than being sliced: above Open in Walmart, and the most the fade
         /// under the recipe page's picker and the cooking screen's bar grows to
         /// (`DSEdgeFade.height(scrolledUnder:)`) (build 122, Hark round 4 item 1).
         static let rowEdgeFade: CGFloat = 56
@@ -566,6 +566,72 @@ extension View {
             DSEdgeFade(edge: edge, color: color, height: height)
                 .offset(y: edge == .bottom ? max(height, 0) : -max(height, 0))
         }
+    }
+}
+
+// MARK: Row fades
+
+extension EnvironmentValues {
+    /// Where the bar pinned over a scrolling list ends, in the scroll view's own coordinates
+    /// (`.scrollView`): rows marked `dsFadesAtBarEdge()` fade out whole before they reach it.
+    /// `nil` when nothing is pinned over the list.
+    @Entry var dsBarEdge: CGFloat? = nil
+}
+
+/// A list row that fades out as a whole on its way under a pinned bar: fully there until its top
+/// comes within `DS.Size.edgeFade` of the bar's edge (where a list's first row rests, so nothing
+/// fades at rest), gone by the time it reaches it. A
+/// gradient at the bar's edge alone left the row it crossed with its top half missing and its
+/// bottom half sharp on the Duo's short screen (Hark's review, build 122 round 5).
+nonisolated enum DSRowEdgeFade {
+    /// Rows taller than this (a step card with its photo) keep the bar's gradient instead: fading
+    /// one whole would blank most of a screen.
+    static let maxRowHeight: CGFloat = 2 * DS.Size.rowEdgeFade
+
+    /// The row's opacity, from its top and height and the bar's edge (all in the scroll view's
+    /// coordinates). 1 with no bar, or for a row too tall to fade whole.
+    static func opacity(top: CGFloat, height: CGFloat, barEdge: CGFloat?) -> Double {
+        guard let barEdge, height <= maxRowHeight else { return 1 }
+        return Double(min(max((top - barEdge) / DS.Size.edgeFade, 0), 1))
+    }
+}
+
+private struct DSRowEdgeFadeModifier: ViewModifier {
+    @Environment(\.dsBarEdge) private var barEdge
+
+    func body(content: Content) -> some View {
+        content.visualEffect { [barEdge] content, proxy in
+            let frame = proxy.frame(in: .scrollView)
+            return content.opacity(DSRowEdgeFade.opacity(top: frame.minY, height: frame.height, barEdge: barEdge))
+        }
+    }
+}
+
+/// Reads where a scroll view's content starts under its top bar (its top inset) and hands it to
+/// its rows as `dsBarEdge`.
+private struct DSScrollBarEdge: ViewModifier {
+    @State private var top: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentInsets.top }) { _, inset in
+                if inset != top { top = inset }
+            }
+            .environment(\.dsBarEdge, top)
+    }
+}
+
+extension View {
+    /// Fades this row out whole before it reaches the bar pinned over its list (`dsBarEdge`), so
+    /// it's never cut in half by the bar's edge. Only moves its drawing; the layout is unchanged.
+    func dsFadesAtBarEdge() -> some View {
+        modifier(DSRowEdgeFadeModifier())
+    }
+
+    /// On a scroll view whose rows pass under a bar at its top edge (a pinned picker above it, or
+    /// the navigation bar): its `dsFadesAtBarEdge()` rows fade out at that edge.
+    func dsRowsFadeAtTopEdge() -> some View {
+        modifier(DSScrollBarEdge())
     }
 }
 

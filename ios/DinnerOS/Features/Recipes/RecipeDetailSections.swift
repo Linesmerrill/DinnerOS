@@ -66,12 +66,14 @@ struct RecipeDescriptionSection: View {
             if let description = recipe.description, !description.isEmpty {
                 Text(description)
                     .foregroundStyle(Color.secondary)
+                    .dsFadesAtBarEdge()
             }
             if !recipe.utensils.isEmpty {
                 DetailSection("Utensils") {
                     Text(recipe.utensils.formatted(.list(type: .and)))
                         .foregroundStyle(Color.secondary)
                 }
+                .dsFadesAtBarEdge()
             }
             // After the meal itself, where someone who just cooked it finishes reading.
             if hasBeenCooked {
@@ -102,6 +104,9 @@ struct RecipeDescriptionSection: View {
 struct RecipeIngredientsSection: View {
     let recipe: Recipe
     @Binding var servings: Int?
+    /// The serving size as a picker; off when the bottom bar already has the stepper, so the
+    /// size is named here but changed in one place.
+    var showsServingPicker = true
     /// The rendered steps, which carry each ingredient's left-out state. `nil` until they load.
     var instructions: RecipeInstructions? = nil
     /// Whether this member may leave ingredients out (`plan.edit`). Others see the state only.
@@ -128,15 +133,20 @@ struct RecipeIngredientsSection: View {
                         .foregroundStyle(Color.secondary)
                 }
                 .accessibilityElement(children: .combine)
+                .dsFadesAtBarEdge()
             }
             servingPicker
+                .dsFadesAtBarEdge()
             VStack(alignment: .leading, spacing: DS.Space.ml) {
                 let lines = recipe.ingredientLines(servings: servings ?? options.first ?? 0)
                 ForEach(RecipeIngredientStates.make(lines: lines, instructions: instructions)) { state in
+                    // Each row fades out whole under the pinned picker, never cut in half.
                     IngredientRow(
                         line: state.line, state: state, canEdit: canEdit && state.canLeaveOut,
                         canSkipOnce: canSkipOnce, isWorking: working.contains(state.id),
-                        leaveOut: { leaveOut(state, $0) }, putBack: { putBack(state) })
+                        leaveOut: { leaveOut(state, $0) }, putBack: { putBack(state) }
+                    )
+                    .dsFadesAtBarEdge()
                 }
             }
         }
@@ -144,7 +154,7 @@ struct RecipeIngredientsSection: View {
 
     @ViewBuilder
     private var servingPicker: some View {
-        if options.count > 1, let selected = servings {
+        if showsServingPicker, options.count > 1, let selected = servings {
             VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text(MenuFormat.servings(selected).capitalized)
                     .font(.headline)
@@ -165,8 +175,8 @@ struct RecipeIngredientsSection: View {
                     .pickerStyle(.segmented)
                 }
             }
-        } else if let only = options.first {
-            Text(MenuFormat.servings(only).capitalized)
+        } else if let shown = servings ?? options.first {
+            Text(MenuFormat.servings(shown).capitalized)
                 .font(.headline)
         }
     }
@@ -314,6 +324,7 @@ struct RecipeNutritionSection: View {
                     )
                     .foregroundStyle(DS.Colors.secondaryText)
                 }
+                .dsFadesAtBarEdge()
                 if let onAdd {
                     Button("Add Nutrition", systemImage: "plus", action: onAdd)
                         .buttonStyle(.dsPrimary(.small))
@@ -322,6 +333,7 @@ struct RecipeNutritionSection: View {
                 Text("Nutrition Values")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
+                    .dsFadesAtBarEdge()
                 VStack(spacing: 0) {
                     ForEach(Array(nutrients.enumerated()), id: \.offset) { index, nutrient in
                         HStack {
@@ -334,6 +346,7 @@ struct RecipeNutritionSection: View {
                         }
                         .padding(.vertical, DS.Space.sm)
                         .accessibilityElement(children: .combine)
+                        .dsFadesAtBarEdge()
                         if index < nutrients.count - 1 {
                             Divider()
                         }
@@ -342,6 +355,7 @@ struct RecipeNutritionSection: View {
                 Text("Per serving, as published with the recipe. Values are approximate.")
                     .font(.footnote)
                     .foregroundStyle(Color.secondary)
+                    .dsFadesAtBarEdge()
             }
         }
     }
