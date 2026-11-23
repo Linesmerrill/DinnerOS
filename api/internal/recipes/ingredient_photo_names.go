@@ -51,14 +51,74 @@ func numberForms(key string) []string {
 	return out
 }
 
+// photoSynonyms are names for the same food that share no words, so the
+// descriptor rule can't find one from the other (build 123, Hark's review
+// item 10: "Bow Tie Pasta" and "Basil Pesto" drew the fork and knife). Each
+// group is one food; a member borrows any other member's photo, in order.
+var photoSynonyms = [][]string{
+	{"farfalle", "bow tie pasta", "bowtie pasta", "bow-tie pasta"},
+	{"pesto", "basil pesto", "pesto sauce", "genovese pesto"},
+	{"scallions", "green onions", "spring onions"},
+	{"cilantro", "fresh coriander"},
+	{"chickpeas", "garbanzo beans"},
+	{"bell pepper", "sweet pepper"},
+	{"zucchini", "courgette"},
+}
+
+// pastaWord is the word a pasta shape is sold with or without: "rigatoni"
+// and "rigatoni pasta" are the same box.
+const pastaWord = " pasta"
+
+// sameFoodForms are key's other names: its synonyms and, for a pasta shape,
+// the name with or without "pasta". Not key itself.
+func sameFoodForms(key string) []string {
+	var out []string
+	if shape, ok := strings.CutSuffix(key, pastaWord); ok && shape != "" {
+		out = append(out, shape)
+	} else if !strings.Contains(key, " ") && key != "pasta" {
+		// A one-word shape ("rigatoni") may be filed as "rigatoni pasta".
+		out = append(out, key+pastaWord)
+	}
+	for _, f := range numberForms(key) {
+		for _, group := range photoSynonyms {
+			if !slices.Contains(group, f) {
+				continue
+			}
+			for _, other := range group {
+				if other == f {
+					continue
+				}
+				out = append(out, other)
+				if shape, ok := strings.CutSuffix(other, pastaWord); ok {
+					out = append(out, shape)
+				} else if strings.HasSuffix(f, pastaWord) {
+					out = append(out, other+pastaWord)
+				}
+			}
+		}
+	}
+	return out
+}
+
 // photoKeys are the catalog keys whose photo an ingredient keyed key may
 // borrow, best first: its own other number, then the plain ingredient in
-// either number. Never key itself.
+// either number, then the same food by another name. Never key itself.
 func photoKeys(key string) []string {
 	var out []string
-	for _, k := range append(numberForms(key), numberForms(photoBase(key))...) {
+	add := func(k string) {
 		if k != key && k != "" && !slices.Contains(out, k) {
 			out = append(out, k)
+		}
+	}
+	base := photoBase(key)
+	for _, k := range append(numberForms(key), numberForms(base)...) {
+		add(k)
+	}
+	for _, from := range []string{key, base} {
+		for _, k := range sameFoodForms(from) {
+			for _, f := range numberForms(k) {
+				add(f)
+			}
 		}
 	}
 	return out

@@ -98,3 +98,61 @@ func TestChickenThighsWithNoPhotoNeverBorrowAnotherCut(t *testing.T) {
 		t.Errorf("Diced Chicken Thighs = %+v, %v; want no photo", got, err)
 	}
 }
+
+// "Bow Tie Pasta" and "Basil Pesto" drew the fork and knife beside a catalog
+// that had them as "Farfalle" and "Pesto" (build 123, Hark's review item 10).
+// The same food by another name lends its photo, a pasta shape is the same
+// with or without "pasta", and a different food still never does.
+func TestTheSameFoodByAnotherNameLendsItsPhoto(t *testing.T) {
+	for key, want := range map[string][]string{
+		"bow tie pasta":     {"farfalle", "farfalle pasta"},
+		"farfalle":          {"bow tie pasta"},
+		"basil pesto":       {"pesto", "pesto sauce"},
+		"pesto":             {"basil pesto"},
+		"rigatoni":          {"rigatoni pasta"},
+		"rigatoni pasta":    {"rigatoni"},
+		"green onions":      {"scallions", "scallion"},
+		"garbanzo beans":    {"chickpeas"},
+		"fresh basil pesto": {"basil pesto", "pesto"},
+	} {
+		keys := photoKeys(key)
+		for _, w := range want {
+			if !slices.Contains(keys, w) {
+				t.Errorf("photoKeys(%q) = %v, missing %q", key, keys, w)
+			}
+		}
+		if slices.Contains(keys, key) {
+			t.Errorf("photoKeys(%q) lists the key itself", key)
+		}
+	}
+	for key, never := range map[string]string{
+		"basil pesto":     "basil",
+		"bow tie pasta":   "penne pasta",
+		"cherry tomatoes": "grape tomatoes",
+		"pasta":           "",
+	} {
+		if keys := photoKeys(key); slices.Contains(keys, never) {
+			t.Errorf("photoKeys(%q) = %v, borrows %q", key, keys, never)
+		}
+	}
+
+	const farfalle, pesto = "https://img.example/farfalle.png", "https://img.example/pesto.png"
+	store := newMemoryStore()
+	store.ingredients = []Ingredient{
+		{ID: "c1", Key: "bow tie pasta", Name: "Bow Tie Pasta"},
+		{ID: "c2", Key: "farfalle", Name: "Farfalle", ImageURL: farfalle},
+		{ID: "c3", Key: "basil pesto", Name: "Basil Pesto"},
+		{ID: "c4", Key: "pesto", Name: "Pesto", ImageURL: pesto},
+		{ID: "c5", Key: "basil", Name: "Basil", ImageURL: "https://img.example/basil.png"},
+	}
+	got, err := NewService(store).IngredientsByID(context.Background(), []string{"c1", "c3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"c1": farfalle, "c3": pesto}
+	for _, ing := range got {
+		if ing.ImageURL != want[ing.ID] {
+			t.Errorf("%s: photo %q, want %q", ing.Name, ing.ImageURL, want[ing.ID])
+		}
+	}
+}
