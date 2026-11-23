@@ -109,6 +109,63 @@ struct RecipeHeaderEdgeTests {
         #expect(DSRowEdgeFade.opacity(top: 120, height: DSRowEdgeFade.maxRowHeight + 1, barEdge: 120) == 1)
     }
 
+    // MARK: Nothing fades at rest (build 122 round 5, items 1 and 3)
+
+    /// The iPad cooking screen's panes sit under the navigation bar with an 86 pt top inset. At
+    /// rest nothing fades: the inset used as the edge faded Step 1, the Steps heading and the
+    /// photo out when the screen opened.
+    @Test func aPaneAtRestHasNoFade() {
+        #expect(DSRowEdgeFade.barEdge(contentOffset: -86, topInset: 86) == nil)
+        #expect(DSRowEdgeFade.barEdge(contentOffset: 0, topInset: 0) == nil)
+        // Rubber-banding past the top isn't scrolling under the bar either.
+        #expect(DSRowEdgeFade.barEdge(contentOffset: -120, topInset: 86) == nil)
+    }
+
+    /// Once scrolled, the edge is the top of the scroll view's own space, which starts below
+    /// its inset: the Steps heading (32 pt down) is whole the moment the pane starts to move.
+    @Test func aScrolledPaneFadesAtTheTopOfItsSpace() throws {
+        let edge = try #require(DSRowEdgeFade.barEdge(contentOffset: -80, topInset: 86))
+        #expect(edge == 0)
+        #expect(DSRowEdgeFade.opacity(top: DS.Size.edgeFade, height: 24, barEdge: edge) == 1)
+        #expect(DSRowEdgeFade.opacity(top: 0, height: 24, barEdge: edge) == 0)
+        #expect(DSRowEdgeFade.barEdge(contentOffset: 40, topInset: 0) == 0)
+    }
+
+    // MARK: A list never rests on a half-faded row (build 122 round 5, items 4 and 10b)
+
+    /// The Allergens line stopped 8 pt under the picker, inside the fade (1.5:1 in dark): the
+    /// page moves back 24 pt so it rests whole, where a list's first row rests.
+    @Test func aRowRestingInTheFadeComesBackWhole() throws {
+        let edge: CGFloat = 200
+        let rows: [(top: CGFloat, height: CGFloat)] = [(edge + 8, 24), (edge + 40, 44), (edge + 84, 44)]
+        let shift = try #require(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge))
+        #expect(shift == 8 - DS.Size.edgeFade)
+    }
+
+    /// A row mostly gone under the picker: the next one comes up to rest instead, the shorter
+    /// move, so the list doesn't jump back a whole row.
+    @Test func aRowMostlyGoneLetsTheNextOneRest() throws {
+        let edge: CGFloat = 200
+        let rows: [(top: CGFloat, height: CGFloat)] = [(edge - 30, 44), (edge + 14, 44), (edge + 58, 44)]
+        let shift = try #require(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge))
+        // The second row (14 pt down) moves to 32 pt down.
+        #expect(shift == 14 - DS.Size.edgeFade)
+        // At the end of the page there's no going on: the row comes back instead.
+        let rows2: [(top: CGFloat, height: CGFloat)] = [(edge + 2, 44), (edge + 46, 44)]
+        #expect(DSRowEdgeFade.restingShift(rows: rows2, barEdge: edge, maxForward: 0) == 2 - DS.Size.edgeFade)
+    }
+
+    /// Rows that rest whole, a list at its top, and tall step cards are left alone.
+    @Test func wholeRowsDontMove() {
+        let edge: CGFloat = 200
+        #expect(DSRowEdgeFade.restingShift(rows: [(edge + DS.Size.edgeFade, 44)], barEdge: edge) == nil)
+        #expect(DSRowEdgeFade.restingShift(rows: [(edge + 4, 44)], barEdge: nil) == nil)
+        #expect(
+            DSRowEdgeFade.restingShift(rows: [(edge + 4, DSRowEdgeFade.maxRowHeight + 1)], barEdge: edge) == nil)
+        // A row entirely under the bar is already gone; the one below it rests whole.
+        #expect(DSRowEdgeFade.restingShift(rows: [(edge - 60, 40), (edge + 40, 44)], barEdge: edge) == nil)
+    }
+
     // MARK: A short tab still lets the picker pin (build 122 round 5)
 
     /// The Duo's typed-by-hand recipe on Nutrition: the page ends inside the snap zone, so it

@@ -52,6 +52,9 @@ struct RecipeDetailView: View {
     @State private var barFade: CGFloat = DS.Size.edgeFade
     /// The fade under the pinned picker: a row tall once rows scroll under it.
     @State private var pickerFade: CGFloat = DS.Size.edgeFade
+    /// Where the section's fading rows are, so a page that stops with one part way into the
+    /// picker's fade can move to show it whole.
+    @State private var rowFrames = DSRowFrames(space: RecipeDetailHeader.contentSpace)
     @State private var pickerHeight: CGFloat = 0
     /// The scroll view's own top safe area: where the bar ends.
     @State private var scrollTop: CGFloat = 0
@@ -199,6 +202,7 @@ struct RecipeDetailView: View {
                             .recipeColumn()
                             // Its rows fade out whole before they reach the pinned picker's edge.
                             .environment(\.dsBarEdge, pinLine + pickerHeight)
+                            .environment(\.dsRowFrames, rowFrames)
                             .padding(.top, DS.Size.edgeFade - DS.Space.xl)
                             // Once rows scroll up under the pinned picker, its fade grows to a row's
                             // height, so the top row is never cut by a hard edge (Hark's review,
@@ -252,7 +256,7 @@ struct RecipeDetailView: View {
         // A drag let go without a flick never asks the snap where to stop, and a short tab came
         // to rest with the large title half under the bar (Hark's review, build 122 round 5):
         // once the page stops, it settles at the nearer end.
-        .onScrollPhaseChange { _, phase, context in
+        .onScrollPhaseChange { oldPhase, phase, context in
             guard phase == .idle else { return }
             let geometry = context.geometry
             let reachable = RecipeDetailHeader.reachable(
@@ -262,6 +266,20 @@ struct RecipeDetailView: View {
                 offset: geometry.contentOffset.y, zone: snapZone, reachable: reachable)
             {
                 withAnimation(.snappy) { scrollPosition.scrollTo(y: target) }
+            } else if oldPhase != .animating,
+                let shift = DSRowEdgeFade.restingShift(
+                    rows: rowFrames.rows(scrolled: geometry.contentOffset.y + geometry.contentInsets.top),
+                    barEdge: pinLine + pickerHeight,
+                    maxForward: reachable - geometry.contentOffset.y)
+            {
+                // At rest no row sits part way into the picker's fade: it moves to show the row
+                // whole (Hark's review, build 122 round 5: the Allergens line rested at 1.5:1).
+                withAnimation(.snappy) {
+                    scrollPosition.scrollTo(y: geometry.contentOffset.y + geometry.contentInsets.top + shift)
+                }
+            } else if pickerFade != DS.Size.edgeFade {
+                // At rest the fade is back to its resting height, clear of the first whole row.
+                withAnimation(.snappy) { pickerFade = DS.Size.edgeFade }
             }
         }
         .ignoresSafeArea(edges: .top)

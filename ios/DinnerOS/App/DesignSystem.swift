@@ -594,30 +594,124 @@ nonisolated enum DSRowEdgeFade {
         guard let barEdge, height <= maxRowHeight else { return 1 }
         return Double(min(max((top - barEdge) / DS.Size.edgeFade, 0), 1))
     }
+
+    /// Where a scroll view's rows meet the bar over it, in the scroll view's own coordinates
+    /// (`.scrollView`), from its scroll geometry: `nil` (no fade) while its content rests at the
+    /// top. That space starts below the scroll view's top inset (the navigation bar on the iPad
+    /// cooking screen), so the edge is 0 there: using the inset itself as the edge faded the
+    /// first rows out at rest on iPad (build 122 round 5).
+    static func barEdge(contentOffset: CGFloat, topInset: CGFloat) -> CGFloat? {
+        contentOffset + topInset > 0.5 ? 0 : nil
+    }
+
+    /// How far to move a list that came to rest with a row part way into the fade at the bar's
+    /// edge (`rows` are the fading rows' tops and heights, in the scroll view's coordinates), so
+    /// every row on screen is whole and fully drawn at rest (Hark's review, build 122 round 5: the
+    /// Allergens line rested under the fade at 1.5:1, and an SE's ingredients started under a
+    /// blank band). Negative moves the content back down, bringing the row whole into view;
+    /// positive moves on to the next row, when the row is mostly gone and that's the shorter
+    /// move, never past `maxForward`. `nil` when nothing rests in the fade.
+    static func restingShift(
+        rows: [(top: CGFloat, height: CGFloat)], barEdge: CGFloat?, maxForward: CGFloat = .infinity
+    ) -> CGFloat? {
+        guard let barEdge else { return nil }
+        let rest = barEdge + DS.Size.edgeFade
+        let showing = rows.filter { $0.height <= maxRowHeight && $0.top + $0.height > barEdge + 0.5 }
+        guard let first = showing.min(by: { $0.top < $1.top }), first.top < rest - 0.5 else { return nil }
+        let back = first.top - rest
+        // The next row down, brought to where a list's first row rests.
+        let next = rows.filter { $0.top >= first.top + first.height - 0.5 }.map(\.top).min()
+        // Mostly under the bar already: the next row comes up instead, when that's the shorter move.
+        if let next, first.top + first.height / 2 < barEdge, next - rest < -back, next - rest <= maxForward {
+            return next - rest
+        }
+        return back
+    }
+}
+
+/// Where a list's fading rows sit in its content (the coordinate space `space`, on the scroll
+/// view's content), for `restingShift`. Places in the content don't move as the list scrolls, so
+/// they're measured once; a plain class, so measuring never redraws anything.
+@MainActor final class DSRowFrames {
+    /// The coordinate space on a list's content that `dsRowsContent()` names.
+    nonisolated static let contentSpace = "DSRowsContent"
+
+    let space: String
+    private var frames: [UUID: (top: CGFloat, height: CGFloat)] = [:]
+
+    init(space: String = DSRowFrames.contentSpace) {
+        self.space = space
+    }
+
+    /// The rows as they sit on screen, in the scroll view's own coordinates (`.scrollView`), for
+    /// content scrolled `scrolled` points up from its resting place (its offset and top inset).
+    func rows(scrolled: CGFloat) -> [(top: CGFloat, height: CGFloat)] {
+        frames.values.map { ($0.top - scrolled, $0.height) }
+    }
+
+    func set(_ id: UUID, _ frame: (top: CGFloat, height: CGFloat)?) {
+        frames[id] = frame
+    }
+}
+
+extension EnvironmentValues {
+    /// Where a list's `dsFadesAtBarEdge()` rows report their places (`DSRowFrames`).
+    @Entry var dsRowFrames: DSRowFrames? = nil
 }
 
 private struct DSRowEdgeFadeModifier: ViewModifier {
     @Environment(\.dsBarEdge) private var barEdge
+    @Environment(\.dsRowFrames) private var rowFrames
+    @State private var id = UUID()
 
     func body(content: Content) -> some View {
         content.visualEffect { [barEdge] content, proxy in
             let frame = proxy.frame(in: .scrollView)
             return content.opacity(DSRowEdgeFade.opacity(top: frame.minY, height: frame.height, barEdge: barEdge))
         }
+        .onGeometryChange(for: CGRect.self) { [space = rowFrames?.space ?? DSRowFrames.contentSpace] proxy in
+            proxy.frame(in: .named(space))
+        } action: { frame in
+            rowFrames?.set(id, (frame.minY, frame.height))
+        }
+        .onDisappear { rowFrames?.set(id, nil) }
     }
 }
 
-/// Reads where a scroll view's content starts under its top bar (its top inset) and hands it to
-/// its rows as `dsBarEdge`.
+/// Hands a scroll view's rows its top edge as `dsBarEdge` while its content is scrolled up under
+/// that edge, and nothing at rest, so nothing fades when the screen opens (Hark's review, build 122
+/// round 5: the iPad cooking screen opened with Step 1 and the photo faded out). When the list
+/// comes to rest with a row part way into the fade, it moves to show that row whole.
 private struct DSScrollBarEdge: ViewModifier {
-    @State private var top: CGFloat = 0
+    @State private var barEdge: CGFloat?
+    @State private var rowFrames = DSRowFrames()
+    @State private var position = ScrollPosition()
 
     func body(content: Content) -> some View {
         content
-            .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentInsets.top }) { _, inset in
-                if inset != top { top = inset }
+            .onScrollGeometryChange(for: CGFloat?.self) {
+                DSRowEdgeFade.barEdge(contentOffset: $0.contentOffset.y, topInset: $0.contentInsets.top)
+            } action: { _, edge in
+                if edge != barEdge { barEdge = edge }
             }
-            .environment(\.dsBarEdge, top)
+            .scrollPosition($position)
+            .onScrollPhaseChange { oldPhase, phase, context in
+                // Once, after a person's scroll: never again after its own move.
+                guard phase == .idle, oldPhase != .animating else { return }
+                let geometry = context.geometry
+                let scrolled = geometry.contentOffset.y + geometry.contentInsets.top
+                let farthest =
+                    geometry.contentSize.height + geometry.contentInsets.bottom - geometry.containerSize.height
+                guard
+                    let shift = DSRowEdgeFade.restingShift(
+                        rows: rowFrames.rows(scrolled: scrolled), barEdge: barEdge,
+                        maxForward: farthest - geometry.contentOffset.y)
+                else { return }
+                // A scroll position counts from the content's resting place, below the top inset.
+                withAnimation(.snappy) { position.scrollTo(y: scrolled + shift) }
+            }
+            .environment(\.dsBarEdge, barEdge)
+            .environment(\.dsRowFrames, rowFrames)
     }
 }
 
@@ -632,6 +726,12 @@ extension View {
     /// the navigation bar): its `dsFadesAtBarEdge()` rows fade out at that edge.
     func dsRowsFadeAtTopEdge() -> some View {
         modifier(DSScrollBarEdge())
+    }
+
+    /// On the content inside a scroll view marked `dsRowsFadeAtTopEdge()`: where its rows are
+    /// measured from, so a list that stops with a row half faded can move to show it whole.
+    func dsRowsContent() -> some View {
+        coordinateSpace(.named(DSRowFrames.contentSpace))
     }
 }
 

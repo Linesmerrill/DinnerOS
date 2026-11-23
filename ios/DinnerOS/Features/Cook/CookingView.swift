@@ -180,15 +180,20 @@ struct CookingView: View {
                     .padding(DS.Space.xxl)
                     // Clear of the fade under the bar, so the first row starts whole.
                     .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
+                    .dsRowsContent()
                 }
+                // Rows fade out whole before they reach the bar, never cut in half; a pane that
+                // stops on a half-faded row moves to show it whole.
+                .dsRowsFadeAtTopEdge()
                 // Rows fade out under the bar's buttons instead of being cut at its edge, over a
                 // whole row once they scroll under it (Hark's review, build 122 item 1e).
                 .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
                     if fade != ingredientsFade { ingredientsFade = fade }
                 }
+                .onScrollPhaseChange { _, phase in
+                    if phase == .idle { Self.rest(&ingredientsFade) }
+                }
                 .dsTopBarEdge(color: DS.Colors.surface, height: ingredientsFade)
-                // Rows fade out whole before they reach the bar, never cut in half.
-                .dsRowsFadeAtTopEdge()
                 .frame(width: max(320, geometry.size.width * 0.38))
                 .background(DS.Colors.surface)
                 Divider()
@@ -196,12 +201,16 @@ struct CookingView: View {
                     stepList(dish)
                         .padding(DS.Space.xxl)
                         .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
+                        .dsRowsContent()
                 }
+                .dsRowsFadeAtTopEdge()
                 .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
                     if fade != stepsFade { stepsFade = fade }
                 }
+                .onScrollPhaseChange { _, phase in
+                    if phase == .idle { Self.rest(&stepsFade) }
+                }
                 .dsTopBarEdge(color: DS.Colors.background, height: stepsFade)
-                .dsRowsFadeAtTopEdge()
                 .contentMargins(.bottom, CGFloat(timers.timers.count) * 72, for: .scrollContent)
                 .overlay(alignment: .bottomTrailing) {
                     CookTimerDock(timers: timers, stacked: true)
@@ -266,17 +275,28 @@ struct CookingView: View {
                 .padding(DS.Space.l)
                 // Clear of the fade at the top, so the first row starts whole.
                 .padding(.top, DS.Size.edgeFade - DS.Space.l)
-            }
-            .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
-                if fade != tabFade { tabFade = fade }
+                .dsRowsContent()
             }
             // Rows fade out whole before they reach the pinned picker, never cut in half (Hark's
             // review, build 122 round 5: "½ cup Jasmine Rice" on the Duo).
             .dsRowsFadeAtTopEdge()
+            .onScrollGeometryChange(for: CGFloat.self, of: Self.scrolledUnder) { _, fade in
+                if fade != tabFade { tabFade = fade }
+            }
+            .onScrollPhaseChange { _, phase in
+                if phase == .idle { Self.rest(&tabFade) }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CookTimerDock(timers: timers, stacked: false)
             }
         }
+    }
+
+    /// A pane that has stopped: its fade goes back to its resting height, so nothing on screen
+    /// rests half faded (Hark's review, build 122 round 5). It grows again once the pane moves.
+    private static func rest(_ fade: inout CGFloat) {
+        guard fade != DS.Size.edgeFade else { return }
+        withAnimation(.snappy) { fade = DS.Size.edgeFade }
     }
 
     /// A pane's fade under its bar, from how far its rows have scrolled up under it.
