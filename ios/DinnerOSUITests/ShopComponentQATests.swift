@@ -9,7 +9,7 @@ final class ShopComponentQATests: XCTestCase {
         executionTimeAllowance = 600
     }
 
-    private let recipe = "Creamy Penne with Peas"
+    private let recipe = "Creamy Penne"
     private let sauce = "Cream Sauce Base"
 
     @MainActor
@@ -22,10 +22,10 @@ final class ShopComponentQATests: XCTestCase {
             try await own.shopAtWalmart()
             let id = try await own.addRecipe(
                 name,
-                ingredients: [("Penne", "6", "oz"), ("Frozen Peas", "1", "cup"), (sauce, "2", "tbsp")],
+                ingredients: [("Penne", "6", "oz"), (sauce, "2", "tbsp")],
                 steps: [
-                    "Boil the penne until tender, adding the peas for the last minute.",
-                    "Stir the cream sauce base into the pan until thick.", "Toss the penne and peas in the sauce.",
+                    "Boil the penne until tender.", "Stir the cream sauce base into the pan until thick.",
+                    "Toss the penne in the sauce.",
                 ])
             try await own.plan(id, weeksAhead: 0)
             let parts = try await own.groceryItems(weeksAhead: 0).filter { $0.component == sauce }
