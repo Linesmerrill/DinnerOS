@@ -287,6 +287,17 @@ enum DiscoverLayout {
         return width(count)
     }
 
+    /// How wide a row's title line is, so See All sits over the row's last card: the cards' own
+    /// width when they don't fill the row, `nil` (the whole row) when they do or before the row
+    /// is measured. Three recipes on an iPad in landscape left See All alone at the far side,
+    /// over 40% of empty screen (Hark's build 122 round 5, item 13).
+    static func headerWidth(rowWidth: CGFloat, cardWidth: CGFloat, count: Int, isWide: Bool) -> CGFloat? {
+        let available = rowWidth - margin(isWide: isWide) * 2
+        guard available > 0, count > 0 else { return nil }
+        let cards = CGFloat(count) * cardWidth + CGFloat(count - 1) * rowSpacing
+        return cards < available ? cards : nil
+    }
+
     /// The grid's card widths (Browse All, See All).
     static let gridMinimum: CGFloat = 150
     static let gridMaximum: CGFloat = 260
@@ -354,6 +365,12 @@ struct DiscoverSectionRow: View {
                 .accessibilityLabel("See All \(section.title)")
                 .accessibilityIdentifier("DiscoverSeeAll-\(section.id)")
             }
+            .frame(
+                width: DiscoverLayout.headerWidth(
+                    rowWidth: rowWidth, cardWidth: cardWidth, count: section.items.count,
+                    isWide: sizeClass == .regular),
+                alignment: .leading
+            )
             .padding(.horizontal, margin)
 
             ScrollView(.horizontal) {

@@ -38,21 +38,44 @@ struct PantryEstimateRing: View {
     }
 }
 
+/// One footnote line of a pantry row with a small icon before it ("~31% left", "Best by"),
+/// its icon in one fixed column so every line's text starts at the same place (Hark's build
+/// 122 round 5: the ring and the calendar sat at different widths and the text didn't line up).
+struct PantryRowIconLine<Icon: View, Content: View>: View {
+    @ViewBuilder let icon: () -> Icon
+    @ViewBuilder let text: () -> Content
+
+    @ScaledMetric(relativeTo: .footnote) private var iconWidth = 16.0
+
+    var body: some View {
+        HStack(alignment: .center, spacing: DS.Space.xs) {
+            icon()
+                .frame(width: iconWidth)
+            text()
+        }
+    }
+}
+
 /// "◔ ~31% left" under a pantry row's name, with a warning glyph when the estimate had to
 /// skip a cooked recipe — otherwise an item that couldn't be counted reads exactly like one
 /// that was, which is the one thing the percentage must not imply.
 struct PantryEstimateLabel: View {
     let estimate: PantryEstimate
+    /// The amount the row already shows, so the estimate doesn't repeat it.
+    var shownAmount: String?
 
     @ScaledMetric(relativeTo: .footnote) private var ringSize = 12.0
 
     var body: some View {
-        HStack(spacing: 5) {
+        PantryRowIconLine {
             PantryEstimateRing(estimate: estimate, diameter: ringSize)
-            Text(PantryUsageFormat.remainingShort(estimate))
-            if PantryUsageFormat.skippedRecipesShort(estimate) != nil {
-                Image(systemName: "exclamationmark.circle")
-                    .foregroundStyle(.orange)
+        } text: {
+            HStack(spacing: 5) {
+                Text(PantryUsageFormat.remainingShort(estimate, besides: shownAmount))
+                if PantryUsageFormat.skippedRecipesShort(estimate) != nil {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundStyle(.orange)
+                }
             }
         }
         .font(.footnote)

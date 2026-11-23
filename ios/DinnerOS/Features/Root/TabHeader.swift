@@ -31,25 +31,69 @@ extension View {
     /// the week strip, carousels and chips ran under the status icons and side buttons (build
     /// 121). Clips only sideways: shadows and badges above and below still show.
     ///
-    /// With `fadesEdges`, a card running past the row's inset fades out across that inset at
-    /// each side instead of being cut by the screen's edge (build 122 review 4). At rest the
-    /// first and last cards sit inside the inset, so the fade only ever touches a card that's
-    /// partly scrolled out.
+    /// With `fadesEdges`, a card or chip running past the row's edge fades out there instead of
+    /// being cut by the screen's edge (build 122 review 4). At rest the first and last cards sit
+    /// inside the inset, so the fade only touches one that's partly scrolled out. Where more of
+    /// the row runs on past an edge, the fade there grows to `CarouselEdgeFade.wide`: across the
+    /// inset alone it was about 8 points of a cut chip and read as no fade at all (Hark's build
+    /// 122 round 5: "Main Protein" on an iPhone).
     func carouselInSafeArea(fadesEdges: Bool = false) -> some View {
-        mask {
-            HStack(spacing: 0) {
-                if fadesEdges {
-                    LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: DS.Space.l)
-                }
-                Rectangle()
-                if fadesEdges {
-                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: DS.Space.l)
-                }
+        modifier(CarouselEdgeFadeModifier(fadesEdges: fadesEdges))
+    }
+}
+
+/// How wide a sideways row's edge fades are (`carouselInSafeArea(fadesEdges:)`).
+nonisolated enum CarouselEdgeFade {
+    /// The fade with nothing past that edge: the row's inset, which only a card on its way out
+    /// reaches.
+    static let inset: CGFloat = DS.Space.l
+    /// The fade with more of the row past that edge: wide enough that the cut card or chip
+    /// plainly fades away.
+    static let wide: CGFloat = DS.Space.huge
+
+    /// The fade's width at one edge, from how far the row runs on past it: the inset with
+    /// nothing there, growing with the overflow up to `wide`, so scrolling to the end eases the
+    /// fade back to the inset instead of snapping it.
+    static func width(overflow: CGFloat) -> CGFloat {
+        min(max(overflow, inset), wide)
+    }
+
+    /// How far the content runs past each edge of what's showing.
+    static func overflow(visible: CGRect, contentWidth: CGFloat) -> (leading: CGFloat, trailing: CGFloat) {
+        (max(visible.minX, 0), max(contentWidth - visible.maxX, 0))
+    }
+}
+
+private struct CarouselEdgeFadeModifier: ViewModifier {
+    let fadesEdges: Bool
+    @State private var leading = CarouselEdgeFade.inset
+    @State private var trailing = CarouselEdgeFade.inset
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: [CGFloat].self) { geometry in
+                let overflow = CarouselEdgeFade.overflow(
+                    visible: geometry.visibleRect, contentWidth: geometry.contentSize.width)
+                return [overflow.leading, overflow.trailing].map { CarouselEdgeFade.width(overflow: $0) }
+            } action: { _, widths in
+                guard fadesEdges, widths.count == 2 else { return }
+                if widths[0] != leading { leading = widths[0] }
+                if widths[1] != trailing { trailing = widths[1] }
             }
-            .padding(.vertical, -DS.Space.huge)
-        }
+            .mask {
+                HStack(spacing: 0) {
+                    if fadesEdges {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: leading)
+                    }
+                    Rectangle()
+                    if fadesEdges {
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: trailing)
+                    }
+                }
+                .padding(.vertical, -DS.Space.huge)
+            }
     }
 }
 
@@ -72,6 +116,10 @@ extension View {
 /// Menu in landscape. The fade sits on the safe area's bottom edge (the top of the tab bar), and
 /// the solid part reaches from there to the screen's edge by ignoring the safe area.
 struct TabBarScrim: ViewModifier {
+    /// The screen's own background, so the fade ends in the page's color, not a band of another
+    /// one: a grouped list's gray in light mode, not white (Hark's build 122 round 5, item 12).
+    var color: Color = DS.Colors.barBackground
+
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
@@ -99,7 +147,7 @@ struct TabBarScrim: ViewModifier {
     private func gradient(_ stops: [(location: CGFloat, opacity: Double)]) -> LinearGradient {
         LinearGradient(
             stops: stops.map {
-                Gradient.Stop(color: DS.Colors.barBackground.opacity($0.opacity), location: $0.location)
+                Gradient.Stop(color: color.opacity($0.opacity), location: $0.location)
             },
             startPoint: .top, endPoint: .bottom)
     }
@@ -121,15 +169,16 @@ nonisolated enum TabBarScrimLayout {
 }
 
 extension View {
-    /// The scrim along the bottom of a tab's scrolling content (`TabBarScrim`).
-    func tabBarEdge() -> some View {
-        modifier(TabBarScrim())
+    /// The scrim along the bottom of a tab's scrolling content (`TabBarScrim`), in the screen's
+    /// own background color.
+    func tabBarEdge(_ color: Color = DS.Colors.barBackground) -> some View {
+        modifier(TabBarScrim(color: color))
     }
 
     /// A solid band of the screen's background under the tab bar, on every screen of a tab
-    /// (`TabBarBacking`).
-    func tabBarBacking(_ edge: VerticalEdge) -> some View {
-        modifier(TabBarBacking(edge: edge))
+    /// (`TabBarBacking`), in that background's color.
+    func tabBarBacking(_ edge: VerticalEdge, color: Color = DS.Colors.barBackground) -> some View {
+        modifier(TabBarBacking(edge: edge, color: color))
     }
 }
 
@@ -159,6 +208,7 @@ nonisolated enum TabBarPlacement {
 /// with the keyboard up it stays at the screen's edge behind it instead of riding above it.
 struct TabBarBacking: ViewModifier {
     let edge: VerticalEdge
+    var color: Color = DS.Colors.barBackground
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
@@ -184,7 +234,7 @@ struct TabBarBacking: ViewModifier {
                     Color.clear
                         .frame(height: 0)
                         .background {
-                            DS.Colors.barBackground
+                            color
                                 .ignoresSafeArea(.container, edges: edge == .top ? .top : .bottom)
                         }
                     if edge == .top { Spacer(minLength: 0) }

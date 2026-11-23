@@ -14,9 +14,16 @@ nonisolated enum PantryEstimateLevel: Equatable, Sendable {
 nonisolated enum PantryUsageFormat {
     /// "~31% left (2.5 oz)", for a pantry row: the percentage alone doesn't say how much
     /// that is, and a package count ("1 package") doesn't either.
-    static func remainingShort(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String {
+    ///
+    /// `shownAmount` is the amount the row already shows above it ("8 cloves"): when the
+    /// estimate comes to the same, it isn't said twice (Garlic, Hark's build 122 round 5).
+    static func remainingShort(
+        _ estimate: PantryEstimate, besides shownAmount: String? = nil, locale: Locale = .autoupdatingCurrent
+    ) -> String {
         let percentText = percent(estimate.percentRemaining, locale: locale)
-        guard let left = remainingGlance(estimate, locale: locale) else {
+        guard let left = remainingGlance(estimate, locale: locale),
+            left.compare(shownAmount ?? "", options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame
+        else {
             return String(localized: "~\(percentText) left")
         }
         return String(localized: "~\(percentText) left (\(left))")

@@ -18,13 +18,14 @@ struct PantryItemRow: View {
                         FrozenBadge()
                     }
                 }
-                if let amount = PantryFormat.amount(item) {
+                let amount = PantryFormat.amount(item)
+                if let amount {
                     Text(amount)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 if let estimate = item.estimate {
-                    PantryEstimateLabel(estimate: estimate)
+                    PantryEstimateLabel(estimate: estimate, shownAmount: amount)
                 }
                 if let frozen = item.frozen {
                     // The thaw estimate is per portion, which is the number that
@@ -34,10 +35,11 @@ struct PantryItemRow: View {
                         .foregroundStyle(.secondary)
                 }
                 if let expiry = item.shownExpiry() {
-                    Label(
-                        expiry.text(frozen: item.isFrozen || item.storedOn != nil),
-                        systemImage: expiry.isExpired ? "exclamationmark.circle" : "calendar"
-                    )
+                    PantryRowIconLine {
+                        Image(systemName: expiry.isExpired ? "exclamationmark.circle" : "calendar")
+                    } text: {
+                        Text(expiry.text(frozen: item.isFrozen || item.storedOn != nil))
+                    }
                     .font(.footnote)
                     .foregroundStyle(expiryColor(expiry))
                 }
@@ -117,13 +119,18 @@ private struct StapleBadge: View {
 /// Marks an item kept in the freezer.
 struct FrozenBadge: View {
     var body: some View {
-        Label("Freezer", systemImage: "snowflake")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, DS.Space.xs)
-            .padding(.vertical, DS.Space.hairline)
-            // Ice blue, not the app's green: at a glance it reads as cold, not as a status.
-            .foregroundStyle(Color(.systemBlue))
-            .background(Capsule().fill(Color(.systemBlue).opacity(0.15)))
-            .accessibilityLabel(Text("In the freezer"))
+        HStack(spacing: DS.Space.xxs) {
+            Image(systemName: "snowflake")
+            Text("Freezer")
+        }
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, DS.Space.xs)
+        .padding(.vertical, DS.Space.hairline)
+        // The Staple badge's quiet gray, from the design system: a blue of its own showed
+        // nowhere else in the app (Hark's build 122 round 5). The snowflake says cold.
+        .foregroundStyle(DS.Colors.secondaryText)
+        .background(DS.Colors.subtleFill, in: .capsule)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("In the freezer"))
     }
 }
