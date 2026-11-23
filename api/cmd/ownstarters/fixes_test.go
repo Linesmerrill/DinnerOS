@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,6 +45,11 @@ func TestTheCheckedInFixesLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	later, err := loadFixes(filepath.Join("fixes", "build-123.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixes = append(fixes, later...)
 	for _, f := range fixes {
 		text := strings.ToLower(f.Headline + " " + f.Description + " " + strings.Join(f.Steps, " "))
 		// Ginger Chicken's photo shows snap peas and peppers; the enchiladas are chicken, not beef.
@@ -146,5 +152,66 @@ func TestSameCuisines(t *testing.T) {
 		if got := sameCuisines(c.have, c.want); got != c.same {
 			t.Errorf("sameCuisines(%v, %v) = %v", c.have, c.want, got)
 		}
+	}
+}
+
+// Ginger Chicken led with Ponzu Sauce and Chopped Chicken Breast, the only two
+// rows above the fold, while its words promise snap peas, red pepper, rice,
+// scallions, sesame and chili flakes (build 123, Hark's review item 11). The
+// build 123 fix leads with what the words name, and keeps every line.
+func TestGingerChickenLeadsWithWhatItsWordsName(t *testing.T) {
+	old, err := loadFixes(filepath.Join("fixes", "build-122.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixes, err := loadFixes(filepath.Join("fixes", "build-123.json"))
+	if err != nil || len(fixes) != 1 {
+		t.Fatalf("fixes = %d, %v", len(fixes), err)
+	}
+	f := fixes[0]
+	if f.CatalogKey != old[0].CatalogKey || f.Description != old[0].Description || strings.Join(f.Steps, "|") != strings.Join(old[0].Steps, "|") {
+		t.Error("build 123 should only reorder build 122's Ginger Chicken")
+	}
+	var names, before []string
+	for _, l := range f.Ingredients {
+		names = append(names, l.Name)
+	}
+	for _, l := range old[0].Ingredients {
+		before = append(before, l.Name)
+	}
+	if len(names) != len(before) {
+		t.Fatalf("lines = %v, want the same %d as before", names, len(before))
+	}
+	for _, n := range before {
+		if !slices.Contains(names, n) {
+			t.Errorf("%s is gone", n)
+		}
+	}
+	lead := strings.ToLower(strings.Join(names[:8], " "))
+	for _, word := range []string{"chicken", "snap peas", "red bell pepper", "rice", "ginger", "scallions", "sesame seeds", "chili flakes"} {
+		if !strings.Contains(lead, word) {
+			t.Errorf("the first 8 lines %v don't name %q", names[:8], word)
+		}
+	}
+	if names[0] != "Chopped Chicken Breast" || names[1] != "Snap Peas" {
+		t.Errorf("leads with %v", names[:2])
+	}
+}
+
+func TestSameIngredientsIsInOrder(t *testing.T) {
+	var target fixTarget
+	for _, n := range []string{"Ponzu Sauce", "Chicken"} {
+		target.Ingredients = append(target.Ingredients, struct {
+			Name string `bson:"name"`
+		}{n})
+	}
+	if sameIngredients(target, []FixIngredient{{Name: "Chicken"}, {Name: "Ponzu Sauce"}}) {
+		t.Error("another order counted as the same")
+	}
+	if !sameIngredients(target, []FixIngredient{{Name: "ponzu sauce"}, {Name: "Chicken"}}) {
+		t.Error("the same order, other case, counted as different")
+	}
+	if !sameIngredients(target, nil) {
+		t.Error("a fix without ingredients leaves them alone")
 	}
 }

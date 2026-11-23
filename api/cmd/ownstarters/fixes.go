@@ -73,6 +73,28 @@ type fixTarget struct {
 	Steps       []step        `bson:"steps"`
 	Cuisines    []string      `bson:"cuisines"`
 	EditedAt    any           `bson:"editedAt"`
+	Ingredients []struct {
+		Name string `bson:"name"`
+	} `bson:"ingredients"`
+}
+
+// sameIngredients reports whether the recipe already lists the fix's lines,
+// in the fix's order (or the fix leaves them alone). Order matters: the page
+// shows the first few above the fold, and they should be what the words name
+// (build 123, Hark: Ginger Chicken led with Ponzu Sauce).
+func sameIngredients(t fixTarget, want []FixIngredient) bool {
+	if len(want) == 0 {
+		return true
+	}
+	if len(t.Ingredients) != len(want) {
+		return false
+	}
+	for i, w := range want {
+		if !strings.EqualFold(strings.TrimSpace(t.Ingredients[i].Name), strings.TrimSpace(w.Name)) {
+			return false
+		}
+	}
+	return true
 }
 
 // sameCuisines reports whether the recipe already has the fix's cuisines (or
@@ -163,7 +185,9 @@ func applyFixes(ctx context.Context, db *mongo.Database, starter bson.ObjectID, 
 		}
 		for _, t := range all {
 			isStarter := t.ID == orig.ID
-			if sameText(t.Steps, f.Steps) && (f.Name == "" || t.Name == f.Name) && sameCuisines(t.Cuisines, f.Cuisines) {
+			if sameText(t.Steps, f.Steps) && (f.Name == "" || t.Name == f.Name) && sameCuisines(t.Cuisines, f.Cuisines) &&
+				// A household that edited its copy keeps its own list.
+				(sameIngredients(t, f.Ingredients) || (!isStarter && t.EditedAt != nil)) {
 				continue // already fixed
 			}
 			if !isStarter && !sameSteps(t.Steps, orig.Steps) {
