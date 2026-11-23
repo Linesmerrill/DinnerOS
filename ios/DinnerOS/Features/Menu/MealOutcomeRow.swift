@@ -9,6 +9,14 @@ import SwiftUI
 /// gives back what the meal took from the pantry. Future nights show nothing, in the same space.
 struct MealOutcomeRow: View {
     let entry: PlanEntry
+    /// For a night still ahead: keep the row's height, so the card lines up with a neighbour
+    /// that shows it (`MealCardRows`), or take none.
+    var holdsSpace = true
+
+    /// Whether the row has something to show: an answer, or a night that's over.
+    nonisolated static func shows(outcome: MealOutcome?, nightHasPassed: Bool) -> Bool {
+        outcome != nil || nightHasPassed
+    }
 
     @Environment(PlanStore.self) private var plans
     @Environment(EventReporter.self) private var events
@@ -34,7 +42,7 @@ struct MealOutcomeRow: View {
                         answer(.cooked) { events.recipeCooked(entry, week: plans.week) }
                     }
                 }
-            } else if outcome != nil || MealNight.hasPassed(date: entry.date) {
+            } else if Self.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date)) {
                 HStack {
                     Spacer(minLength: 0)
                     DidntMakeItMenu(entry: entry) { reason in
@@ -43,9 +51,9 @@ struct MealOutcomeRow: View {
                         Text("Didn’t make it?")
                     }
                 }
-            } else {
-                // Holds the row's height, so a card for a night still ahead lines up with its
-                // neighbours in the iPad's grid.
+            } else if holdsSpace {
+                // Holds the row's height, so a card for a night still ahead lines up with a
+                // neighbour that shows the row.
                 Text("Didn’t make it?")
                     .hidden()
                     .accessibilityHidden(true)

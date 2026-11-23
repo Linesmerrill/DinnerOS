@@ -114,6 +114,24 @@ struct MealRatingRow: View {
     }
 }
 
+extension MealRatingRow {
+    /// The row's height with nothing in it: an unrated row's "How was it?" and stars, hidden, for
+    /// a card that doesn't ask yet beside one that does. Always the unrated row, so a recipe
+    /// rated some earlier week doesn't hold room for a follow-up button it isn't showing.
+    struct Space: View {
+        var body: some View {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                Text("How was it?")
+                    .font(.subheadline)
+                StarRatingControl(score: .constant(0))
+            }
+            .hidden()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
 #Preview("Unrated") {
     MealRatingRow(recipe: MenuPreviewData.cards[1].recipe)
         .padding(DS.Space.l)

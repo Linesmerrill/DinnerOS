@@ -166,13 +166,13 @@ struct Build121MenuLayoutTests {
         #expect(!AllMealsLayout.showsTitle(nil, isSearching: false))
     }
 
-    /// An uncooked meal keeps the rating row's space, so every Your Meals card is one height:
-    /// cards of different heights froze the Menu on an iPad in landscape (QA build 121).
+    /// An uncooked meal keeps the rating row's space beside a card that asks, so the week's cards
+    /// are one height (QA build 121). Build 123 keeps it only then (`Build123MenuCardsTests`).
     @Test func anUncookedMealHoldsTheRatingRowsSpace() {
-        #expect(MealRating.row(outcome: .cooked, nightHasPassed: false) == .shown)
-        #expect(MealRating.row(outcome: nil, nightHasPassed: true) == .shown)
-        #expect(MealRating.row(outcome: nil, nightHasPassed: false) == .heldSpace)
-        #expect(MealRating.row(outcome: .skipped(nil), nightHasPassed: true) == .heldSpace)
+        #expect(MealRating.row(outcome: .cooked, nightHasPassed: false, weekAsks: true) == .shown)
+        #expect(MealRating.row(outcome: nil, nightHasPassed: true, weekAsks: true) == .shown)
+        #expect(MealRating.row(outcome: nil, nightHasPassed: false, weekAsks: true) == .heldSpace)
+        #expect(MealRating.row(outcome: .skipped(nil), nightHasPassed: true, weekAsks: true) == .heldSpace)
     }
 
     @Test func theEmptyWeekHintIsASentence() {

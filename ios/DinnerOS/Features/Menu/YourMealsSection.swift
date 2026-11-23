@@ -9,6 +9,7 @@ struct YourMealsSection: View {
     @Environment(MenuStore.self) private var menu
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(HouseholdStore.self) private var households
+    @Environment(EventReporter.self) private var events
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var editingEntry: PlanEntry?
@@ -157,13 +158,14 @@ struct YourMealsSection: View {
             }
             .padding(.horizontal, DS.Space.l)
         } else {
+            let rows = carouselRows
             ScrollView(.horizontal) {
                 // Not lazy: a week has a handful of meals, and a lazy row takes its height from
                 // the cards it has laid out so far, so a later card's Cooked/Skip and rating rows
                 // spilled under the next section.
                 HStack(alignment: .top, spacing: DS.Space.m) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        card(entry)
+                        card(entry, rows: rows)
                             .containerRelativeFrame(.horizontal) { width, _ in
                                 // A phone shows one big card; wider screens show several at a
                                 // readable size instead of one card the width of an iPad.
@@ -181,10 +183,20 @@ struct YourMealsSection: View {
         }
     }
 
-    private func card(_ entry: PlanEntry) -> some View {
-        MealCard(entry: entry, isEditable: isEditable, card: menu.card(forRecipeID: entry.recipe.id)) {
+    private func card(_ entry: PlanEntry, rows: MealCardRows = .none) -> some View {
+        MealCard(entry: entry, isEditable: isEditable, card: menu.card(forRecipeID: entry.recipe.id), rows: rows) {
             editingEntry = entry
         }
+    }
+
+    /// The rows the carousel's cards keep room for, from the week's meals and answers.
+    private var carouselRows: MealCardRows {
+        MealCardRows.of(
+            entries.map { entry in
+                MealCardRows.Meal(
+                    outcome: events.outcome(for: entry), nightHasPassed: MealNight.hasPassed(date: entry.date),
+                    canRate: menu.card(forRecipeID: entry.recipe.id) != nil)
+            })
     }
 
     /// The week has nothing in it yet.
@@ -299,6 +311,8 @@ struct MealCard: View {
     let entry: PlanEntry
     let isEditable: Bool
     let card: MenuCard?
+    /// Which optional rows to keep room for, so the week's cards line up.
+    var rows: MealCardRows = .none
     let edit: () -> Void
 
     @Environment(PlanStore.self) private var plans
@@ -340,24 +354,44 @@ struct MealCard: View {
             // What happened comes before how it was: one is a fact about the night, the other an
             // opinion about the food. A meal counts as made unless someone says it wasn't
             // (decision 662), so the row only offers that, once the night is over.
-            MealOutcomeRow(entry: entry)
-            if let feedbackRecipe {
-                switch MealRating.row(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date)) {
-                case .shown:
+            MealOutcomeRow(entry: entry, holdsSpace: rows.holdsOutcome)
+            switch MealRating.row(
+                outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date),
+                canRate: feedbackRecipe != nil, weekAsks: rows.holdsRating)
+            {
+            case .shown:
+                if let feedbackRecipe {
                     MealRatingRow(recipe: feedbackRecipe)
-                case .heldSpace:
-                    // Not asked yet, but the row's height is kept: cards of different heights in
-                    // this carousel kept the Menu's lazy stack re-measuring on every frame, and
-                    // an iPad in landscape froze while scrolling (QA, build 121).
-                    MealRatingRow(recipe: feedbackRecipe)
-                        .hidden()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier(Self.ratingRowID)
                 }
+            case .heldSpace:
+                // Not asked yet, but a neighbour asks: the row's height is kept so the cards
+                // line up (`MealCardRows`).
+                MealRatingRow.Space()
+            case .none:
+                EmptyView()
             }
         }
         .contextMenu { menuItems }
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(
+            Self.cardID(
+                entryID: entry.id, isAddOn: isAddOn,
+                asks: MealRating.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date))))
+    }
+
+    /// For the UI tests: every card, an add-on's told apart, and the stars on a card.
+    static let cardIDPrefix = "menu.mealCard."
+    static let addOnCardIDPrefix = "menu.mealCard.addOn."
+    static let ratingRowID = "menu.mealCard.rating"
+    /// Ends the identifier of a card whose meal should ask how it was: made, or its night over.
+    /// Worked out from the plan alone, not from whether the stars could be drawn, so a card that
+    /// should ask and doesn't fails the sweep (build 123, Hark).
+    static let asksSuffix = ".asks"
+
+    static func cardID(entryID: String, isAddOn: Bool, asks: Bool) -> String {
+        (isAddOn ? addOnCardIDPrefix : cardIDPrefix) + entryID + (asks ? asksSuffix : "")
     }
 
     /// A paging card is a little narrower than the screen; `RecipePhoto` refines this once the
@@ -629,14 +663,61 @@ nonisolated enum MealRating {
         }
     }
 
-    /// The rating row on a planned meal's card: the stars, or the same space left empty, so
-    /// every card in Your Meals is one height whether it asks or not.
+    /// The rating row on a planned meal's card: the stars; the same space left empty, so the
+    /// card lines up with a neighbour that asks; or nothing, when no card in the week asks.
     enum Row: Equatable {
         case shown
         case heldSpace
+        case none
     }
 
-    static func row(outcome: MealOutcome?, nightHasPassed: Bool) -> Row {
-        shows(outcome: outcome, nightHasPassed: nightHasPassed) ? .shown : .heldSpace
+    /// `canRate`: the card has the menu card's recipe, which carries the member's own rating.
+    /// `weekAsks`: some card in the same carousel shows the stars (`MealCardRows`).
+    static func row(outcome: MealOutcome?, nightHasPassed: Bool, canRate: Bool = true, weekAsks: Bool) -> Row {
+        if canRate, shows(outcome: outcome, nightHasPassed: nightHasPassed) { return .shown }
+        return weekAsks ? .heldSpace : .none
+    }
+}
+
+/// Which of a meal card's optional rows ("Didn't make it?", then the stars) the cards in Your
+/// Meals keep room for.
+///
+/// Build 121 kept both rows' space on every card whose night was still ahead, so the cards were
+/// one height. But a week with nothing to ask yet (every week on its first day) then had an
+/// empty band of about 100 points under every card, and with a rated add-on's hidden "Anything
+/// to Change?" a little more, between the servings control and Shared Recipes (Merrill, build
+/// 122, Nov 22). Now a row's space is kept only when some card in the week shows that row.
+///
+/// Worked out from the plan and the answers, never from measured sizes, so nothing about the
+/// layout feeds back into it: the carousel's height is settled in one pass, the iPad in
+/// landscape has nothing to re-measure while it scrolls (QA, build 121), and every card in a
+/// week is still one height.
+nonisolated struct MealCardRows: Equatable {
+    /// Some card shows "Didn't make it?" or "I Made It".
+    var holdsOutcome: Bool
+    /// Some card shows the stars.
+    var holdsRating: Bool
+
+    /// Nothing held: cards stacked one under another (accessibility sizes) needn't line up.
+    static let none = MealCardRows(holdsOutcome: false, holdsRating: false)
+
+    /// One meal of the week: its answer, whether its night is over, and whether it can be rated
+    /// (its menu card is known, which carries the member's own rating).
+    struct Meal {
+        var outcome: MealOutcome?
+        var nightHasPassed: Bool
+        var canRate: Bool
+    }
+
+    static func of(_ meals: [Meal]) -> MealCardRows {
+        MealCardRows(
+            holdsOutcome: meals.contains {
+                MealOutcomeRow.shows(outcome: $0.outcome, nightHasPassed: $0.nightHasPassed)
+            },
+            holdsRating: meals.contains {
+                MealRating.row(
+                    outcome: $0.outcome, nightHasPassed: $0.nightHasPassed, canRate: $0.canRate, weekAsks: false)
+                    == .shown
+            })
     }
 }
