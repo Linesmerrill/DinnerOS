@@ -85,16 +85,16 @@ func TestIngredientsWithoutAPhotoBorrowThePlainIngredients(t *testing.T) {
 	}
 }
 
-// With no chicken thigh photo in the catalog at all (its only one is a dish,
-// dropped), chicken thighs show raw chicken rather than the fallback glyph.
-func TestChickenThighsWithNoPhotoShowRawChicken(t *testing.T) {
+// A chicken thigh with no photo under any form keeps the fallback glyph: never
+// another cut's photo, which would show breast for thigh.
+func TestChickenThighsWithNoPhotoNeverBorrowAnotherCut(t *testing.T) {
 	store := newMemoryStore()
-	store.ingredients = []Ingredient{{ID: "b1", Key: "diced chicken thighs", Name: "Diced Chicken Thighs"}}
-	got, err := NewService(store).IngredientsByID(context.Background(), []string{"b1"})
-	if err != nil || len(got) != 1 || got[0].ImageURL != rawChickenPhoto {
-		t.Errorf("Diced Chicken Thighs = %+v, %v; want the raw chicken photo", got, err)
+	store.ingredients = []Ingredient{
+		{ID: "b1", Key: "diced chicken thighs", Name: "Diced Chicken Thighs"},
+		{ID: "b2", Key: "chicken breast", Name: "Chicken Breast", ImageURL: "https://example.test/breast.png"},
 	}
-	if IngredientPhoto(rawChickenPhoto) != rawChickenPhoto {
-		t.Error("the raw chicken stand-in is itself dropped or swapped")
+	got, err := NewService(store).IngredientsByID(context.Background(), []string{"b1"})
+	if err != nil || len(got) != 1 || got[0].ImageURL != "" {
+		t.Errorf("Diced Chicken Thighs = %+v, %v; want no photo", got, err)
 	}
 }

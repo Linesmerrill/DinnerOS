@@ -130,20 +130,5 @@ func (s *Service) fillMissingPhotos(ctx context.Context, list []Ingredient) {
 		if list[i].ImageURL == "" {
 			list[i].ImageURL = relatives[photoBase(list[i].Key)]
 		}
-		if list[i].ImageURL == "" {
-			list[i].ImageURL = photoStandIns[photoBase(list[i].Key)]
-		}
 	}
 }
-
-// photoStandIns are the last resort for a plain ingredient the catalog has no
-// photo of under any form, each a catalog photo of the same raw ingredient
-// under another cut. The meal kit's only chicken thigh photo is a cooked dish
-// (dish_photos.txt), so chicken thighs show the raw chicken of the cutlets
-// photo, as chicken breast strips already do (photoSwaps).
-var photoStandIns = map[string]string{
-	"chicken thighs": rawChickenPhoto,
-	"chicken thigh":  rawChickenPhoto,
-}
-
-const rawChickenPhoto = "https://img.hellofresh.com/f_auto,fl_lossy,q_auto,w_1200/hellofresh_s3/ingredient/59c2b202c288007f56514711-4f7e3ff4.png"
