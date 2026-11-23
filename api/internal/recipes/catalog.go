@@ -24,7 +24,12 @@ func (s *Service) IngredientsByID(ctx context.Context, ids []string) ([]Ingredie
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return s.store.GetIngredients(ctx, ids)
+	found, err := s.store.GetIngredients(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	s.fillMissingPhotos(ctx, found)
+	return found, nil
 }
 
 // IngredientsByKey returns the catalog ingredients whose Key
@@ -33,7 +38,12 @@ func (s *Service) IngredientsByKey(ctx context.Context, keys []string) ([]Ingred
 	if len(keys) == 0 {
 		return nil, nil
 	}
-	return s.store.FindIngredients(ctx, nil, keys)
+	found, err := s.store.FindIngredients(ctx, nil, keys)
+	if err != nil {
+		return nil, err
+	}
+	s.fillMissingPhotos(ctx, found)
+	return found, nil
 }
 
 // SearchIngredients finds catalog ingredients for autocomplete. The query is

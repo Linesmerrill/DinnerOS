@@ -794,7 +794,7 @@ func (s *Service) fillCategories(ctx context.Context, list []Recipe) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	catalog, err := s.store.GetIngredients(ctx, ids)
+	catalog, err := s.IngredientsByID(ctx, ids)
 	if err != nil {
 		return fmt.Errorf("get ingredients: %w", err)
 	}
