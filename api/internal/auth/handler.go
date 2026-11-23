@@ -85,6 +85,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/logout", h.logout)
 		if h.opts.DevLoginEnabled {
 			r.Post("/dev", h.signInDev)
+			if h.opts.Review.devAccountsOn() {
+				r.Post("/dev/email-account", h.registerDevEmailAccount)
+			}
 		}
 		r.Get("/options", h.options)
 		if h.opts.Review.Enabled() {
@@ -135,7 +138,26 @@ type SessionResponse struct {
 // IdentityResponse is a login method attached to the current user.
 type IdentityResponse struct {
 	Provider string `json:"provider"`
-	Email    string `json:"email,omitempty"`
+	// Name is how Account names the login method ("Apple", "Email").
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
+}
+
+// providerName is the login method's name on the Account screen. The App
+// Review account signs in with an email and a password, so it's "Email".
+func providerName(p users.Provider) string {
+	switch p {
+	case users.ProviderApple:
+		return "Apple"
+	case users.ProviderGoogle:
+		return "Google"
+	case users.ProviderReview:
+		return "Email"
+	case users.ProviderDev:
+		return "Developer"
+	default:
+		return string(p)
+	}
 }
 
 // MeResponse is returned by GET /me.
@@ -330,7 +352,9 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := MeResponse{User: newUserResponse(user), Identities: make([]IdentityResponse, 0, len(identities))}
 	for _, identity := range identities {
-		resp.Identities = append(resp.Identities, IdentityResponse{Provider: string(identity.Provider), Email: identity.Email})
+		resp.Identities = append(resp.Identities, IdentityResponse{
+			Provider: string(identity.Provider), Name: providerName(identity.Provider), Email: identity.Email,
+		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }

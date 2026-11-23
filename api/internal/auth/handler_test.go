@@ -300,7 +300,7 @@ func TestMeHandler(t *testing.T) {
 	}
 	me := decodeBody[MeResponse](t, rec)
 	if me.User.ID != session.User.ID || len(me.Identities) != 1 ||
-		me.Identities[0] != (IdentityResponse{Provider: "apple", Email: "ada@privaterelay.appleid.com"}) {
+		me.Identities[0] != (IdentityResponse{Provider: "apple", Name: "Apple", Email: "ada@privaterelay.appleid.com"}) {
 		t.Errorf("me = %+v", me)
 	}
 	if strings.Contains(rec.Body.String(), "apple-sub") {

@@ -260,6 +260,8 @@ func run() error {
 	recipeService.WithPlans(planService)
 	if reviewSeeder != nil {
 		reviewSeeder.WithPlanner(planService)
+	}
+	if reviewSeeder != nil && cfg.ReviewAccount.Enabled() {
 		go refreshReviewAccount(ctx, reviewSeeder, userService, cfg.ReviewAccount.Email, logger)
 	}
 	// A frozen item needed by one of today's meals is a reminder derived on
@@ -724,7 +726,11 @@ func newReviewSignIn(cfg config.Config, householdService *households.Service, re
 	if p := cfg.ReviewAccount.Problem; p != "" {
 		logger.Warn(p)
 	}
-	if !cfg.ReviewAccount.Enabled() {
+	// A development server with developer sign-in also takes email accounts
+	// that UI tests register (POST /auth/dev/email-account), seeded the same
+	// way, so a screenshot shows a person signed in with email (build 123).
+	dev := cfg.DevLoginEnabled()
+	if !cfg.ReviewAccount.Enabled() && !dev {
 		return nil, nil, nil
 	}
 	seeder, err := reviewaccount.NewSeeder(householdService, recipeService, logger)
@@ -732,10 +738,18 @@ func newReviewSignIn(cfg config.Config, householdService *households.Service, re
 		return nil, nil, err
 	}
 	starter.SkipWhen(reviewaccount.SkipStarter(householdService, userService))
-	logger.Info("review sign-in is on for the App Review account")
-	return auth.NewReviewSignIn(auth.ReviewOptions{
-		Email: cfg.ReviewAccount.Email, Password: cfg.ReviewAccount.Password, Seeder: seeder,
-	}), seeder, nil
+	opts := auth.ReviewOptions{Seeder: seeder, DevAccounts: dev}
+	if cfg.ReviewAccount.Enabled() {
+		logger.Info("review sign-in is on for the App Review account")
+		opts.Email, opts.Password = cfg.ReviewAccount.Email, cfg.ReviewAccount.Password
+	}
+	if dev {
+		// Every simulator signs in from localhost: AUTH_RATE_BURST, as for the
+		// other sign-ins.
+		logger.Warn("development email accounts enabled: POST /api/v1/auth/dev/email-account")
+		opts.RateBurst = cfg.AuthRateBurst
+	}
+	return auth.NewReviewSignIn(opts), seeder, nil
 }
 
 // newHouseholdHandlers wires the households and invitations modules. The

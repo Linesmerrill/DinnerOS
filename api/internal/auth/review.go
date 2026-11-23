@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
@@ -59,6 +61,14 @@ type ReviewOptions struct {
 	Seeder   ReviewSeeder
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
+	// DevAccounts turns on email accounts a local development server's UI
+	// tests register through POST /auth/dev/email-account, so a screenshot
+	// can show a person signed in with email without the one review account.
+	// Only for a development server with developer sign-in on.
+	DevAccounts bool
+	// RateBurst is how many tries one address may make at once. Default
+	// reviewRateBurst. Local QA raises it: every simulator is localhost.
+	RateBurst int
 }
 
 // ReviewSignIn checks the review account's email and password and remembers
@@ -71,33 +81,108 @@ type ReviewSignIn struct {
 	limiter *ratelimit.Limiter
 	perIP   *failureLock
 	global  *failureLock
+	dev     *devAccounts
 }
+
+// devAccounts are the email accounts UI tests register on a development
+// server, by normalized email. They live in memory: each test run registers
+// its own again.
+type devAccounts struct {
+	mu      sync.Mutex
+	byEmail map[string]devAccount
+}
+
+type devAccount struct {
+	pwHash      [sha256.Size]byte
+	displayName string
+}
+
+// devAccountsMax bounds memory; past it, registering another is refused.
+const devAccountsMax = 10_000
 
 // NewReviewSignIn returns review sign-in, or nil when it isn't configured.
 func NewReviewSignIn(opts ReviewOptions) *ReviewSignIn {
 	email := normalizeReviewEmail(opts.Email)
 	if email == "" || opts.Password == "" {
+		// The review account needs both halves.
+		email = ""
+	}
+	if email == "" && !opts.DevAccounts {
 		return nil
+	}
+	burst := opts.RateBurst
+	if burst <= 0 {
+		burst = reviewRateBurst
 	}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
 	}
+	var dev *devAccounts
+	if opts.DevAccounts {
+		dev = &devAccounts{byEmail: map[string]devAccount{}}
+	}
 	return &ReviewSignIn{
+		dev:    dev,
 		email:  email,
 		pwHash: sha256.Sum256([]byte(opts.Password)),
 		seeder: opts.Seeder,
 		now:    now,
 		limiter: ratelimit.New(ratelimit.Options{
-			Burst: reviewRateBurst, Every: reviewRateEvery, Now: now, Message: "Too many tries. Wait a minute and try again.",
+			Burst: burst, Every: reviewRateEvery, Now: now, Message: "Too many tries. Wait a minute and try again.",
 		}),
 		perIP:  newFailureLock(reviewLockAfter, reviewLockWindow, reviewLockFor),
 		global: newFailureLock(reviewGlobalLockAfter, reviewLockWindow, reviewLockFor),
 	}
 }
 
-// Enabled reports whether review sign-in is on. A nil ReviewSignIn is off.
+// Enabled reports whether email sign-in is on: for the review account, or for
+// development accounts. A nil ReviewSignIn is off.
 func (r *ReviewSignIn) Enabled() bool { return r != nil }
+
+func (r *ReviewSignIn) devAccountsOn() bool { return r != nil && r.dev != nil }
+
+// account returns the email and display name of the account an email and
+// password sign in to, if any: the review account, else (development only) a
+// registered development account.
+func (r *ReviewSignIn) account(email, password string) (string, string, bool) {
+	if r.email != "" && r.matches(email, password) {
+		return r.email, reviewDisplayName, true
+	}
+	if r.dev == nil {
+		return "", "", false
+	}
+	given := normalizeReviewEmail(email)
+	r.dev.mu.Lock()
+	acct, ok := r.dev.byEmail[given]
+	r.dev.mu.Unlock()
+	got := sha256.Sum256([]byte(password))
+	if !ok || subtle.ConstantTimeCompare(acct.pwHash[:], got[:]) != 1 {
+		return "", "", false
+	}
+	return given, acct.displayName, true
+}
+
+var (
+	errDevAccountTaken = errors.New("auth: that email is the review account")
+	errDevAccountsFull = errors.New("auth: too many development accounts")
+)
+
+// register adds or replaces a development account. The review account's
+// email can't be taken.
+func (r *ReviewSignIn) register(email, password, displayName string) error {
+	email = normalizeReviewEmail(email)
+	if email == r.email {
+		return errDevAccountTaken
+	}
+	r.dev.mu.Lock()
+	defer r.dev.mu.Unlock()
+	if _, ok := r.dev.byEmail[email]; !ok && len(r.dev.byEmail) >= devAccountsMax {
+		return errDevAccountsFull
+	}
+	r.dev.byEmail[email] = devAccount{pwHash: sha256.Sum256([]byte(password)), displayName: displayName}
+	return nil
+}
 
 // ReviewSubject is the stable subject the review account's identity is
 // stored under: derived from the email, so the email itself isn't the key.
@@ -122,13 +207,13 @@ func (r *ReviewSignIn) matches(email, password string) bool {
 
 // SignInReview signs the review account in through the same session code as
 // every other provider, after the seeder has set it up.
-func (s *Service) SignInReview(ctx context.Context, email string, seeder ReviewSeeder) (SignInResult, error) {
+func (s *Service) SignInReview(ctx context.Context, email, displayName string, seeder ReviewSeeder) (SignInResult, error) {
 	identity := users.VerifiedIdentity{
 		Provider:      users.ProviderReview,
 		Subject:       ReviewSubject(email),
 		Email:         normalizeReviewEmail(email),
 		EmailVerified: true,
-		DisplayName:   reviewDisplayName,
+		DisplayName:   displayName,
 	}
 	user, created, err := s.users.FindOrCreateByIdentity(ctx, identity)
 	if err != nil {
@@ -187,7 +272,14 @@ func (h *Handler) signInReview(w http.ResponseWriter, r *http.Request) {
 		validationFailed(w, r, reviewMissingFields)
 		return
 	}
-	if len(req.Email) > maxEmailLength || len(req.Password) > maxReviewPassword || !review.matches(req.Email, req.Password) {
+	var (
+		email, displayName string
+		ok                 bool
+	)
+	if len(req.Email) <= maxEmailLength && len(req.Password) <= maxReviewPassword {
+		email, displayName, ok = review.account(req.Email, req.Password)
+	}
+	if !ok {
 		review.perIP.fail(ip, now)
 		review.global.fail("", now)
 		// Neither the email nor the password is logged.
@@ -196,8 +288,67 @@ func (h *Handler) signInReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	review.perIP.clear(ip)
-	res, err := h.opts.Service.SignInReview(r.Context(), review.email, review.seeder)
+	res, err := h.opts.Service.SignInReview(r.Context(), email, displayName, review.seeder)
 	h.writeSignIn(w, r, users.ProviderReview, res, err)
+}
+
+// --- Development email accounts -------------------------------------------------
+
+type devEmailAccountRequest struct {
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	DisplayName string `json:"displayName"`
+}
+
+// devAccountDomain reports whether an email is on a domain kept for examples
+// and tests (RFC 2606), so no real person's address is ever used.
+func devAccountDomain(email string) bool {
+	at := strings.LastIndexByte(email, '@')
+	if at < 0 {
+		return false
+	}
+	switch domain := email[at+1:]; domain {
+	case "example.com", "example.org", "example.net":
+		return true
+	default:
+		return strings.HasSuffix(domain, ".test")
+	}
+}
+
+// registerDevEmailAccount is POST /auth/dev/email-account, on a development
+// server only: it adds an email and password that /auth/review-sign-in then
+// accepts, as a person of its own with the display name given. Registering an
+// email again replaces its password; the name is kept from the first sign-in.
+func (h *Handler) registerDevEmailAccount(w http.ResponseWriter, r *http.Request) {
+	var req devEmailAccountRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	email := normalizeReviewEmail(req.Email)
+	displayName := strings.TrimSpace(req.DisplayName)
+	switch {
+	case email == "" || len(email) > maxEmailLength || !validEmail(email):
+		validationFailed(w, r, "email is invalid")
+		return
+	case !devAccountDomain(email):
+		validationFailed(w, r, "email must be on example.com, example.org, example.net or a .test domain")
+		return
+	case len(req.Password) < 8 || len(req.Password) > maxReviewPassword:
+		validationFailed(w, r, "password must be 8 to 256 characters")
+		return
+	case displayName == "" || utf8.RuneCountInString(displayName) > maxDisplayNameLength:
+		validationFailed(w, r, "displayName is required")
+		return
+	}
+	switch err := h.opts.Review.register(email, req.Password, displayName); {
+	case errors.Is(err, errDevAccountTaken):
+		httpx.WriteError(w, r, http.StatusConflict, "conflict", "that email is the review account")
+		return
+	case err != nil:
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "too many development accounts; restart the server")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Lockout ----------------------------------------------------------------------
