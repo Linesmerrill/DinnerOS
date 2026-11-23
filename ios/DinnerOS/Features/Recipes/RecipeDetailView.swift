@@ -55,6 +55,8 @@ struct RecipeDetailView: View {
     /// Where the section's fading rows are, so a page that stops with one part way into the
     /// picker's fade can move to show it whole.
     @State private var rowFrames = DSRowFrames(space: RecipeDetailHeader.contentSpace)
+    /// The page has moved once to show a half-faded row whole since it was last touched.
+    @State private var rowsSettled = false
     @State private var pickerHeight: CGFloat = 0
     /// The scroll view's own top safe area: where the bar ends.
     @State private var scrollTop: CGFloat = 0
@@ -256,7 +258,8 @@ struct RecipeDetailView: View {
         // A drag let go without a flick never asks the snap where to stop, and a short tab came
         // to rest with the large title half under the bar (Hark's review, build 122 round 5):
         // once the page stops, it settles at the nearer end.
-        .onScrollPhaseChange { oldPhase, phase, context in
+        .onScrollPhaseChange { _, phase, context in
+            if phase == .interacting { rowsSettled = false }
             guard phase == .idle else { return }
             let geometry = context.geometry
             let reachable = RecipeDetailHeader.reachable(
@@ -266,7 +269,7 @@ struct RecipeDetailView: View {
                 offset: geometry.contentOffset.y, zone: snapZone, reachable: reachable)
             {
                 withAnimation(.snappy) { scrollPosition.scrollTo(y: target) }
-            } else if oldPhase != .animating,
+            } else if !rowsSettled,
                 let shift = DSRowEdgeFade.restingShift(
                     rows: rowFrames.rows(scrolled: geometry.contentOffset.y + geometry.contentInsets.top),
                     barEdge: pinLine + pickerHeight,
@@ -274,6 +277,8 @@ struct RecipeDetailView: View {
             {
                 // At rest no row sits part way into the picker's fade: it moves to show the row
                 // whole (Hark's review, build 122 round 5: the Allergens line rested at 1.5:1).
+                // Once a scroll, also after the snap above has moved it.
+                rowsSettled = true
                 withAnimation(.snappy) {
                     scrollPosition.scrollTo(y: geometry.contentOffset.y + geometry.contentInsets.top + shift)
                 }

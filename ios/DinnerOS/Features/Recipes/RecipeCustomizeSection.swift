@@ -17,6 +17,9 @@ struct RecipeCustomizeSection: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
             }
+            // Fades out whole under the pinned picker, and never rests half faded under it
+            // (Hark's review, build 122 round 5).
+            .dsFadesAtBarEdge()
             ForEach(groups) { group in
                 VStack(spacing: 0) {
                     ForEach(Array(group.choices.enumerated()), id: \.element.id) { index, choice in
