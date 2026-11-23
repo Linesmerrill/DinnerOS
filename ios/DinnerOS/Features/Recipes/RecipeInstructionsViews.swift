@@ -67,7 +67,7 @@ struct InstructionStepText: View {
                 segment.text.hasPrefix(amount + " ")
             else { return text + Self.text(for: segment) }
             return text
-                + Text(verbatim: amount + "\u{00A0}").foregroundStyle(Color.secondary)
+                + Text(verbatim: RecipeFormat.unbrokenAmount(amount) + "\u{00A0}").foregroundStyle(Color.secondary)
                 + Text(verbatim: String(segment.text.dropFirst(amount.count + 1))).fontWeight(.semibold)
         }
     }
@@ -119,13 +119,19 @@ struct InstructionStepText: View {
     }
 
     static func text(for segment: InstructionSegment) -> Text {
-        guard segment.isIngredient else { return Text(verbatim: segment.text) }
+        guard segment.isIngredient else { return Text(verbatim: RecipeFormat.unbroken(segment.text)) }
         // Left out: struck through and quiet, never removed, so the step still reads as written
         // and says the recipe calls for it.
+        // Its amount stays on one line: "¼ cup parmesan" never ends a line at "¼" (Hark's review,
+        // build 122 round 5).
+        let written = RecipeFormat.unbroken(
+            leadingAmount(segment.text).map {
+                RecipeFormat.unbrokenAmount($0) + String(segment.text.dropFirst($0.count))
+            } ?? segment.text)
         if segment.leftOut {
-            return Text(verbatim: segment.text).strikethrough().foregroundStyle(Color.secondary)
+            return Text(verbatim: written).strikethrough().foregroundStyle(Color.secondary)
         }
-        let named = Text(verbatim: segment.text).fontWeight(.semibold)
+        let named = Text(verbatim: written).fontWeight(.semibold)
         guard segment.spicy else { return named }
         // A flame and the weight carry the meaning; red only reinforces it.
         return Text(Image(systemName: "flame.fill")).foregroundStyle(Color.spicyIngredient)

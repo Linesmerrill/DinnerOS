@@ -233,6 +233,18 @@ struct RecipePageLayoutTests {
         #expect(RecipeFormat.quantity("3/2", value: 1.5, locale: Locale(identifier: "en_US")) == "1 ½")
     }
 
+    /// Hark's review, build 122 round 5: "¼ / cup" and "½- / inch" split across lines on the iPad
+    /// cooking screen. An amount stays on one line and a size keeps its hyphen.
+    @Test func amountsAndSizesNeverSplitAcrossLines() {
+        #expect(RecipeFormat.unbrokenAmount("1/4 cup") == "¼\u{00A0}cup")
+        #expect(RecipeFormat.unbrokenAmount("1 1/2 Tbsp") == "1\u{00A0}½\u{00A0}Tbsp")
+        #expect(RecipeFormat.unbroken("Dice 1 tomato into ½-inch pieces") == "Dice 1 tomato into ½\u{2011}inch pieces")
+        #expect(RecipeFormat.unbroken("cut into 1-inch cubes") == "cut into 1\u{2011}inch cubes")
+        // Ranges and ordinary hyphens stay as written.
+        #expect(RecipeFormat.unbroken("4-6 minutes") == "4-6 minutes")
+        #expect(RecipeFormat.unbroken("Street Cart-Style") == "Street Cart-Style")
+    }
+
     @Test func theServersAmountTextWins() {
         let fromServer = RecipeAmount(
             servings: 2, quantity: "3/2", quantityValue: 1.5, unit: "cup", sourceUnit: "cup", rawText: "1 1/2 cups",

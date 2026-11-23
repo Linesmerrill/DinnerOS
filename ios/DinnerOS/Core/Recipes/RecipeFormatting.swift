@@ -87,6 +87,19 @@ nonisolated enum RecipeFormat {
         return whole == 0 ? glyph : whole.formatted(.number.locale(locale)) + " " + glyph
     }
 
+    /// Text that never ends a line inside a size: "½-inch" and "1-inch" get a non-breaking
+    /// hyphen, so a line never ends "½-" (Hark's review, build 122 round 5).
+    static func unbroken(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: #"([0-9¼½¾⅓⅔⅛⅜⅝⅞])-(?=[A-Za-z])"#, with: "$1\u{2011}", options: .regularExpression)
+    }
+
+    /// An amount that stays on one line: "1 ½ Tbsp" and "¼ cup" never split between the number
+    /// and the unit.
+    static func unbrokenAmount(_ text: String) -> String {
+        unbroken(kitchenFractions(text)).replacingOccurrences(of: " ", with: "\u{00A0}")
+    }
+
     /// An amount as written by a person or a source, in the kitchen form: "1 1/2 cups" and
     /// "1½ cups" read "1 ½ cups", "1/2 tsp" reads "½ tsp". Fractions without a glyph stay.
     static func kitchenFractions(_ text: String) -> String {

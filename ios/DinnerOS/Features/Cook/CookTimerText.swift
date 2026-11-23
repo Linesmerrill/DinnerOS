@@ -12,11 +12,11 @@ enum CookTimerText {
         server: (CookDuration, String) -> InstructionTimer? = { _, _ in nil }
     ) -> Text {
         let durations = CookDurations.find(in: string)
-        guard !durations.isEmpty else { return Text(verbatim: string) }
+        guard !durations.isEmpty else { return Text(verbatim: RecipeFormat.unbroken(string)) }
         var out = Text(verbatim: "")
         var cursor = string.startIndex
         for duration in durations {
-            out = out + Text(verbatim: String(string[cursor..<duration.range.lowerBound]))
+            out = out + Text(verbatim: RecipeFormat.unbroken(String(string[cursor..<duration.range.lowerBound])))
             // The stopwatch is part of the link and nothing in it can break, so a time that wraps
             // moves to the next line whole and any of the green is a tap target.
             let written = String(string[duration.range])
@@ -38,7 +38,7 @@ enum CookTimerText {
             out = out + Text(link).fontWeight(.bold)
             cursor = duration.range.upperBound
         }
-        return out + Text(verbatim: String(string[cursor...]))
+        return out + Text(verbatim: RecipeFormat.unbroken(String(string[cursor...])))
     }
 
     static func url(step: Int, duration: CookDuration, subject: String? = nil, start: Int? = nil) -> URL? {

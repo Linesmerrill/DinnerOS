@@ -536,13 +536,16 @@ struct CookIngredientList: View {
     ) -> some View {
         HStack(alignment: .center, spacing: DS.Space.m) {
             CookCircle(isChecked: isChecked)
-            Text(amount.map(RecipeFormat.kitchenFractions) ?? "")
+            // One line, never split between the number and the unit ("¼ / cup" on an iPad in
+            // portrait, Hark's review, build 122 round 5): a longer amount widens its column.
+            Text(verbatim: amount.map(RecipeFormat.unbrokenAmount) ?? "")
                 .font(DS.Typography.subheadline)
                 .monospacedDigit()
                 .foregroundStyle(DS.Colors.secondaryText)
                 .strikethrough(isQuiet)
-                .lineLimit(2)
-                .frame(width: amountWidth, alignment: .leading)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minWidth: amountWidth, alignment: .leading)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 HStack(spacing: DS.Space.xs) {
                     Text(RecipeFormat.displayName(name))
@@ -571,7 +574,7 @@ struct CookIngredientList: View {
                 ingredientKey: item.ingredientKey
             ) {
                 if let prep = item.prep {
-                    Text(prep)
+                    Text(verbatim: RecipeFormat.unbroken(prep))
                         .font(DS.Typography.subheadline)
                         .italic()
                         .foregroundStyle(DS.Colors.secondaryText)
