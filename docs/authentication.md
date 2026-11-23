@@ -111,7 +111,8 @@ header:
 | `POST /api/v1/auth/refresh` | `{refreshToken}` | `200 {accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt}` |
 | `POST /api/v1/auth/logout` | `{refreshToken}` | `204` |
 | `POST /api/v1/auth/dev` | `{subject, email?, displayName?}` | `200` session. Development only (see below). |
-| `GET /api/v1/me` | bearer token | `200 {user, identities: [{provider, email?}]}` |
+| `POST /api/v1/auth/dev/email-account` | `{email, password, displayName}` | `204`. Development only (see below). |
+| `GET /api/v1/me` | bearer token | `200 {user, identities: [{provider, name, email?}]}`; `name` is how Account names it ("Apple", "Google", "Email", "Developer") |
 
 A session response is
 `{accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt, user: {id, displayName, primaryEmail?, createdAt}, isNewUser}`.
@@ -138,6 +139,16 @@ that flag set.
 curl -s localhost:8080/api/v1/auth/dev -H 'Content-Type: application/json' \
   -d '{"subject":"simulator-ada","email":"ada@example.com","displayName":"Ada"}'
 ```
+
+With developer sign-in on, `POST /api/v1/auth/dev/email-account` also registers
+an email account (build 123): `/auth/review-sign-in` then accepts that email and
+password as a person of its own (provider `review`, which Account calls
+"Email"), set up like the App Review account. UI tests use it so a screenshot
+shows someone signed in with email (`BiometricSignInQATests`), each run with its
+own person. Emails must be on `example.com`, `example.org`, `example.net` or a
+`.test` domain; the accounts live in memory, so a restart forgets them. With it,
+email sign-in shows on a development server even without
+`REVIEW_ACCOUNT_EMAIL`, and its rate limit is `AUTH_RATE_BURST`.
 
 ## iOS client
 

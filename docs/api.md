@@ -91,6 +91,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/auth/refresh` `{refreshToken}` → token pair | rate limited | 2 | ✅ |
 | POST | `/api/v1/auth/logout` `{refreshToken}` → `204` | rate limited | 2 | ✅ |
 | POST | `/api/v1/auth/dev` `{subject, email?, displayName?}` → session (development only) | rate limited | 2 | ✅ |
+| POST | `/api/v1/auth/dev/email-account` `{email, password, displayName}` → `204` (development only, [authentication](authentication.md#development-login)) | rate limited | 2 | ✅ |
 | GET | `/api/v1/me` → `{user, identities}` | bearer | 2 | ✅ |
 | DELETE | `/api/v1/me` → `204` ([delete account](#delete-account)) | bearer | 7 | ✅ |
 | PUT | `/api/v1/me/device-tokens` `{token, environment, platform?}` → device token | bearer | 7 | ✅ |

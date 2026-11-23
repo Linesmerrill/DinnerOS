@@ -306,6 +306,49 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/dev/email-account:
+    post:
+      summary: Register a development email account (development only)
+      description: |
+        Adds an email and password that `/api/v1/auth/review-sign-in` then
+        accepts as a person of its own, set up like the App Review account. For
+        UI tests that photograph someone signed in with email. The email must be
+        on example.com, example.org, example.net or a `.test` domain. Kept in
+        memory; registering an email again replaces its password. Exists only
+        when developer sign-in is on; otherwise 404.
+      operationId: registerDevEmailAccount
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, displayName]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: jordan.avery@example.test
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 256
+                displayName:
+                  type: string
+                  maxLength: 100
+                  example: Jordan Avery
+      responses:
+        "204":
+          description: Registered.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The email is the App Review account's.
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/auth/options:
     get:
       summary: What the sign-in screen offers
@@ -9476,11 +9519,15 @@ components:
           format: date-time
     Identity:
       type: object
-      required: [provider]
+      required: [provider, name]
       properties:
         provider:
           type: string
-          enum: [apple, google, dev]
+          enum: [apple, google, dev, review]
+        name:
+          type: string
+          description: How the Account screen names this login method ("Apple", "Google", "Email", "Developer").
+          example: Email
         email:
           type: string
           format: email
