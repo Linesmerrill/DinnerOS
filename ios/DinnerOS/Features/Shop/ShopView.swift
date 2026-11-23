@@ -1762,9 +1762,13 @@ private struct ShopHandoffBar: View {
         }
     }
 
+    /// Nothing new to send. "Everything is already in your Walmart cart" only when nothing is
+    /// left to choose either (Hark, build 122 round 5: it showed above "Choose 2 Products").
     private var everythingInCart: some View {
         Label(
-            shopping.linkNotice ?? ShoppingText.everythingInCart(in: store, listPage: shopping.opensListPage),
+            ShopHandoffText.nothingNewText(
+                notice: shopping.linkNotice, needsProduct: proposal.needsProduct.count, store: store,
+                listPage: shopping.opensListPage),
             systemImage: "checkmark.circle"
         )
         .font(.subheadline)
@@ -2101,10 +2105,27 @@ enum ShopHandoffText {
                 : String(localized: "Adds \(count) items to your \(store) cart. You check out in \(store).")
         }
         guard needsProduct > 0 else { return first }
-        let rest =
-            needsProduct == 1
+        return first + " " + chooseMore(needsProduct)
+    }
+
+    /// The bar's line when a link would add nothing new. "Everything is already in your Walmart
+    /// cart" only when no item still needs a product; with some left it says what's in the cart
+    /// and counts the rest, so it agrees with "Choose 2 Products" above it (Hark, build 122
+    /// round 5). Another notice ("Nothing to add to your cart…") is shown as it is.
+    static func nothingNewText(notice: String?, needsProduct: Int, store: String, listPage: Bool) -> String {
+        let everything = ShoppingText.everythingInCart(in: store, listPage: listPage)
+        if let notice, notice != everything { return notice }
+        guard needsProduct > 0 else { return everything }
+        let picked =
+            listPage
+            ? String(localized: "What you picked is on your \(store) list.")
+            : String(localized: "What you picked is in your \(store) cart.")
+        return picked + " " + chooseMore(needsProduct)
+    }
+
+    private static func chooseMore(_ count: Int) -> String {
+        count == 1
             ? String(localized: "Choose a product for 1 more to add it too.")
-            : String(localized: "Choose products for \(needsProduct) more to add them too.")
-        return first + " " + rest
+            : String(localized: "Choose products for \(count) more to add them too.")
     }
 }
