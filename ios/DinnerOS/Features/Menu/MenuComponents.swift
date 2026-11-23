@@ -31,6 +31,8 @@ struct RecipePhoto: View {
     /// The measured width, once there is one. Until then `pointWidth` stands in, so the first
     /// frame asks the CDN for a card-sized photo rather than the 1200-pixel original.
     @State private var measuredWidth: CGFloat?
+    /// The no-photo art is showing, for the UI tests' marker (`QAMarkers`).
+    @State private var showsPlaceholder = false
 
     var body: some View {
         sized
@@ -42,6 +44,7 @@ struct RecipePhoto: View {
                 measuredWidth = width
             }
             .accessibilityHidden(true)
+            .qaMarker(QAMarkers.photoPlaceholder, label: title ?? "", isShown: showsPlaceholder)
     }
 
     /// Only a measured width that lands in a different bucket changes the key, so refining the
@@ -77,6 +80,8 @@ struct RecipePhoto: View {
 
     private var fallbackGlyph: some View {
         RecipePlaceholderArt(title: title, showsTitle: showsTitle, fadesNearTop: placeholderFadesNearTop)
+            .onAppear { if QAMarkers.isOn { showsPlaceholder = true } }
+            .onDisappear { if QAMarkers.isOn { showsPlaceholder = false } }
     }
 }
 
@@ -119,6 +124,8 @@ struct IngredientPhoto: View {
     var size: CGFloat = 48
 
     @Environment(\.displayScale) private var displayScale
+    /// The fallback glyph is showing, for the UI tests' marker (`QAMarkers`).
+    @State private var showsPlaceholder = false
 
     var body: some View {
         Circle()
@@ -128,12 +135,16 @@ struct IngredientPhoto: View {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
                     fallbackGlyph
                 } fallback: {
+                    // Only the fallback counts: the same glyph also waits behind a loading photo.
                     fallbackGlyph
+                        .onAppear { if QAMarkers.isOn { showsPlaceholder = true } }
+                        .onDisappear { if QAMarkers.isOn { showsPlaceholder = false } }
                 }
             }
             .clipShape(.circle)
             .overlay(Circle().strokeBorder(Color(.separator)))
             .accessibilityHidden(true)
+            .qaMarker(QAMarkers.photoPlaceholder, label: "ingredient", isShown: showsPlaceholder)
     }
 
     /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the glyph.

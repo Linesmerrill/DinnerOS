@@ -315,6 +315,8 @@ extension XCTestCase {
         for (key, value) in ProcessInfo.processInfo.environment where key.hasPrefix("QA_APP_") {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
+        // Lets the tests see a photo showing its no-photo art (`QAMarkers`, build 123).
+        app.launchEnvironment["QA_MARKERS"] = "1"
         app.launch()
         assertFullScreen(app)
         let devSignIn = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch

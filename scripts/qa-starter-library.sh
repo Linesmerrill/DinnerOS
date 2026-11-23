@@ -21,9 +21,79 @@
 # makes the screenshots' typed-by-hand recipe, with its photo, when it's missing, and moves the old
 # one's ("Sip Fudge", or QA_RETIRED_RECIPES) planned meals to it. Re-running it changes nothing.
 #   scripts/qa-starter-library.sh http://localhost:8082 tidy
+#
+# With "menu" it makes sure that household's current week has what the sweep checks on the Menu
+# (build 123): a dinner on the week's first day, marked made so its card asks "How was it?", and
+# the household's Garlic Bread planned with it as an add-on. Re-running it changes nothing.
+#   scripts/qa-starter-library.sh http://localhost:8082 menu
 set -euo pipefail
 BASE=${1:-http://localhost:8082}
 case $BASE in http://localhost:* | http://127.0.0.1:*) ;; *) echo "local APIs only" >&2; exit 1 ;; esac
+
+if [ "${2:-}" = menu ]; then
+    token=$(curl -sf -X POST "$BASE/api/v1/auth/dev" -H 'Content-Type: application/json' \
+        -d '{"subject":"dev-simulator"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+    BASE=$BASE TOKEN=$token python3 - <<'MENU'
+import datetime, json, os, urllib.request, uuid
+
+base, token = os.environ["BASE"] + "/api/v1", os.environ["TOKEN"]
+
+def call(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    req = urllib.request.Request(base + path, data=data, method=method, headers=headers)
+    with urllib.request.urlopen(req) as r:
+        raw = r.read()
+    return json.loads(raw) if raw else {}
+
+items = call("GET", "/households").get("items") or []
+if not items:
+    raise SystemExit("dev-simulator has no household yet: sign in once in the app")
+household = items[0]["household"]
+hid, first_day = household["id"], household.get("weekStartsOn") or "mon"
+week = call("GET", f"/households/{hid}/menu")["week"]
+recipes, cursor = [], ""
+while True:
+    page = call("GET", f"/households/{hid}/recipes?limit=100" + (f"&cursor={cursor}" if cursor else ""))
+    recipes += page.get("items") or []
+    cursor = page.get("nextCursor") or ""
+    if not cursor:
+        break
+by_name = {r["name"]: r for r in recipes}
+plan = call("GET", f"/households/{hid}/plans/{week}")
+entries = plan.get("entries") or []
+
+# The made dinner: one already on the first day, else the meal kit's Chicken Penne al Limone (or
+# the first dinner with a photo) planned there.
+main = next((e for e in entries if e.get("day") == first_day and not (e.get("recipe") or {}).get("isAddon")), None)
+made = ""
+if main is None:
+    planned = {(e.get("recipe") or {}).get("id") for e in entries}
+    pick = by_name.get("Chicken Penne al Limone")
+    if pick is None or pick["id"] in planned:
+        pick = next(r for r in sorted(recipes, key=lambda r: r["name"])
+                    if not r.get("isAddon") and r.get("imageUrl") and r["id"] not in planned)
+    main = call("POST", f"/households/{hid}/plans/{week}/entries",
+                {"recipeId": pick["id"], "day": first_day, "servings": 2})["entry"]
+    made = f"planned {pick['name']}; "
+if not main.get("outcome"):
+    call("POST", f"/households/{hid}/events", {"events": [{
+        "clientEventId": str(uuid.uuid4()), "type": "recipe.cooked", "recipeId": main["recipe"]["id"], "week": week,
+        "occurredAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "payload": {"entryId": main["id"], "date": main.get("date"), "servings": main.get("servings") or 2},
+    }]})
+    made += f"marked {main['recipe']['name']} made; "
+
+# The add-on: Garlic Bread (a meal-kit add-on with a photo) with that dinner.
+if not any((e.get("recipe") or {}).get("isAddon") for e in entries):
+    bread = by_name.get("Garlic Bread") or next(r for r in recipes if r.get("isAddon") and r.get("imageUrl"))
+    call("POST", f"/households/{hid}/plans/{week}/entries",
+         {"recipeId": bread["id"], "day": main.get("day") or first_day, "servings": 2})
+    made += f"planned {bread['name']} as an add-on; "
+print(f"menu for {hid} {week}: " + (made.rstrip("; ") or "already set"))
+MENU
+    exit 0
+fi
 
 if [ "${2:-}" = tidy ]; then
     token=$(curl -sf -X POST "$BASE/api/v1/auth/dev" -H 'Content-Type: application/json' \

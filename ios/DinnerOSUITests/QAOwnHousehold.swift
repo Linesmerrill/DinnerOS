@@ -26,8 +26,11 @@ struct QAOwnHousehold {
     /// Signs a new person in on the API and gives them a household with one typed recipe, so the
     /// Menu opens on a library rather than the empty-library card. The person is a realistic one
     /// ("maya-rivera-48213", shown as Maya Rivera of Rivera Kitchen; build 123: names and
-    /// avatars show on screen); `prefix`, the test's name, goes in the log.
-    static func make(_ prefix: String, recipe: String? = nil) async throws -> QAOwnHousehold {
+    /// avatars show on screen); `prefix`, the test's name, goes in the log. An empty `recipe` adds
+    /// none, for a test that brings its own; `name` replaces the household's name.
+    static func make(_ prefix: String, recipe: String? = nil, name: String? = nil) async throws
+        -> QAOwnHousehold
+    {
         let subject = QAPeople.subject()
         print("QA-OWN: \(prefix) signs in as \(subject)")
         let login = try await call(
@@ -40,13 +43,15 @@ struct QAOwnHousehold {
         let timeZone = "America/Phoenix"
         let created = try await call(
             "POST", "households", token: token,
-            body: ["name": QAPeople.kitchen(forSubject: subject), "timeZone": timeZone, "defaultServings": 2])
+            body: ["name": name ?? QAPeople.kitchen(forSubject: subject), "timeZone": timeZone, "defaultServings": 2])
         let household = (created["household"] as? [String: Any]) ?? created
         let householdID = try XCTUnwrap(household["id"] as? String, "The new household has no id")
         let own = QAOwnHousehold(
             subject: subject, householdID: householdID, token: token, timeZone: timeZone,
             weekStartsOn: household["weekStartsOn"] as? String ?? "sun")
-        _ = try await own.addRecipe(recipe ?? "Lemon Rice \(Int.random(in: 100...999))")
+        if recipe != "" {
+            _ = try await own.addRecipe(recipe ?? "Lemon Rice \(Int.random(in: 100...999))")
+        }
         return own
     }
 
@@ -149,6 +154,67 @@ struct QAOwnHousehold {
             body: ["recipeId": recipeID, "day": NSNull(), "servings": 2])
     }
 
+    /// Plans `recipeID` on `day` ("mon"…"sun") of the week `weeksAhead` from this one. Returns the
+    /// plan entry's id and date.
+    @discardableResult
+    func plan(_ recipeID: String, weeksAhead: Int, day: String) async throws -> (id: String, date: String) {
+        let added = try await Self.call(
+            "POST", "households/\(householdID)/plans/\(week(weeksAhead: weeksAhead))/entries", token: token,
+            body: ["recipeId": recipeID, "day": day, "servings": 2])
+        let entry = try XCTUnwrap(added["entry"] as? [String: Any], "The planned meal came back without its entry")
+        return (try XCTUnwrap(entry["id"] as? String), entry["date"] as? String ?? "")
+    }
+
+    /// Meal-kit recipes with photos, as a meal-kit import brings them: the only way a household's
+    /// recipe is an add-on (garlic bread), which typing one in can't make. Returns name → id.
+    @discardableResult
+    func importRecipes(_ recipes: [(name: String, imageURL: String, isAddon: Bool)]) async throws -> [String: String] {
+        let stamp = ISO8601DateFormatter().string(from: .now)
+        let file: [String: Any] = [
+            "version": 1, "source": "hellofresh", "generatedAt": stamp, "review": [[String: Any]](),
+            "recipes": recipes.enumerated().map { index, recipe -> [String: Any] in
+                [
+                    "source": "hellofresh", "sourceRecipeId": "\(subject)-\(index)", "sourceUrl": "",
+                    "name": recipe.name, "imageUrl": recipe.imageURL, "isAddon": recipe.isAddon,
+                    "servings": [2, 4], "totalMinutes": 30, "cuisines": ["italian"], "tags": [String](),
+                    "orderWeeks": [String](),
+                    "ingredients": [
+                        [
+                            "sourceIngredientId": "\(subject)-garlic", "name": "Garlic", "pantryStaple": false,
+                            "amounts": [
+                                [
+                                    "servings": 2, "quantity": 2, "unit": "clove", "sourceUnit": "clove",
+                                    "rawText": "2 cloves",
+                                ]
+                            ],
+                        ]
+                    ],
+                    "steps": [["index": 1, "text": "Cook it, then serve."]],
+                ]
+            },
+        ]
+        _ = try await Self.call("POST", "households/\(householdID)/recipes/import", token: token, body: file)
+        // A new household's first page holds them all (`appending(path:)` would escape a query).
+        let listed = try await Self.call("GET", "households/\(householdID)/recipes", token: token)
+        let items = listed["items"] as? [[String: Any]] ?? []
+        var ids: [String: String] = [:]
+        for item in items {
+            if let name = item["name"] as? String, let id = item["id"] as? String { ids[name] = id }
+        }
+        return ids
+    }
+
+    /// Says a planned meal was made, as "I Made It" does: the plan then carries the answer, and the
+    /// Menu asks how it was.
+    func markMade(entryID: String, recipeID: String, date: String, weeksAhead: Int) async throws {
+        let event: [String: Any] = [
+            "clientEventId": UUID().uuidString, "type": "recipe.cooked", "recipeId": recipeID,
+            "week": week(weeksAhead: weeksAhead), "occurredAt": ISO8601DateFormatter().string(from: .now),
+            "payload": ["entryId": entryID, "date": date, "servings": 2],
+        ]
+        _ = try await Self.call("POST", "households/\(householdID)/events", token: token, body: ["events": [event]])
+    }
+
     /// The ISO week the app shows `weeksAhead` weeks from today: today's date in the household's
     /// time zone, moved back to its first day (`planning.WeekOfOn`).
     func week(weeksAhead: Int, now: Date = .now) -> String {
@@ -202,13 +268,14 @@ extension XCTestCase {
     /// waits). `setup` plans or adds whatever else the test needs.
     @MainActor
     func ownHousehold(
-        _ prefix: String, setup: @escaping @Sendable (QAOwnHousehold) async throws -> Void = { _ in }
+        _ prefix: String, recipe: String? = nil, name: String? = nil,
+        setup: @escaping @Sendable (QAOwnHousehold) async throws -> Void = { _ in }
     ) throws -> QAOwnHousehold {
         let box = QABox<QAOwnHousehold>()
         let done = expectation(description: "A household of the test’s own")
         Task.detached {
             do {
-                let own = try await QAOwnHousehold.make(prefix)
+                let own = try await QAOwnHousehold.make(prefix, recipe: recipe, name: name)
                 try await setup(own)
                 box.value = .success(own)
             } catch {
@@ -231,6 +298,7 @@ extension XCTestCase {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
         app.launchEnvironment["QA_DEV_SUBJECT"] = household.subject
+        app.launchEnvironment["QA_MARKERS"] = "1"
         app.launch()
         assertFullScreen(app)
         let devSignIn = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch

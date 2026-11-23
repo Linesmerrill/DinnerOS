@@ -30,7 +30,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light duo-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID ShopComponentQATests ShopPrepQATests StartCookingQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID ShopComponentQATests ShopPrepQATests MenuCardsQATests StartCookingQATests"}
 STALL=${STALL:-600}
 # Tests to run on a second simulator per config, "QA matrix <config> 2", at the same time as the
 # first. Off by default: on this Mac (build 118) 17 simulators ran 40 to 70% slower each and
@@ -169,7 +169,7 @@ run_test() {
     # Screenshot tests keep their results; other passing tests don't, to save disk.
     case "$verdict $test" in
     "ok AppSweepQATests/"* | "ok ScreensQATests/"* | "ok StartCookingQATests"* | "ok BiometricSignInQATests/testSignInScreenWithFaceID" | \
-        "ok BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID" | "ok ShopComponentQATests"* | "ok ShopPrepQATests"*) ;;
+        "ok BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID" | "ok ShopComponentQATests"* | "ok ShopPrepQATests"* | "ok MenuCardsQATests"*) ;;
     "ok "*) rm -rf "$OUT/$name.xcresult" ;;
     esac
 }
@@ -195,6 +195,8 @@ runs_on() {
     # Nov 22's three screens, in every config since Hark's build 122 round 4 review (item 1): back
     # from the background, a sauce with every item had, the freeze card.
     BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID | ShopComponentQATests | ShopPrepQATests) return 0 ;;
+    # Your Meals at rest with no empty band under the cards, in every config (build 123).
+    MenuCardsQATests) return 0 ;;
     esac
     local placed
     case $test in
@@ -319,6 +321,10 @@ seed_offer_codes 8082
 "$ROOT/scripts/qa-starter-library.sh" http://localhost:8082 tidy >>"$OUT/summary.txt" ||
     { echo "couldn't tidy the test household on 8082"; exit 1; }
 "$ROOT/scripts/qa-starter-library.sh" http://localhost:8082 pantry >/dev/null || true
+# A dinner marked made and an add-on this week, so the sweep's Menu checks have stars and an
+# add-on card to find (build 123).
+"$ROOT/scripts/qa-starter-library.sh" http://localhost:8082 menu >>"$OUT/summary.txt" ||
+    { echo "couldn't set up the test household's Menu on 8082"; exit 1; }
 build 8082 &
 [ $need8083 = yes ] && build 8083 &
 wait

@@ -37,9 +37,50 @@ final class AppSweepQATests: XCTestCase {
             }
             snap(app, "\(tab) (\(mode))")
             checkScreen(app, "\(tab) (\(mode))")
+            checkNothingMissing(app, tab: tab, mode: mode)
             visitRows(app, tab: tab, mode: mode)
         }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+    }
+
+    /// Build 123 (Hark: "this cannot happen again"): content that should be there and isn't. On
+    /// Menu, every meal that should ask how it was shows its stars, the add-ons the subtitle
+    /// counts have their cards, and there's no empty band under the cards; on Menu, a recipe
+    /// page, Shop and Pantry, nothing is still loading after 10 seconds (`MenuQAChecks`).
+    @MainActor
+    private func checkNothingMissing(_ app: XCUIApplication, tab: String, mode: String) {
+        let screen = "\(tab) (\(mode))"
+        switch tab {
+        case "Menu":
+            problems += MenuQAChecks.checkMealCardRatingRows(app, screen: screen)
+            problems += MenuQAChecks.checkAddOnCards(app, screen: screen)
+            problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)
+            problems += MenuQAChecks.checkLoaded(app, screen: screen)
+            checkRecipePageLoaded(app, mode: mode)
+        case "Shop", "Pantry":
+            problems += MenuQAChecks.checkLoaded(app, screen: screen)
+        default:
+            break
+        }
+    }
+
+    /// Opens the first planned meal's recipe page from Your Meals, checks it loaded, and comes
+    /// back to the Menu.
+    @MainActor
+    private func checkRecipePageLoaded(_ app: XCUIApplication, mode: String) {
+        let cards = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", MenuQAChecks.cardPrefix))
+        let open = cards.buttons.firstMatch
+        guard open.exists, open.isHittable else {
+            problems.append("Menu (\(mode)): no meal card to open a recipe page from")
+            return
+        }
+        let name = open.label.components(separatedBy: ",").first ?? open.label
+        open.tap()
+        sleep(1)
+        problems += MenuQAChecks.checkLoaded(app, screen: "Recipe page › \(name) (\(mode))")
+        backButton(app).tap()
+        sleep(1)
     }
 
     /// Opens each row on the screen that leads somewhere, checks it, and comes back.

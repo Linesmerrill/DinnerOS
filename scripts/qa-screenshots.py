@@ -25,7 +25,8 @@ REPO = "Linesmerrill/DinnerOS"
 # The tests whose screenshots are screens: the tab sweeps, the deeper screens and sheets, the
 # sign-in screen with and without Face ID, and Start Cooking on a scrolled recipe.
 TESTS = ("AppSweepQATests", "ScreensQATests", "testSignInScreenWithFaceID", "StartCookingQATests",
-         "testComingBackFromTheBackgroundNeverAsksForFaceID", "ShopComponentQATests", "ShopPrepQATests")
+         "testComingBackFromTheBackgroundNeverAsksForFaceID", "ShopComponentQATests", "ShopPrepQATests",
+         "MenuCardsQATests")
 # Screens every config must have.
 REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop", "Pantry", "Pantry › Add an Item",
             "Household", "Plus paywall",
@@ -35,7 +36,9 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # Nov 22's three, in every config since Hark's build 122 round 4 review (item 1).
             "Face ID › Back from the background", "Shop › Sauce with every item had", "Shop › Freeze card",
             # Both recipe pages scroll everywhere, the upright iPad included (the same review).
-            "Recipe page › typed by hand › scrolled", "Recipe page › imported › scrolled")
+            "Recipe page › typed by hand › scrolled", "Recipe page › imported › scrolled",
+            # Your Meals with no empty band under the cards (build 123, Merrill's Nov 22 Menu).
+            "Menu › Your Meals at rest")
 # Required screens a config may lack, each with its reason. The hand-typed recipe's page fits on
 # the upright iPad's screen, so there's nothing to scroll and a "scrolled" shot would be a copy of
 # the top (Hark's review, build 122 round 3 item 13c; the publisher refuses copies). Allowed only
