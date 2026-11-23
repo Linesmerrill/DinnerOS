@@ -28,5 +28,35 @@
       "Put the chicken back in the pan and turn the heat to medium. Add the ginger sauce, chili sauce and ponzu and stir until thick and sticky, 1-2 minutes. Stir in the sesame oil. Add salt and pepper as needed.",
       "Fluff the rice with a fork. Spoon it into bowls and top with the chicken and vegetables. Sprinkle with the scallion greens, sesame seeds and chili flakes to taste."
     ]
+  },
+  {
+    "catalogKey": "hellofresh:63c6c26348e4aa8a320cc35f",
+    "headline": "Sticky ginger chicken with snap peas and peppers over rice",
+    "description": "Chicken, snap peas and red pepper in a sticky, sweet, gently spicy ginger sauce over rice, topped with scallions, sesame seeds and chili flakes.",
+    "ingredients": [
+      {"name": "Chopped Chicken Breast"},
+      {"name": "Snap Peas", "amounts": [{"servings": 2, "quantity": "4", "unit": "oz"}, {"servings": 3, "quantity": "6", "unit": "oz"}, {"servings": 4, "quantity": "8", "unit": "oz"}, {"servings": 6, "quantity": "12", "unit": "oz"}]},
+      {"name": "Red Bell Pepper", "amounts": [{"servings": 2, "quantity": "1", "unit": "count"}, {"servings": 3, "quantity": "3/2", "unit": "count"}, {"servings": 4, "quantity": "2", "unit": "count"}, {"servings": 6, "quantity": "3", "unit": "count"}]},
+      {"name": "Jasmine Rice"},
+      {"name": "Umami Ginger Sauce"},
+      {"name": "Scallions", "amounts": [{"servings": 2, "quantity": "2", "unit": "count"}, {"servings": 3, "quantity": "3", "unit": "count"}, {"servings": 4, "quantity": "4", "unit": "count"}, {"servings": 6, "quantity": "6", "unit": "count"}]},
+      {"name": "Sesame Seeds", "amounts": [{"servings": 2, "quantity": "1", "unit": "tsp"}, {"servings": 3, "quantity": "3/2", "unit": "tsp"}, {"servings": 4, "quantity": "2", "unit": "tsp"}, {"servings": 6, "quantity": "3", "unit": "tsp"}]},
+      {"name": "Korean Chili Flakes"},
+      {"name": "Garlic"},
+      {"name": "Sweet Thai Chili Sauce"},
+      {"name": "Ponzu Sauce"},
+      {"name": "Sesame Oil"},
+      {"name": "Salt"},
+      {"name": "Cooking Oil"},
+      {"name": "Black Pepper"}
+    ],
+    "steps": [
+      "Rinse and pat dry the produce. Put the rice, 1¼ cups water (2 cups for 4 servings) and a pinch of salt in a small pot on medium-high. Once it boils, turn the heat to low, cover and cook until the rice is tender, 15-18 minutes. Keep it covered off the heat until serving.",
+      "Trim the snap peas. Core the bell pepper and cut it into thin strips. Trim and thinly slice the scallions, keeping the dark green tops apart. Peel and mince the garlic.",
+      "Dry the chicken with paper towels and cut it into bite-size pieces if needed. Season with salt and pepper. Brown it in a large pan with a drizzle of oil on medium-high, stirring now and then, until cooked through, 5-7 minutes. Move it to a plate.",
+      "Add another drizzle of oil to the pan with the snap peas, bell pepper and scallion whites. Cook, stirring, until crisp-tender, 3-4 minutes. Add the garlic and cook 30 seconds more.",
+      "Put the chicken back in the pan and turn the heat to medium. Add the ginger sauce, chili sauce and ponzu and stir until thick and sticky, 1-2 minutes. Stir in the sesame oil. Add salt and pepper as needed.",
+      "Fluff the rice with a fork. Spoon it into bowls and top with the chicken and vegetables. Sprinkle with the scallion greens, sesame seeds and chili flakes to taste."
+    ]
   }
 ]

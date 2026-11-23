@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -165,8 +166,18 @@ func TestGingerChickenLeadsWithWhatItsWordsName(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixes, err := loadFixes(filepath.Join("fixes", "build-123.json"))
-	if err != nil || len(fixes) != 1 {
+	// The same fix under the local starter's key and production's (the starter
+	// libraries were imported from different meal-kit weeks).
+	if err != nil || len(fixes) != 2 {
 		t.Fatalf("fixes = %d, %v", len(fixes), err)
+	}
+	if fixes[1].CatalogKey != "hellofresh:63c6c26348e4aa8a320cc35f" {
+		t.Errorf("second key = %s, want production's", fixes[1].CatalogKey)
+	}
+	second := fixes[1]
+	second.CatalogKey = fixes[0].CatalogKey
+	if !reflect.DeepEqual(second, fixes[0]) {
+		t.Error("production's fix should match the local one but for its key")
 	}
 	f := fixes[0]
 	if f.CatalogKey != old[0].CatalogKey || f.Description != old[0].Description || strings.Join(f.Steps, "|") != strings.Join(old[0].Steps, "|") {
