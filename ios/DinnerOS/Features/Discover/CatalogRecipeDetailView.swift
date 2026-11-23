@@ -146,9 +146,11 @@ struct CatalogRecipeDetailView: View {
                 .font(DS.Typography.subtitle)
                 .foregroundStyle(DS.Colors.secondaryText)
         }
+        // The design system's readable gray: the system's secondary gray was under 3:1 here on
+        // white at this size (build 122 round 5).
         Text(Self.details(for: recipe))
             .font(.footnote)
-            .foregroundStyle(DS.Colors.secondaryText)
+            .foregroundStyle(DS.Colors.quietText)
         if let description = recipe.description, !description.isEmpty {
             Text(description)
                 .font(.body)
