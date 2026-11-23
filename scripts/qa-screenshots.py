@@ -97,10 +97,33 @@ def results(folders):
     return found
 
 
+def failed_tests(folders):
+    """The config and test of every test whose last result in the matrix summaries failed. A
+    rerun folder passed later replaces the earlier result, as for the screenshots."""
+    verdicts = {}
+    for folder in folders:
+        try:
+            lines = open(os.path.join(folder, "summary.txt")).read().splitlines()
+        except FileNotFoundError:
+            continue
+        for line in lines:
+            m = re.match(r"^(\S+) (\S+): (ok|FAILED)\b", line)
+            if m:
+                verdicts[(m.group(1), m.group(2))] = m.group(3)
+    return sorted(f"{c} {t}" for (c, t), v in verdicts.items() if v == "FAILED")
+
+
 def main():
     if len(sys.argv) < 3 or not sys.argv[1].isdigit():
         sys.exit(__doc__)
     build, folders = sys.argv[1], sys.argv[2:]
+    # A failed test (the sweep's Menu, loading and blank-band checks among them) blocks the set,
+    # and with it the TestFlight push that waits on it (Merrill, Nov 22: "this cannot happen
+    # again").
+    failed = failed_tests(folders)
+    if failed:
+        print("\n".join(failed), file=sys.stderr)
+        sys.exit(f"{len(failed)} test(s) failed: rerun them (RERUN=) and pass the rerun folder after the run")
     work = tempfile.mkdtemp(prefix=f"qa-screenshots-{build}-")
     out = os.path.join(work, f"qa-screenshots-{build}")
     os.makedirs(out)
