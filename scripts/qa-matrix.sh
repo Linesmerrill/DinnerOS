@@ -209,12 +209,13 @@ runs_on() {
     # Adding by hand end to end, on the large iPhone.
     AddRecipeQATests | SaveThenOpenQATests) placed=large-dark ;;
     CompanionQATests) placed=small-dark ;;
-    UnsplashPhotoQATests) placed=duo-light ;;
-    AddRecipeChooserQATests) placed=large-light ;;
+    # Build 123 rebalance (the matrix ran 1840 s): off the slowest configs, large-light and the Duo.
+    UnsplashPhotoQATests) placed=ipadP-light ;;
+    AddRecipeChooserQATests) placed=ipadL-light ;;
     ImportFailureQATests) placed=duo-dark ;;
     DiscoverQATests) placed=small-light ;;
     CuisineQATests) placed=ipadP-dark ;;
-    NextStepDotQATests) placed=duo-dark ;;
+    NextStepDotQATests) placed=ipadL-light ;;
     ReportRecipeQATests) placed=small-dark ;;
     # Pre-submission checks (decisions 741, 749).
     ReviewPathQATests) placed=ipadP-dark ;;
