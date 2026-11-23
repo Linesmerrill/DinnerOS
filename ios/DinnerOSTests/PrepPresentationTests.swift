@@ -140,7 +140,7 @@ struct PrepPresentationTests {
         #expect(banner.moreText == nil)
         // Each item says what to do with it, so the member knows which is which at a glance.
         #expect(banner.rows.map(\.card.name) == ["Ground Pork", "Chicken Thighs"])
-        // Each says the bag size too, and the extra under it (Hark, build 122: "2 bags" alone).
+        // An older server sends no rest: each says the bag size, and the extra under it.
         #expect(banner.rows.map(\.glanceText) == ["4 bags, 10 oz each", "3 bags, 12 oz each"])
         #expect(banner.rows.map(\.glanceNote) == ["Plus 4 oz extra.", nil])
         // Less than a bag isn't something to put away: it's listed last, with why under it.
@@ -155,22 +155,41 @@ struct PrepPresentationTests {
         #expect(banner.accessibilityLabel == spoken)
     }
 
-    /// The API's own words win at the suggested count: the bag size, the extra, and what the
-    /// pantry already had (the Ground Pork topped up from 9 oz).
-    @Test func theBannerUsesTheAPIsWordsAndSaysWhatsOnHand() throws {
+    /// The API's own words win at the suggested count: what's left after the week, then how
+    /// it splits, so the two lines add up (Hark, build 122 round 5: "2 bags, 10 oz each" with
+    /// "You already have 9 oz." added up to nothing). What was on hand stays off the banner.
+    @Test func theBannerUsesTheAPIsWordsAndTheyAddUp() throws {
         let json = PrepPreviewData.severalBagsJSON.replacingOccurrences(
             of: #""instruction":"""#,
-            with: #""glanceText":"2 bags, 10 oz each","glanceNote":"Plus 3 oz extra. You already have 9 oz.","#
-                + #""onHandText":"9 oz","instruction":"""#)
+            with: #""glanceText":"44 oz left after this week","glanceNote":"Freeze 4 bags of 10 oz, 4 oz extra.","#
+                + #""restText":"44 oz","onHandText":"9 oz","instruction":"""#)
         let card = try #require(PrepPreviewData.session(json)?.cards.first)
         let suggested = try presentation(card)
-        #expect(suggested.glanceText == "2 bags, 10 oz each")
-        #expect(suggested.glanceNote == "Plus 3 oz extra. You already have 9 oz.")
-        // Another count builds its own words, still saying what's on hand.
+        #expect(suggested.glanceText == "44 oz left after this week")
+        #expect(suggested.glanceNote == "Freeze 4 bags of 10 oz, 4 oz extra.")
+        // Another count builds its own words: the same rest, split the new way.
         let two = try presentation(card, bags: 2)
-        #expect(two.glanceText == "2 bags, 10 oz each")
-        #expect(two.glanceNote == "Plus 24 oz extra. You already have 9 oz.")
-        #expect(PrepCardPresentation.spoken("You already have 9 oz.") == "You already have 9 ounces.")
+        #expect(two.glanceText == "44 oz left after this week")
+        #expect(two.glanceNote == "Freeze 2 bags of 10 oz, 24 oz extra.")
+        let one = try presentation(card, bags: 1)
+        #expect(one.glanceNote == "Freeze 1 bag of 10 oz, 34 oz extra.")
+        for row in [suggested, two, one] {
+            #expect(row.glanceNote?.contains("9 oz") == false)
+        }
+        #expect(
+            PrepCardPresentation.spoken("Freeze 2 bags of 10 oz, 3 oz extra.")
+                == "Freeze 2 bags of 10 ounces, 3 ounces extra.")
+    }
+
+    /// Every bag spoken for: the note says only the bags.
+    @Test func theNoteWithNothingExtraSaysOnlyTheBags() throws {
+        let json = PrepPreviewData.oneBagJSON.replacingOccurrences(
+            of: #""instruction":"""#, with: #""restText":"10 oz","instruction":"""#
+        ).replacingOccurrences(of: #""leftoverText":"4 oz""#, with: #""leftoverText":"""#)
+        let card = try #require(PrepPreviewData.session(json)?.cards.first)
+        let row = try presentation(card)
+        #expect(row.glanceText == "10 oz left after this week")
+        #expect(row.glanceNote == "Freeze 1 bag of 10 oz.")
     }
 
     @Test func aBannerWithOnlyExtrasFreezesNothing() throws {

@@ -42,15 +42,20 @@ final class ShopPrepQATests: XCTestCase {
         XCTAssertTrue(card.label.contains("2 bags to freeze"), "The freeze card doesn’t say 2 bags: \(card.label)")
         XCTAssertFalse(card.label.contains("12 bags"), "The freeze card counts 1 oz bags: \(card.label)")
         XCTAssertTrue(card.label.contains("Ground Beef"), "Ground Beef’s extra isn’t on the card: \(card.label)")
-        // The row says the bag size, the extra, and what was on hand (Hark, build 122).
+        // The row says what's left after the week and how it splits, so the math checks out:
+        // 24 oz bought, 1 oz kept out with the 9 oz on hand, 23 oz = 2 bags of 10 oz + 3 oz
+        // (Hark, build 122 round 5).
         XCTAssertTrue(
-            card.label.contains("Ground Pork, 2 bags, 10 ounces each. Plus 3 ounces extra. You already have 9 ounces"),
-            "The pork row doesn’t say the bag size and what’s on hand: \(card.label)")
+            card.label.contains(
+                "Ground Pork, 23 ounces left after this week. Freeze 2 bags of 10 ounces, 3 ounces extra"),
+            "The pork row doesn’t say what’s left and how it splits: \(card.label)")
+        XCTAssertFalse(card.label.contains("9 ounces"), "The pork row still says what was on hand: \(card.label)")
         // "Too little to freeze" comes after Ground Beef, the item it's about.
         XCTAssertTrue(
             card.label.contains("Ground Beef, 6 ounces extra. Too little to freeze"),
             "The note isn’t under Ground Beef: \(card.label)")
-        XCTAssertTrue(app.staticTexts["2 bags, 10 oz each"].exists || card.label.contains("10 ounces each"))
+        XCTAssertTrue(
+            app.staticTexts["23 oz left after this week"].exists || card.label.contains("23 ounces left after this week"))
         sleep(1)
         snap(app, "Shop › Freeze card (\(mode))")
         app.terminate()

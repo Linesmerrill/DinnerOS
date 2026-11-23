@@ -87,13 +87,16 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     let frozen: Bool
     /// The card's one line of guidance, ready to show.
     let instruction: String
-    /// The banner row's short version at the suggested bag count, ready to show: "2 bags,
-    /// 10 oz each", and the line under it, "Plus 3 oz extra. You already have 9 oz." (empty
+    /// The banner row's short version at the suggested bag count, ready to show: "23 oz left
+    /// after this week", and the line under it, "Freeze 2 bags of 10 oz, 3 oz extra." (empty
     /// when there's nothing to add). Older servers leave them out.
     let glanceText: String?
     let glanceNote: String?
+    /// What the pack leaves once this week's meals are kept out, "23 oz", the same at any bag
+    /// count. Older servers leave it out; empty when nothing freezes.
+    let restText: String?
     /// What the pantry already had toward the week's meals, "9 oz". Older servers leave it out;
-    /// empty when nothing.
+    /// empty when nothing. The banner no longer shows it (build 123: it didn't add up there).
     let onHandText: String?
     let reminderText: String
     /// What to write on each bag, one line each: "Ground Pork, 10 oz", "Frozen Sep 27",
@@ -124,7 +127,8 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, category, unit, bought, boughtValue, boughtText, needed, neededValue,
             neededText, surplus, surplusValue, surplusPercent, surplusText, freezable, frozen,
-            instruction, glanceText, glanceNote, onHandText, reminderText, bagLabel, meals, portions, frozenPortions,
+            instruction, glanceText, glanceNote, restText, onHandText, reminderText, bagLabel, meals, portions,
+            frozenPortions,
             answeredAt, suggestions
         case imageURLString = "imageUrl"
         case handoffID = "handoffId"
