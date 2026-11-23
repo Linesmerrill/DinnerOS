@@ -111,7 +111,7 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Name, \(person.name)"].exists, "Account doesn’t show \(person.name)")
         XCTAssertTrue(app.staticTexts["Email, \(person.email)"].exists, "Account doesn’t show their email")
         XCTAssertTrue(
-            app.staticTexts["Signed In With, Email"].waitForExistence(timeout: 5),
+            app.staticTexts["Signed in with, Email"].waitForExistence(timeout: 5),
             "Account doesn’t say they signed in with email")
         snap(app, "Face ID › Back from the background (\(mode))")
 
