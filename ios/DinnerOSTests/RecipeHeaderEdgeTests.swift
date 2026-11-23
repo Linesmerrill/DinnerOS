@@ -88,6 +88,95 @@ struct RecipeHeaderEdgeTests {
                 == DS.Size.rowEdgeFade)
     }
 
+    // MARK: Rows fade out whole at a pinned bar (build 122 round 5)
+
+    /// A row resting where a list's first row starts (a fade's height below the bar) is whole;
+    /// it fades as it comes up and is gone by the time its top reaches the bar's edge, so it's
+    /// never shown half under the bar (Grape Tomatoes on the Duo's recipe page, ½ cup Jasmine Rice
+    /// on its cooking screen).
+    @Test func aRowFadesOutWholeBeforeItReachesTheBar() {
+        let edge: CGFloat = 120
+        #expect(DSRowEdgeFade.opacity(top: edge + DS.Size.edgeFade, height: 50, barEdge: edge) == 1)
+        #expect(DSRowEdgeFade.opacity(top: edge + 300, height: 50, barEdge: edge) == 1)
+        #expect(DSRowEdgeFade.opacity(top: edge + DS.Size.edgeFade / 2, height: 50, barEdge: edge) == 0.5)
+        #expect(DSRowEdgeFade.opacity(top: edge, height: 50, barEdge: edge) == 0)
+        #expect(DSRowEdgeFade.opacity(top: edge - 25, height: 50, barEdge: edge) == 0)
+    }
+
+    @Test func noBarOrATallCardLeavesTheRowAlone() {
+        #expect(DSRowEdgeFade.opacity(top: 0, height: 50, barEdge: nil) == 1)
+        // A step card with its photo keeps the bar's gradient instead.
+        #expect(DSRowEdgeFade.opacity(top: 120, height: DSRowEdgeFade.maxRowHeight + 1, barEdge: 120) == 1)
+    }
+
+    // MARK: A short tab still lets the picker pin (build 122 round 5)
+
+    /// The Duo's typed-by-hand recipe on Nutrition: the page ends inside the snap zone, so it
+    /// came to rest with the large title half under the bar. The sections get room to pin.
+    @Test func aShortTabGetsRoomForThePickerToPin() {
+        let zone: ClosedRange<CGFloat> = 200...500
+        // Sections from 600 down, 150 tall, a 40 pt pad: the page reaches 600+150+40-560 = 230.
+        let height = RecipeDetailHeader.sectionsMinHeight(
+            sectionsTop: 600, sectionsHeight: 150, bottomPadding: 40, visibleHeight: 560, pinLine: 100, zone: zone)
+        #expect(height == CGFloat(560 - 100 - 40))
+        // With that room the page reaches the pinned end: 600 + 420 + 40 - 560 = 500.
+        #expect(600 + height + 40 - 560 >= zone.upperBound)
+    }
+
+    /// The snap counts the bottom bar's inset, so a page with room to pin can reach the pin.
+    @Test func theScrollEndsPastTheBottomBar() {
+        #expect(RecipeDetailHeader.reachable(contentHeight: 1200, containerHeight: 700, bottomInset: 150) == 650)
+    }
+
+    @Test func aLongOrUnscrollablePageKeepsItsHeight() {
+        let zone: ClosedRange<CGFloat> = 200...500
+        // Long enough already.
+        #expect(
+            RecipeDetailHeader.sectionsMinHeight(
+                sectionsTop: 600, sectionsHeight: 900, bottomPadding: 40, visibleHeight: 560, pinLine: 100, zone: zone)
+                == 0)
+        // Fits on the screen, or never scrolls the title to the bar (an iPad): nothing added.
+        #expect(
+            RecipeDetailHeader.sectionsMinHeight(
+                sectionsTop: 600, sectionsHeight: 60, bottomPadding: 40, visibleHeight: 900, pinLine: 100, zone: zone)
+                == 0)
+        // No zone, or not measured yet.
+        #expect(
+            RecipeDetailHeader.sectionsMinHeight(
+                sectionsTop: 600, sectionsHeight: 150, bottomPadding: 40, visibleHeight: 560, pinLine: 100, zone: nil)
+                == 0)
+        #expect(
+            RecipeDetailHeader.sectionsMinHeight(
+                sectionsTop: 600, sectionsHeight: 0, bottomPadding: 40, visibleHeight: 560, pinLine: 100, zone: zone)
+                == 0)
+    }
+
+    // MARK: Each word once under the title (build 122 round 5)
+
+    @Test func aTagTheBadgeAlreadySaysIsLeftOut() {
+        #expect(RecipeTagChips.shown(["quick", "Pasta"], badge: "Quick") == ["Pasta"])
+        #expect(RecipeTagChips.shown(["quick", "Pasta"]) == ["Quick", "Pasta"])
+        #expect(RecipeTagChips.shown(["one-pot", "seo", "latin-american-faves", "One Pot"]) == ["One Pot"])
+    }
+
+    @Test func thePhotoNeverSaysQuick() {
+        let quick = MenuBadge(code: .quick, text: "Quick")
+        let again = MenuBadge(code: .makeAgain, text: "Make Again")
+        #expect(RecipeTagChips.heroBadge([quick]) == nil)
+        #expect(RecipeTagChips.heroBadge([quick, again]) == again)
+    }
+
+    @Test func theStepperInTheBarMeansNoSecondServingsControl() {
+        let planned = RecipePlanBarLayout.make(
+            isPlanned: true, canEdit: true, isDraft: true, isPastWeek: false, hasStartCooking: true,
+            startCookingInBar: true, stacksStartCooking: true)
+        #expect(planned?.row.contains(.stepper) == true)
+        let notPlanned = RecipePlanBarLayout.make(
+            isPlanned: false, canEdit: true, isDraft: true, isPastWeek: false, hasStartCooking: true,
+            startCookingInBar: true, stacksStartCooking: true)
+        #expect(notPlanned?.row.contains(.stepper) == false)
+    }
+
     // MARK: Ratings only once it's been cooked
 
     private let thisWeek = ISOWeek("2026-W47")!

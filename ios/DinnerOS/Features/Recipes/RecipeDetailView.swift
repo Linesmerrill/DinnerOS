@@ -55,6 +55,12 @@ struct RecipeDetailView: View {
     @State private var pickerHeight: CGFloat = 0
     /// The scroll view's own top safe area: where the bar ends.
     @State private var scrollTop: CGFloat = 0
+    /// The picker and the sections under it, as tall as they are (`sectionsMinHeight`).
+    @State private var sectionsHeight: CGFloat = 0
+    /// The scroll view's height less the bottom bar: what the page shows at once.
+    @State private var visibleHeight: CGFloat = 0
+    /// The bottom bar's inset on the scroll view, for where the scroll can end (`RecipeHeaderSnap`).
+    @State private var bottomInset: CGFloat = 0
     /// The one-line title's row under the bar's buttons.
     @ScaledMetric(relativeTo: .headline) private var compactTitleHeight: CGFloat = 36
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -167,60 +173,79 @@ struct RecipeDetailView: View {
                         RecipeNotesForNextTime(notes: notes)
                             .recipeColumn()
                     }
-                    RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection, fadeHeight: pickerFade)
-                        // Where it would sit unpinned: the picker only moves its drawing.
-                        .onGeometryChange(for: RecipeDetailHeader.Anchor.self) { proxy in
-                            RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
-                        } action: { anchor in
-                            if pickerContentTop != anchor.content { pickerContentTop = anchor.content }
-                            let fade = RecipeDetailHeader.barFade(pickerTop: anchor.visible, pinLine: pinLine)
-                            if fade != barFade { barFade = fade }
-                        }
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.height
-                        } action: { height in
-                            if height != pickerHeight { pickerHeight = height }
-                        }
-                        .stickyBelowTop(pinLine)
-                        .zIndex(1)
-                    // Clear of the picker's fade, so the section's first row is whole once the
-                    // picker pins.
-                    sectionContent
-                        .recipeColumn()
-                        .padding(.top, DS.Size.edgeFade - DS.Space.xl)
-                        // Once rows scroll up under the pinned picker, its fade grows to a row's
-                        // height, so the top row is never cut by a hard edge (Hark's review,
-                        // build 122 item 1c). Measured here: the picker's own frame moves with it
-                        // once it pins.
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.frame(in: .scrollView).minY
-                        } action: { top in
-                            let fade = RecipeDetailHeader.pickerFade(
-                                sectionTop: top, pinLine: pinLine, pickerHeight: pickerHeight)
-                            if fade != pickerFade { pickerFade = fade }
-                        }
-                    if let recipe, !recipe.steps.isEmpty {
-                        CookingStepsSection(
-                            steps: recipe.steps, instructions: instructions,
-                            chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
-                        )
-                        .recipeColumn()
-                    }
-                    // Picking recipes to share one by one happens here, on the recipe.
-                    // Any recipe the household has, imports included, can be shared (decision 685).
-                    if let recipe, households.current?.household.catalogSharing == .chosen,
-                        households.access?.can(.recipesEdit) == true
-                    {
-                        RecipeSharingRow(recipe: recipe)
+                    // The picker and everything under it, at least a screen tall once the page
+                    // scrolls, so the picker can always pin and the large title never rests half
+                    // under the bar on a short tab (Hark’s review, build 122 round 5).
+                    VStack(alignment: .leading, spacing: DS.Space.xl) {
+                        RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection, fadeHeight: pickerFade)
+                            .onGeometryChange(for: RecipeDetailHeader.Anchor.self) { proxy in
+                                RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
+                            } action: { anchor in
+                                let fade = RecipeDetailHeader.barFade(pickerTop: anchor.visible, pinLine: pinLine)
+                                if fade != barFade { barFade = fade }
+                            }
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { height in
+                                if height != pickerHeight { pickerHeight = height }
+                            }
+                            .stickyBelowTop(pinLine)
+                            .zIndex(1)
+                        // Clear of the picker's fade, so the section's first row is whole once the
+                        // picker pins.
+                        sectionContent
                             .recipeColumn()
+                            // Its rows fade out whole before they reach the pinned picker's edge.
+                            .environment(\.dsBarEdge, pinLine + pickerHeight)
+                            .padding(.top, DS.Size.edgeFade - DS.Space.xl)
+                            // Once rows scroll up under the pinned picker, its fade grows to a row's
+                            // height, so the top row is never cut by a hard edge (Hark's review,
+                            // build 122 item 1c). Measured here: the picker's own frame moves with it
+                            // once it pins.
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.frame(in: .scrollView).minY
+                            } action: { top in
+                                let fade = RecipeDetailHeader.pickerFade(
+                                    sectionTop: top, pinLine: pinLine, pickerHeight: pickerHeight)
+                                if fade != pickerFade { pickerFade = fade }
+                            }
+                        if let recipe, !recipe.steps.isEmpty {
+                            CookingStepsSection(
+                                steps: recipe.steps, instructions: instructions,
+                                chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
+                            )
+                            .recipeColumn()
+                        }
+                        // Picking recipes to share one by one happens here, on the recipe.
+                        // Any recipe the household has, imports included, can be shared (decision 685).
+                        if let recipe, households.current?.household.catalogSharing == .chosen,
+                            households.access?.can(.recipesEdit) == true
+                        {
+                            RecipeSharingRow(recipe: recipe)
+                                .recipeColumn()
+                        }
                     }
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        if height != sectionsHeight { sectionsHeight = height }
+                    }
+                    // Where the picker sits unpinned, read from the stack that holds it: the
+                    // picker's own frame follows it as it pins, which moved the snap zone's end
+                    // with the scroll and left a short tab resting on half the title.
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.frame(in: .named(RecipeDetailHeader.contentSpace)).minY
+                    } action: { top in
+                        if pickerContentTop != top { pickerContentTop = top }
+                    }
+                    .frame(minHeight: sectionsMinHeight, alignment: .top)
                 }
                 // Clear of the bottom bar's fade, so the last row comes out of it whole.
-                .padding(.bottom, DS.Size.edgeFade + DS.Space.s)
+                .padding(.bottom, Self.bottomPadding)
             }
             .coordinateSpace(.named(RecipeDetailHeader.contentSpace))
         }
-        .scrollTargetBehavior(RecipeHeaderSnap(zone: snapZone))
+        .scrollTargetBehavior(RecipeHeaderSnap(zone: snapZone, bottomInset: bottomInset))
         .ignoresSafeArea(edges: .top)
         // Where the bar ends, measured on the scroll view itself so the solid bar and the pinned
         // picker use the same line (on iPad the page's own inset left a 100 pt gap).
@@ -242,15 +267,20 @@ struct RecipeDetailView: View {
         // page, so it needs none.
         .overlay(alignment: .top) {
             if !showsBar && !hasSideColumn {
-                // On iPad the photo starts at the bar's edge (the bar holds the tabs), so the
-                // wash is the page's own solid color there and eases out from the photo's top,
-                // with no line where the photo begins.
-                let photoBelowBar = scrollTop > 0
-                RecipeHeroScrim(
-                    barBottom: barBottom, easeFrom: photoBelowBar ? barBottom : barBottom - DS.Space.xxl,
-                    color: photoBelowBar ? DS.Colors.background : DS.Colors.heroScrim
-                )
-                .ignoresSafeArea(edges: .top)
+                // On iPad the photo starts at the bar's edge (the bar holds the tabs): the bar is
+                // the page's own solid color down to that edge and the photo starts clean below
+                // it. Easing the color out over the photo left a gray band on a pale photo in
+                // dark mode (Hark's review, build 122 round 5).
+                if scrollTop > 0 {
+                    DS.Colors.background
+                        .frame(height: barBottom)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .ignoresSafeArea(edges: .top)
+                } else {
+                    RecipeHeroScrim(barBottom: barBottom, easeFrom: barBottom - DS.Space.xxl)
+                        .ignoresSafeArea(edges: .top)
+                }
             }
         }
         // Once the photo has scrolled away, a solid bar and, under the buttons, the recipe's
@@ -283,10 +313,15 @@ struct RecipeDetailView: View {
         .background(DS.Colors.background)
         .scrollIndicators(.hidden)
         .onScrollGeometryChange(for: RecipeDetailHeader.Scroll.self) { geometry in
-            RecipeDetailHeader.Scroll(offset: geometry.contentOffset.y, top: geometry.contentInsets.top)
+            RecipeDetailHeader.Scroll(
+                offset: geometry.contentOffset.y, top: geometry.contentInsets.top,
+                visibleHeight: geometry.containerSize.height - geometry.contentInsets.bottom,
+                bottom: geometry.contentInsets.bottom)
         } action: { _, scroll in
             let offset = scroll.offset
             if pinTop != scroll.top { pinTop = scroll.top }
+            if visibleHeight != scroll.visibleHeight { visibleHeight = scroll.visibleHeight }
+            if bottomInset != scroll.bottom { bottomInset = scroll.bottom }
             // A gap between showing and hiding the bar, so a page resting near the line
             // can't flip it on and off: the bar changes the layout, which moves the line.
             let shows = RecipeDetailHeader.showsBar(offset: offset, heroHeight: heroHeight, showing: showsNavigationBar)
@@ -485,10 +520,30 @@ struct RecipeDetailView: View {
             titleTop: titleContentTop, pickerTop: pickerContentTop, pinLine: pinLine, fade: DS.Size.edgeFade)
     }
 
+    /// The least height for the picker and the sections under it (`RecipeDetailHeader.sectionsMinHeight`).
+    private var sectionsMinHeight: CGFloat {
+        RecipeDetailHeader.sectionsMinHeight(
+            sectionsTop: pickerContentTop, sectionsHeight: sectionsHeight, bottomPadding: Self.bottomPadding,
+            visibleHeight: visibleHeight, pinLine: pinLine, zone: snapZone)
+    }
+
+    /// Room under the last section, clear of the bottom bar's fade.
+    private static let bottomPadding = DS.Size.edgeFade + DS.Space.s
+
+    /// Whether the bottom bar has the −/+ servings stepper: then the Ingredients tab names the
+    /// size without a second control for it (Hark's review, build 122 round 5).
+    private var barHasServings: Bool {
+        RecipePlanBarLayout.make(
+            isPlanned: !plannedEntries.isEmpty, canEdit: households.access?.can(.planEdit) == true,
+            isDraft: plans.isDraft, isPastWeek: menu.selectedTiming == .past,
+            hasStartCooking: recipe?.steps.isEmpty == false, startCookingInBar: startCookingPlacement != .topBar,
+            stacksStartCooking: startCookingPlacement == .bottomRow
+        )?.row.contains(.stepper) == true
+    }
+
     /// "Autopilot pick" or "Make Again" from the card this recipe was opened from.
     private var heroBadge: MenuBadge? {
-        let badges = card?.badges ?? []
-        return badges.first { $0.code == .autopilotPick } ?? badges.first { $0.code == .makeAgain } ?? badges.first
+        RecipeTagChips.heroBadge(card?.badges ?? [])
     }
 
     private var shareURL: URL? {
@@ -598,19 +653,7 @@ struct RecipeDetailView: View {
     private var tags: [String] {
         // The cuisine has its own line when the server names it.
         let cuisines = (recipe?.cuisineLabels.isEmpty ?? true) ? (recipe?.cuisines ?? []) : []
-        let values = (recipe?.tags ?? summary.tags) + cuisines
-        var seen = Set<String>()
-        return values.compactMap { value -> String? in
-            let spelled = value.replacingOccurrences(of: "-", with: " ")
-                .replacingOccurrences(of: "_", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = spelled.lowercased()
-            guard !key.isEmpty, key != "seo", !key.hasSuffix("faves"), !key.hasSuffix("picks") else { return nil }
-            guard seen.insert(key).inserted else { return nil }
-            return spelled.capitalized(with: .current)
-        }
-        .prefix(5)
-        .map { $0 }
+        return RecipeTagChips.shown((recipe?.tags ?? summary.tags) + cuisines, badge: heroBadge?.text)
     }
 
     // MARK: Sections
@@ -635,7 +678,8 @@ struct RecipeDetailView: View {
                 RecipeDescriptionSection(recipe: recipe, hasBeenCooked: hasBeenCooked)
             case .ingredients:
                 RecipeIngredientsSection(
-                    recipe: recipe, servings: $servings, instructions: instructions, canEdit: canLeaveOut,
+                    recipe: recipe, servings: $servings, showsServingPicker: !barHasServings,
+                    instructions: instructions, canEdit: canLeaveOut,
                     canSkipOnce: plannedWeek != nil, working: leavingOut, leaveOut: leaveOut(_:choice:),
                     putBack: putBack(_:))
             case .nutrition:
@@ -991,6 +1035,36 @@ enum RecipeStatsLayout {
     }
 }
 
+/// Which tags show as chips under the recipe's title.
+nonisolated enum RecipeTagChips {
+    /// Imported tags carry the source's own slugs ("latin-american-faves", "seo"): the ones a
+    /// person would recognize, spelled out, each once, up to five. A tag that says the same as the
+    /// photo's badge (`badge`, "Quick") is left out, so it shows once (build 122 round 5).
+    static func shown(_ values: [String], badge: String? = nil) -> [String] {
+        var seen = Set<String>()
+        if let badge { seen.insert(badge.lowercased()) }
+        return values.compactMap { value -> String? in
+            let spelled = value.replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = spelled.lowercased()
+            guard !key.isEmpty, key != "seo", !key.hasSuffix("faves"), !key.hasSuffix("picks") else { return nil }
+            guard seen.insert(key).inserted else { return nil }
+            return spelled.capitalized(with: .current)
+        }
+        .prefix(5)
+        .map { $0 }
+    }
+
+    /// The badge on the photo: "Autopilot pick", then "Make Again", then any other, but never
+    /// "Quick": the page already says how long it takes and Autopilot calls it quick under
+    /// Description, so the photo said it a second time (Hark's review, build 122 round 5).
+    static func heroBadge(_ badges: [MenuBadge]) -> MenuBadge? {
+        let shown = badges.filter { $0.code != .quick }
+        return shown.first { $0.code == .autopilotPick } ?? shown.first { $0.code == .makeAgain } ?? shown.first
+    }
+}
+
 /// A tag under the recipe's title: primary text on a gray capsule, so it reads in light and dark
 /// (the plain menu chip's gray on gray was too faint here).
 struct RecipeTagChip: View {
@@ -1088,6 +1162,9 @@ enum RecipeDetailHeader {
     struct Scroll: Equatable {
         var offset: CGFloat
         var top: CGFloat
+        /// The scroll view's height less its bottom inset (the bottom bar).
+        var visibleHeight: CGFloat = 0
+        var bottom: CGFloat = 0
     }
 
     /// How far to push a pinned row down so it stays `top` points below the scroll view's top:
@@ -1140,6 +1217,29 @@ enum RecipeDetailHeader {
         return start...end
     }
 
+    /// The least height for the picker and the sections under it (starting `sectionsTop` down the
+    /// page's content and `sectionsHeight` tall as they are), so that a page that scrolls into
+    /// `zone` can always scroll on until the picker pins at `pinLine`: then a short tab (Nutrition
+    /// with no values) never comes to rest with the large title half under the bar. 0 when the
+    /// page already reaches that far, or never scrolls into the zone (it fits on the screen).
+    static func sectionsMinHeight(
+        sectionsTop: CGFloat, sectionsHeight: CGFloat, bottomPadding: CGFloat, visibleHeight: CGFloat,
+        pinLine: CGFloat, zone: ClosedRange<CGFloat>?
+    ) -> CGFloat {
+        guard let zone, visibleHeight > 0, sectionsHeight > 0 else { return 0 }
+        let reachable = sectionsTop + sectionsHeight + bottomPadding - visibleHeight
+        guard reachable > zone.lowerBound, reachable < zone.upperBound else { return 0 }
+        // With the picker pinned, the sections fill the page from the picker's top to the end.
+        return (visibleHeight - pinLine - bottomPadding).rounded(.up)
+    }
+
+    /// The farthest a page scrolls: its content and the bottom bar's inset, less the screen.
+    nonisolated static func reachable(contentHeight: CGFloat, containerHeight: CGFloat, bottomInset: CGFloat)
+        -> CGFloat
+    {
+        contentHeight + bottomInset - containerHeight
+    }
+
     /// Where a scroll ending at `target` settles: unchanged outside `zone`; inside it, at the end
     /// it was heading for (`velocity` is positive scrolling down the page), or the nearer end
     /// when it was let go without a flick.
@@ -1187,10 +1287,15 @@ extension View {
 /// (`RecipeDetailHeader.snapped`).
 nonisolated struct RecipeHeaderSnap: ScrollTargetBehavior {
     let zone: ClosedRange<CGFloat>?
+    /// The bottom bar's inset: the scroll ends that much further down. Left out, a page given
+    /// room to pin its picker was still held short of it (build 122 round 5).
+    var bottomInset: CGFloat = 0
 
     func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
         guard let zone else { return }
-        let reachable = context.contentSize.height - context.containerSize.height
+        let reachable = RecipeDetailHeader.reachable(
+            contentHeight: context.contentSize.height, containerHeight: context.containerSize.height,
+            bottomInset: bottomInset)
         // A page too short to pin the picker settles at its own end.
         let clamped = zone.lowerBound...max(zone.lowerBound, min(zone.upperBound, reachable))
         target.rect.origin.y = RecipeDetailHeader.snapped(
