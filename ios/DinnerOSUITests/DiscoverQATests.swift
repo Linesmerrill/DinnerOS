@@ -144,7 +144,7 @@ final class DiscoverQATests: XCTestCase {
 
     @MainActor
     private func clearSearch(_ app: XCUIApplication, _ field: XCUIElement) {
-        let clear = app.buttons["Clear search"].firstMatch
+        let clear = app.buttons.matching(NSPredicate(format: "label ==[c] %@", "Clear search")).firstMatch
         if clear.exists { clear.tap() }
         if !app.keyboards.firstMatch.exists { field.tap() }
     }

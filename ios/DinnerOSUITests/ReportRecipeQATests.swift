@@ -95,7 +95,7 @@ final class ReportRecipeQATests: XCTestCase {
         let field = app.textFields["DiscoverSearch"].firstMatch
         reveal(field, in: app, maxSwipes: 6)
         field.tap()
-        let clear = app.buttons["Clear search"].firstMatch
+        let clear = app.buttons.matching(NSPredicate(format: "label ==[c] %@", "Clear search")).firstMatch
         if clear.exists { clear.tap() }
         if !app.keyboards.firstMatch.exists { field.tap() }
         field.typeText(name)
