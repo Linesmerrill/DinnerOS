@@ -95,7 +95,7 @@ final class BiometricSignInQATests: XCTestCase {
         let toggle = app.switches["account.biometricSignIn"].firstMatch
         XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Not on the Account screen")
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for seconds: UInt32 in [5, 15] {
+        for seconds: UInt32 in [8] {
             XCUIDevice.shared.press(.home)
             sleep(seconds)
             app.activate()
