@@ -32,3 +32,20 @@ class FailedTestsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WrongBuildTest(unittest.TestCase):
+    def folder(self, number):
+        path = tempfile.mkdtemp()
+        if number is not None:
+            with open(os.path.join(path, "build-number"), "w") as f:
+                f.write(number + "\n")
+        return path
+
+    def test_runs_built_as_the_number_pass(self):
+        self.assertEqual(qa.wrong_build("121", [self.folder("121"), self.folder("121")]), [])
+
+    def test_another_number_or_none_blocks_the_set(self):
+        other, none = self.folder("120"), self.folder(None)
+        wrong = qa.wrong_build("121", [self.folder("121"), other, none])
+        self.assertEqual(wrong, [f"{other}: built as 120", f"{none}: built as none"])

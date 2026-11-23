@@ -162,6 +162,13 @@ struct HouseholdView: View {
             if storeRequests != nil || referrals != nil {
                 operatorSection
             }
+            // The number TestFlight shows, so a screenshot can be matched to a phone (Hark, Nov 23).
+            Section {
+            } footer: {
+                Text("Version \(FeedbackView.versionText)")
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("household.version")
+            }
         }
         // No tall empty band between the bar and the household card: the list's own top
         // spacing is gap enough (build 122, Hark's review item 16: too large on the Duo).

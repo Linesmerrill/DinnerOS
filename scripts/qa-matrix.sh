@@ -9,6 +9,10 @@
 #   RERUN=/path/to/old/summary.txt scripts/qa-matrix.sh   # only what failed there, nothing else
 #   PLAN_ONLY=1 scripts/qa-matrix.sh          # which simulator runs which test; runs nothing
 #
+# BUILD_NUMBER is the number TestFlight will give this build (fastlane's latest + 1), required.
+# The app is built with it, Household shows it ("Version 1.0 (121)"), and $OUT/build-number
+# records it so qa-screenshots.py publishes these shots only under that number.
+#
 # Needs two local APIs on local Mongo (docs/development.md): 8082 with no photo search key, and
 # 8083 with UNSPLASH_ACCESS_KEY=qa-not-a-real-key pointed at cmd/fakeunsplash. Start both with
 # REFERRAL_MAX_PER_30_DAYS=1000 so parallel referral runs don't use up the sharer's slots, and
@@ -28,6 +32,10 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
+if [ -z "${PLAN_ONLY:-}" ]; then
+    BUILD_NUMBER=${BUILD_NUMBER:?set BUILD_NUMBER to the number TestFlight will give this build}
+    case $BUILD_NUMBER in *[!0-9]*) echo "BUILD_NUMBER must be a number"; exit 1 ;; esac
+fi
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light duo-dark"
 CONFIGS=${CONFIGS:-$ALL}
 TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests/testTheGuideShowsFromEveryEntryAndCopiesTheList AnyListGuideQATests/testCopyShowsTheCopiedHUD ReferralQATests/testAnInviteCountsOnceTheNewHouseholdSetsUp ReferralQATests/testANewOrCustomCodeReplacesTheOldOne InviteLinkQATests/testANewPersonAcceptsAnInviteLinkAndGetsTheChecklist InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID ShopComponentQATests ShopPrepQATests MenuCardsQATests StartCookingQATests"}
@@ -51,6 +59,7 @@ RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
 # iPhone Duo only runs on its own iOS 27.2 runtime.
 RUNTIME_DUO=${RUNTIME_DUO:-com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4}
 mkdir -p "$OUT"
+[ -n "${PLAN_ONLY:-}" ] || echo "$BUILD_NUMBER" >"$OUT/build-number"
 : >"$OUT/summary.txt"
 rm -f "$OUT/STOP"
 
@@ -85,7 +94,8 @@ build() {
     local port=$1
     xcodebuild build-for-testing -project "$ROOT/ios/DinnerOS.xcodeproj" -scheme "DinnerOS QA" \
         -destination "generic/platform=iOS Simulator" -derivedDataPath "$OUT/dd-$port" \
-        "API_BASE_URL=http:/\$()/localhost:$port" ARCHS=arm64 CODE_SIGN_IDENTITY=- >"$OUT/build-$port.log" 2>&1 ||
+        "API_BASE_URL=http:/\$()/localhost:$port" "CURRENT_PROJECT_VERSION=$BUILD_NUMBER" \
+        ARCHS=arm64 CODE_SIGN_IDENTITY=- >"$OUT/build-$port.log" 2>&1 ||
         { echo "build for $port failed: $OUT/build-$port.log"; exit 1; }
 }
 
@@ -113,7 +123,7 @@ run_test() {
     # Keychain outlives an uninstall: clear it so every test starts signed out.
     xcrun simctl keychain "$id" reset 2>/dev/null
     rm -rf "$OUT/$name.xcresult"
-    TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
+    TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_BUILD_NUMBER=$BUILD_NUMBER TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
         TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_BUILD_CHANNEL=appStore TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Pesto Bow Tie Pasta" \
         TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" TEST_RUNNER_QA_EXPECT_START_COOKING=$cook \
         TEST_RUNNER_QA_REVIEW_EMAIL="${REVIEW_ACCOUNT_EMAIL:-}" TEST_RUNNER_QA_REVIEW_PASSWORD="${REVIEW_ACCOUNT_PASSWORD:-}" \

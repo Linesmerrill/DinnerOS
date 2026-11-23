@@ -123,6 +123,21 @@ def failed_tests(folders):
     return sorted(f"{c} {t}" for (c, t), v in verdicts.items() if v == "FAILED")
 
 
+def wrong_build(build, folders):
+    """The folders whose app was built with another number, or with none recorded (before
+    build 121). TestFlight numbers builds itself (Hark, Nov 23), and the screenshots are matched
+    to a phone by the number Household shows."""
+    wrong = []
+    for folder in folders:
+        try:
+            recorded = open(os.path.join(folder, "build-number")).read().strip()
+        except OSError:
+            recorded = "none"
+        if recorded != build:
+            wrong.append(f"{folder}: built as {recorded}")
+    return wrong
+
+
 def main():
     if len(sys.argv) < 3 or not sys.argv[1].isdigit():
         sys.exit(__doc__)
@@ -130,6 +145,10 @@ def main():
     # A failed test (the sweep's Menu, loading and blank-band checks among them) blocks the set,
     # and with it the TestFlight push that waits on it (Merrill, Nov 22: "this cannot happen
     # again").
+    wrong = wrong_build(build, folders)
+    if wrong:
+        print("\n".join(wrong), file=sys.stderr)
+        sys.exit(f"these runs weren't built as {build}: rerun with BUILD_NUMBER={build}")
     failed = failed_tests(folders)
     if failed:
         print("\n".join(failed), file=sys.stderr)

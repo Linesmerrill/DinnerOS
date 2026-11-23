@@ -39,6 +39,7 @@ final class AppSweepQATests: XCTestCase {
             checkScreen(app, "\(tab) (\(mode))")
             checkNothingMissing(app, tab: tab, mode: mode)
             visitRows(app, tab: tab, mode: mode)
+            if tab == "Household" { checkVersion(app, mode: mode) }
         }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
     }
@@ -61,6 +62,23 @@ final class AppSweepQATests: XCTestCase {
             problems += MenuQAChecks.checkLoaded(app, screen: screen)
         default:
             break
+        }
+    }
+
+    /// Household's last line names the build as TestFlight numbers it ("Version 1.0 (121)"), the
+    /// number the matrix built with (BUILD_NUMBER), so a screenshot can be matched to a phone. The
+    /// Household shot shows it.
+    @MainActor
+    private func checkVersion(_ app: XCUIApplication, mode: String) {
+        let build = ProcessInfo.processInfo.environment["QA_BUILD_NUMBER"] ?? ""
+        let version = app.staticTexts["household.version"].firstMatch
+        reveal(version, in: app, maxSwipes: 12)
+        guard version.waitForExistence(timeout: 5) else {
+            problems.append("Household (\(mode)): no version line")
+            return
+        }
+        if build.isEmpty || !version.label.hasSuffix("(\(build))") {
+            problems.append("Household (\(mode)): shows “\(version.label)”, want build \(build)")
         }
     }
 
