@@ -19,13 +19,13 @@ final class ReportRecipeQATests: XCTestCase {
         let other = "Mushroom Pilaf \(n)"
         let cookSubject = QAPeople.subject()
         let cook = try await QAAPI.signIn(subject: cookSubject)
-        let cookHousehold = try await cook.createHousehold(name: "\(QAPeople.kitchen(forSubject: cookSubject)) \(n)")
+        let cookHousehold = try await cook.createHousehold(name: QAPeople.kitchen(forSubject: cookSubject))
         for name in [reported, hidden, other] {
             try await cook.shareTypedRecipe(householdID: cookHousehold, name: name)
         }
         let subject = QAPeople.subject()
         let me = try await QAAPI.signIn(subject: subject)
-        _ = try await me.createHousehold(name: "\(QAPeople.kitchen(forSubject: subject)) \(n)")
+        _ = try await me.createHousehold(name: QAPeople.kitchen(forSubject: subject))
 
         let app = XCUIApplication()
         applyOrientation()

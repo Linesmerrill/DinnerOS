@@ -18,7 +18,7 @@ final class DiscoverQATests: XCTestCase {
         let subject = QAPeople.subject()
         let addonName = "Garlic Bread \(n)"
         let api = try await QAAPI.signIn(subject: subject)
-        let householdID = try await api.createHousehold(name: "\(QAPeople.kitchen(forSubject: subject)) \(n)")
+        let householdID = try await api.createHousehold(name: QAPeople.kitchen(forSubject: subject))
         try await api.importAddon(householdID: householdID, name: addonName, sourceID: "qa-addon-\(n)")
 
         let app = XCUIApplication()

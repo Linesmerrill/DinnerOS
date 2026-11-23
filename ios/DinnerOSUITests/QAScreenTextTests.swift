@@ -28,6 +28,19 @@ final class QAScreenTextTests: XCTestCase {
         XCTAssertEqual(QAScreenText.offending(["Beef Tacos", "Contest"]), [])
     }
 
+    /// Shared Recipes' rows fail on a test run's recipe (build 123 review: "Saffron Pilaf 90901"
+    /// in Chef’s Picks).
+    func testRunNumberedRecipeNamesAreCaught() {
+        for name in ["Lemon Herb Pilaf 24421", "Mushroom Pilaf 90901", "Saffron Pilaf 123", "Pilaf  45678 "] {
+            XCTAssertTrue(MenuQAChecks.endsInRunNumber(name), name)
+        }
+        for name in ["Saffron Pilaf", "Chili for 2", "Serves 4", "Soup for 12", "24421 Pilaf", "Route 66 Burger", ""] {
+            XCTAssertFalse(MenuQAChecks.endsInRunNumber(name), name)
+        }
+        XCTAssertEqual(MenuQAChecks.cardName("Saffron Pilaf 90901, 25 min, Indian"), "Saffron Pilaf 90901")
+        XCTAssertEqual(MenuQAChecks.cardName("Beef Tacos"), "Beef Tacos")
+    }
+
     func testPeopleAreNamedLikePeople() {
         let subject = QAPeople.subject("Maya Rivera")
         XCTAssertTrue(subject.hasPrefix("maya-rivera-"), subject)

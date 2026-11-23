@@ -20,6 +20,8 @@ final class ScreensQATests: XCTestCase {
     func testNewPersonFirstRun() throws {
         applyOrientation()
         let app = XCUIApplication()
+        // Marks a photo showing its placeholder, for the Shared Recipes check.
+        app.launchEnvironment["QA_MARKERS"] = "1"
         app.launch()
         let subject = app.textFields["Subject"]
         if subject.waitForExistence(timeout: 8) {
@@ -57,6 +59,7 @@ final class ScreensQATests: XCTestCase {
         app.staticTexts["Shared Recipes"].firstMatch.tap()
         sleep(3)
         shot(app, "Shared Recipes")
+        problems += MenuQAChecks.checkSharedRecipeRows(app, screen: "Shared Recipes")
         // A recipe card in one of the rows (decision 710).
         let first = app.buttons["DiscoverCard"].firstMatch
         if first.waitForExistence(timeout: 5) {

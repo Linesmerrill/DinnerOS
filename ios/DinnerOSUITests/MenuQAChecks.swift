@@ -109,6 +109,41 @@ enum MenuQAChecks {
         return bottoms(card).max() ?? card.frame.maxY
     }
 
+    /// (5) Shared Recipes' rows (build 123 review): no card named like a test run's recipe
+    /// ("Lemon Herb Pilaf 24421") and none without a photo. Recipes from the test runs' own
+    /// households filled Chef’s Picks and Trending with both.
+    @MainActor
+    static func checkSharedRecipeRows(_ app: XCUIApplication, screen: String) -> [String] {
+        let frame = app.frame
+        var problems: [String] = []
+        for card in app.buttons.matching(identifier: "DiscoverCard").allElementsBoundByIndex
+        where !card.frame.isEmpty && frame.intersects(card.frame) {
+            let name = cardName(card.label)
+            if endsInRunNumber(name) {
+                problems.append("\(screen): “\(name)” is a test recipe, its name ends in a number")
+            }
+        }
+        let placeholders = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@", photoPlaceholder)).allElementsBoundByIndex
+            .filter { !$0.frame.isEmpty && frame.intersects($0.frame) }
+        for marker in placeholders {
+            problems.append("\(screen): no photo for “\(item(at: marker, in: app))”, showing the placeholder")
+        }
+        return problems
+    }
+
+    /// A card's name: its label up to the time and cuisine ("Saffron Pilaf, 25 min, Indian").
+    static func cardName(_ label: String) -> String {
+        label.components(separatedBy: ", ").first ?? label
+    }
+
+    /// Whether a name ends in a number of three digits or more after a word: a test run's
+    /// recipe ("Mushroom Pilaf 90901"), never "Chili for 2" or "Serves 4".
+    static func endsInRunNumber(_ name: String) -> Bool {
+        name.trimmingCharacters(in: .whitespaces)
+            .range(of: #"\p{L}\s+\d{3,}$"#, options: .regularExpression) != nil
+    }
+
     /// (3) Nothing still loading after `timeout`: no spinner on screen, no photo showing its
     /// no-photo art, no row without a word on it.
     @MainActor

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -236,7 +237,7 @@ func shown(entries []Recipe) []Recipe {
 	return out
 }
 
-// TestRecipePrefix starts the name of every recipe the local QA runs make
+// TestRecipePrefix starts the name of a recipe the local QA runs make
 // (build 122 review). Those runs share recipes from households of their own,
 // and Shared Recipes is one list for everyone, so "QA Hide Pilaf 12341" filled
 // Chef’s Picks in the screenshots. Rows, Discover and browsing leave them out;
@@ -244,14 +245,25 @@ func shown(entries []Recipe) []Recipe {
 // tests that report and hide a recipe need, and opening or adding one works.
 const TestRecipePrefix = "QA "
 
+// testRunNumber ends the name of the recipes the QA runs make since build
+// 123, which name them like people do and add the run's five-digit number
+// ("Lemon Herb Pilaf 24421"), so ten simulators sharing one server each find
+// their own. Build 123's screenshots showed six of them in Chef’s Picks.
+var testRunNumber = regexp.MustCompile(`\s[0-9]{5}$`)
+
+// testRecipePattern is the same rule for a Mongo name match.
+const testRecipePattern = `^QA |\s[0-9]{5}\s*$`
+
 // IsTestRecipeName reports whether name is a QA run's recipe.
 func IsTestRecipeName(name string) bool {
-	return strings.HasPrefix(strings.TrimSpace(name), TestRecipePrefix)
+	name = strings.TrimSpace(name)
+	return strings.HasPrefix(name, TestRecipePrefix) || testRunNumber.MatchString(name)
 }
 
 // NamesTestRecipe reports whether search text asks for a QA run's recipe.
 func NamesTestRecipe(text string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(text)), TestRecipePrefix)
+	text = strings.TrimSpace(text)
+	return strings.HasPrefix(strings.ToUpper(text), TestRecipePrefix) || testRunNumber.MatchString(text)
 }
 
 // withoutTestRecipes drops QA runs' recipes from a list.

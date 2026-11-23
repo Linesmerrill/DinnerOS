@@ -452,6 +452,8 @@ struct DiscoverCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Self.accessibilityText(for: summary, saved: isSaved))
         .accessibilityIdentifier("DiscoverCard")
+        // The card reads as one element, so the photo's own marker is folded into it.
+        .qaMarker(QAMarkers.photoPlaceholder, label: summary.name, isShown: summary.imageURL == nil)
         // On top of the card, not inside its link, so a tap saves rather than opens.
         .overlay(alignment: .topTrailing) {
             saveButton
