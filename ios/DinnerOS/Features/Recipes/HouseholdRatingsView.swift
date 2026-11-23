@@ -75,14 +75,14 @@ struct HouseholdRatingsList: View {
                 VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text(recipeName)
                         .font(.headline)
-                    Text(RatingFormat.summary(response.householdRating) ?? String(localized: "No Ratings Yet"))
+                    Text(RatingFormat.summary(response.householdRating) ?? String(localized: "No ratings yet"))
                         .foregroundStyle(.secondary)
                         .accessibilityLabel(RatingFormat.accessibilitySummary(response.householdRating))
                 }
             }
             if response.items.isEmpty {
                 ContentUnavailableView(
-                    "No Ratings Yet", systemImage: "star",
+                    "No ratings yet", systemImage: "star",
                     description: Text("Nobody in this household has rated this recipe.")
                 )
                 .listRowBackground(Color.clear)

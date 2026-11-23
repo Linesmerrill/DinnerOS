@@ -458,14 +458,14 @@ struct HouseholdView: View {
             Button {
                 Task { await push.requestAuthorizationIfNeeded() }
             } label: {
-                DSIconRow(systemImage: "bell.badge") { Text("Turn On Notifications") }
+                DSIconRow(systemImage: "bell.badge") { Text("Turn on notifications") }
             }
             .accessibilityHint("Lets order-day and low-stock reminders reach this phone.")
         case .denied:
             Button {
                 if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
             } label: {
-                DSIconRow(systemImage: "bell.slash") { Text("Turn On Notifications in Settings") }
+                DSIconRow(systemImage: "bell.slash") { Text("Turn on notifications in Settings") }
             }
             .accessibilityHint("Notifications are off for DinnerOS on this phone.")
         }
@@ -490,7 +490,7 @@ struct HouseholdView: View {
                 biometricRow(biometricLock, kind: kind)
             }
             if let me, !me.identities.isEmpty {
-                LabeledContent("Signed In With") {
+                LabeledContent("Signed in with") {
                     Text(me.identities.map { Self.providerName($0.provider) }.formatted(.list(type: .and)))
                 }
             }

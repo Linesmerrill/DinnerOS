@@ -53,12 +53,12 @@ final class PermissionsDeniedQATests: XCTestCase {
             XCTFail("No location button on the store finder")
         }
 
-        // Notifications: Account › Turn On Notifications, then no.
+        // Notifications: Account › Turn on notifications, then no.
         app.buttons["Household"].firstMatch.tap()
         let account = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Account'")).firstMatch
         XCTAssertTrue(account.waitForExistence(timeout: 8))
         account.tap()
-        let turnOn = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Notifications'")).firstMatch
+        let turnOn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'notifications'")).firstMatch
         if turnOn.waitForExistence(timeout: 5) {
             turnOn.tap()
             dontAllow()

@@ -130,7 +130,7 @@ nonisolated enum RecipeRatingVisibility {
     }
 }
 
-/// "4.5 ★ from 2" with a link to every member's rating, or "No Ratings Yet".
+/// "4.5 ★ from 2" with a link to every member's rating, or "No ratings yet".
 struct HouseholdRatingSummary: View {
     let recipe: Recipe
 
@@ -153,7 +153,7 @@ struct HouseholdRatingSummary: View {
             .accessibilityLabel(RatingFormat.accessibilitySummary(rating))
             .accessibilityHint("Shows every member’s rating")
         } else {
-            Text("No Ratings Yet")
+            Text("No ratings yet")
                 .font(DS.Typography.subheadline)
                 .foregroundStyle(DS.Colors.secondaryText)
         }
