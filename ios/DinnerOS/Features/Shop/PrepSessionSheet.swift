@@ -532,8 +532,11 @@ struct PrepIngredientTile: View {
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
+        // The design system's one thumbnail plate (`IngredientPhoto`'s white with a hairline):
+        // on a gray fill, a photo cut out round showed gray corners beside a photo shot on white,
+        // and Ground Pork and Ground Beef looked like two styles (Hark's build 122 round 5).
         RoundedRectangle(cornerRadius: size * 0.2, style: .continuous)
-            .fill(DS.Colors.subtleFill)
+            .fill(DS.Colors.thumbnailFill)
             .frame(width: size, height: size)
             .overlay {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
@@ -543,13 +546,16 @@ struct PrepIngredientTile: View {
                 }
             }
             .clipShape(.rect(cornerRadius: size * 0.2, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: size * 0.2, style: .continuous).strokeBorder(DS.Colors.cardStroke)
+            )
             .accessibilityHidden(true)
     }
 
     private var glyph: some View {
         Image(systemName: Self.symbol(for: category))
             .font(.system(size: size * 0.38, weight: .medium))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DS.Colors.thumbnailGlyph)
     }
 
     /// A food glyph for the ingredient's grocery category.

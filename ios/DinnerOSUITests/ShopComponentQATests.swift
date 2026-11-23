@@ -56,7 +56,11 @@ final class ShopComponentQATests: XCTestCase {
         XCTAssertFalse(
             app.buttons["Make \(sauce) Again"].exists, "Skipping every part offered to make the sauce again")
         reveal(header, in: app)
+        // The meal's name whole under the week bar, with its sauce under it: revealing the sauce
+        // alone left "Creamy Penne" resting half under the bar (Hark's build 122 round 5, item 9).
+        showMealName(above: header, in: app)
         sleep(1)
+        XCTAssertTrue(header.isHittable, "\(sauce) went off screen bringing \(name) into view")
         snap(app, "Shop › Sauce with every item had (\(mode))")
 
         // The recipe page and the cooking screen still make it.
@@ -93,6 +97,27 @@ final class ShopComponentQATests: XCTestCase {
     }
 
     private var mode: String { ProcessInfo.processInfo.environment["QA_MODE"] ?? "light" }
+
+    /// Scrolls back in short steps until the meal's name sits whole below the week bar, as long
+    /// as the sauce's header stays on screen above the bottom bars.
+    @MainActor
+    private func showMealName(above header: XCUIElement, in app: XCUIApplication) {
+        let meal = app.staticTexts[recipe].firstMatch
+        let bar = app.staticTexts["This Week"].firstMatch
+        guard bar.exists else { return }
+        // Past the bar's own padding and the fade under it (`DS.Size.edgeFade`), so the name
+        // is whole and at full strength.
+        func barEdge() -> CGFloat { bar.frame.maxY + 48 }
+        for _ in 0..<6 {
+            if meal.exists, !meal.frame.isEmpty, meal.frame.minY >= barEdge() { return }
+            // Stop before the sauce's header would drop under Open in Walmart and the tab bar.
+            guard header.frame.maxY < app.frame.minY + app.frame.height * 0.6 else { return }
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+            sleep(1)
+        }
+    }
 
     @MainActor
     private func open(_ recipe: String, in app: XCUIApplication) {

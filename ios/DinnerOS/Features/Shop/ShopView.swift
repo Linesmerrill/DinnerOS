@@ -296,6 +296,8 @@ private struct ShopWeekList: View {
         }
         // Clear of the Open in Walmart bar's fade, so the last row comes out of it whole.
         .contentMargins(.bottom, DS.Size.rowEdgeFade, for: .scrollContent)
+        // Meal names and sauce headers fade out under the week bar (`dsFadesAtBarEdge`).
+        .dsRowsFadeAtTopEdge()
         // A centered column on iPad, like the bar under it (build 121, review 2).
         .dsReadableForm()
         // Choosing in Walmart, for every line without a product or one line's re-choose.
@@ -427,13 +429,18 @@ private struct ShopWeekList: View {
                         component: component, isNotMade: notMade, canEdit: canLeaveOut && group.meal != nil,
                         isWorking: working.contains(component.id),
                         leaveOut: { scope in leaveOut(component: component, in: group, scope: scope) },
-                        putBack: { putBack(component: component, in: group) })
+                        putBack: { putBack(component: component, in: group) }
+                    )
+                    .dsFadesAtBarEdge()
                     ForEach(component.rows) { row in
                         mealRow(row, in: group, inComponent: true, componentLeftOut: notMade)
                     }
                 }
             } header: {
+                // A meal's name fades out whole on its way under the week bar, never resting
+                // there cut in half (Hark's build 122 round 5, item 9).
                 ShopMealHeader(group: group)
+                    .dsFadesAtBarEdge()
             } footer: {
                 if index == layout.groups.count - 1 {
                     mealsFooter(
@@ -1150,14 +1157,21 @@ private struct ShopComponentHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
-            VStack(alignment: .leading, spacing: DS.Space.hairline) {
-                Label(component.name, systemImage: "square.stack.3d.up")
+            // The status sits under the name, not under the icon (Hark's build 122 round 5).
+            Label {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                    Text(component.name)
+                        .font(.subheadline.weight(.semibold))
+                        .strikethrough(isNotMade)
+                        .foregroundStyle(isNotMade ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: "square.stack.3d.up")
                     .font(.subheadline.weight(.semibold))
-                    .strikethrough(isNotMade)
                     .foregroundStyle(isNotMade ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
-                Text(status)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("shop.component.\(component.name)")
