@@ -253,6 +253,7 @@ final class ScreensQATests: XCTestCase {
             if openedCooking(recipe, in: app) {
                 waitStill(app)
                 shot(app, "Cooking › \(kind)")
+                checkStepsShowAtRest(app, "Cooking › \(kind)")
             } else {
                 snap(app, "Cooking › \(kind): not the cooking screen (\(mode))", unique: false)
                 problems.append("Cooking › \(kind): Start Cooking didn’t open \(recipe)’s cooking screen")
@@ -423,6 +424,48 @@ final class ScreensQATests: XCTestCase {
     @MainActor
     private static func isSelected(_ element: XCUIElement) -> Bool {
         element.isSelected || (element.value as? String)?.contains("elected") == true
+    }
+
+    /// The cooking screen as it opens on an iPad (the steps beside the ingredients): the Steps
+    /// heading and Step 1 are on screen, below the bar, and drawn whole, not faded out. Hark's
+    /// review, build 122 round 5: the steps started at Step 2 under a blank band, and the photo
+    /// and Serves line were half faded. A phone shows the steps on a tab of their own.
+    @MainActor
+    private func checkStepsShowAtRest(_ app: XCUIApplication, _ name: String) {
+        guard !app.segmentedControls.buttons["Steps"].firstMatch.exists else { return }
+        let screen = app.frame
+        // The ingredients pane is the left 38% or 320 points; the steps are to its right.
+        let stepsLeft = max(320, screen.width * 0.38)
+        let barBottom = max(
+            app.buttons["Done"].firstMatch.frame.maxY,
+            app.buttons["How the Cooking Screen Works"].firstMatch.frame.maxY)
+        guard let image = capture(app).image else {
+            problems.append("\(name): no screenshot to check the steps in")
+            return
+        }
+        func inStepsPane(_ predicate: NSPredicate) -> XCUIElement? {
+            let matches = app.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
+            return matches.first { $0.exists && $0.frame.minX >= stepsLeft - 1 }
+        }
+        let checks: [(what: String, element: XCUIElement?, contrast: Int)] = [
+            ("the Steps heading", inStepsPane(NSPredicate(format: "label == 'Steps'")), 90),
+            ("Step 1", inStepsPane(NSPredicate(format: "label == 'Step 1' OR label BEGINSWITH 'Step 1,'")), 150),
+        ]
+        for check in checks {
+            guard let element = check.element else {
+                problems.append("\(name): \(check.what) isn’t on the screen")
+                continue
+            }
+            let frame = element.frame
+            guard element.isHittable, screen.contains(frame), frame.minY >= barBottom else {
+                problems.append("\(name): \(check.what) is off the screen or under the bar, at \(frame)")
+                continue
+            }
+            let range = QAShotCompare.brightnessRange(image, in: frame)
+            if range < check.contrast {
+                problems.append("\(name): \(check.what) is faded out (brightness range \(range), want \(check.contrast)+)")
+            }
+        }
     }
 
     @MainActor

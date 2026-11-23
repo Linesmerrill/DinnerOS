@@ -86,6 +86,31 @@ enum QAShotCompare {
         return sums.map { $0 / area }
     }
 
+    /// How far apart the darkest and lightest points inside `rect` (in points) are, 0 to 255 of
+    /// brightness: text drawn whole is far from its background, a row faded out isn't there at
+    /// all (Hark's review, build 122 round 5: Step 1 faded out on the iPad cooking screen).
+    static func brightnessRange(_ image: QAShotImage, in rect: CGRect) -> Int {
+        let minX = max(Int(rect.minX.rounded(.up)), 0)
+        let maxX = min(Int(rect.maxX.rounded(.down)), image.width)
+        let minY = max(Int(rect.minY.rounded(.up)), 0)
+        let maxY = min(Int(rect.maxY.rounded(.down)), image.height)
+        guard minX < maxX, minY < maxY else { return 0 }
+        var darkest = 255
+        var lightest = 0
+        for y in minY..<maxY {
+            for x in minX..<maxX {
+                let p = (y * image.width + x) * 4
+                let r = Int(image.pixels[p])
+                let g = Int(image.pixels[p + 1])
+                let b = Int(image.pixels[p + 2])
+                let brightness = (299 * r + 587 * g + 114 * b) / 1000
+                darkest = min(darkest, brightness)
+                lightest = max(lightest, brightness)
+            }
+        }
+        return lightest - darkest
+    }
+
     /// True when the cell averages alone prove at least `share` of the cells changed: a cell whose
     /// average moved by more than the tolerance in a channel has a pixel that did too. Cheap, so
     /// most pairs of different screens never need the pixel by pixel look.
