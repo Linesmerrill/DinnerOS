@@ -47,6 +47,13 @@ COVERAGE_EXCEPTIONS = {
     (f"ipadP-{mode}", "Recipe page › typed by hand › scrolled"): "Hand-typed recipe page fits on the upright iPad"
     for mode in ("light", "dark")
 }
+# MenuCardsQATests runs on three configs (scripts/qa-matrix.sh); every config's sweep checks Your
+# Meals the same way and shoots its Menu.
+COVERAGE_EXCEPTIONS.update({
+    (f"{device}-{mode}", "Menu › Your Meals at rest"): "Your Meals checked by this config's sweep, shown in its Menu shot"
+    for device in ("large", "small", "duo", "ipadL", "ipadP") for mode in ("light", "dark")
+    if f"{device}-{mode}" not in ("large-dark", "ipadL-light", "duo-dark")
+})
 DEVICES = {
     "large": ("iPhone 17 Pro Max", "portrait"),
     "small": ("iPhone SE", "portrait"),

@@ -195,8 +195,10 @@ runs_on() {
     # Nov 22's three screens, in every config since Hark's build 122 round 4 review (item 1): back
     # from the background, a sauce with every item had, the freeze card.
     BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID | ShopComponentQATests | ShopPrepQATests) return 0 ;;
-    # Your Meals at rest with no empty band under the cards, in every config (build 123).
-    MenuCardsQATests) return 0 ;;
+    # Your Meals on a week like Merrill's (build 123), on a large iPhone, a landscape iPad and the
+    # Duo. Every config's sweep checks the same things on the test household (stars, add-ons, no
+    # blank band, nothing left loading) and shoots its Menu, so this one needn't run ten times.
+    MenuCardsQATests) case $config in large-dark | ipadL-light | duo-dark) return 0 ;; *) return 1 ;; esac ;;
     esac
     local placed
     case $test in
@@ -208,7 +210,7 @@ runs_on() {
     InviteLinkQATests/testAHouseholdThatsSetUpIsToldCodesAreForNewHouseholds) placed=ipadP-light ;;
     # Adding by hand end to end, on the large iPhone.
     AddRecipeQATests | SaveThenOpenQATests) placed=large-dark ;;
-    CompanionQATests) placed=small-dark ;;
+    CompanionQATests) placed=ipadL-light ;;
     # Build 123 rebalance (the matrix ran 1840 s): off the slowest configs, large-light and the Duo.
     UnsplashPhotoQATests) placed=ipadP-light ;;
     AddRecipeChooserQATests) placed=ipadL-light ;;
