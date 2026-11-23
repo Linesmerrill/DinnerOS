@@ -38,10 +38,11 @@ final class ReferralQATests: XCTestCase {
         signOut(app)
 
         // 2. A brand-new person starts a household and enters the code.
-        // Unique per run: earlier runs left dozens of QA Invite Kitchens in Your Invites.
+        // Unique per run: earlier runs left dozens of invite kitchens in Your Invites.
         // Random too: the matrix runs this on several simulators at once.
-        let newName = "QA Invite Kitchen \(Int(Date().timeIntervalSince1970) % 100_000)\(Int.random(in: 100...999))"
-        let newSubject = "qa-invite-\(Int.random(in: 10000...99999))"
+        let newSubject = QAPeople.subject()
+        let newName =
+            "\(QAPeople.kitchen(forSubject: newSubject)) \(Int(Date().timeIntervalSince1970) % 100_000)\(Int.random(in: 100...999))"
         app = signInAsNewPerson(app, householdName: newName, subject: newSubject)
         openGiveAFreeMonth(app)
         let field = app.textFields["Code"]
@@ -61,7 +62,7 @@ final class ReferralQATests: XCTestCase {
         snap(app, "Your free month, nothing done yet (\(mode))")
 
         // 3. A recipe, then a dinner: the checklist ticks off.
-        addPastedRecipe(app, name: "QA Invite Soup 1")
+        addPastedRecipe(app, name: "Tomato Basil Soup")
         // The step that just finished gets its own moment over the Menu (decision 729).
         expectStepDone(app, number: 2, done: 2, of: 3, name: "Step 2 done (\(mode))")
         openGiveAFreeMonth(app)
@@ -154,7 +155,7 @@ final class ReferralQATests: XCTestCase {
         snap(app, "Change Your Code, not allowed (\(mode))")
 
         // A free custom code, after the confirmation.
-        let custom = "qa-fam-\(Int.random(in: 10000...99999))"
+        let custom = "family-\(Int.random(in: 10000...99999))"
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + custom)
         XCTAssertTrue(waitForCheck(app, "You can use that code."), "\(custom) wasn’t available")
         snap(app, "Change Your Code, available (\(mode))")

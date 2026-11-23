@@ -75,7 +75,7 @@ final class AnyListGuideQATests: XCTestCase {
     @MainActor
     private func plannedHousehold(_ name: String) throws -> QAOwnHousehold {
         try ownHousehold(name) { own in
-            let dinner = try await own.addRecipe("QA Carrot Rice Bowls \(Int.random(in: 100...999))")
+            let dinner = try await own.addRecipe("Carrot Rice Bowls \(Int.random(in: 100...999))")
             try await own.plan(dinner, weeksAhead: 0)
             try await own.plan(dinner, weeksAhead: 1)
             try await own.shopAtWalmart()

@@ -209,10 +209,66 @@ enum QAShotCompare {
     static var kept: [(name: String, image: QAShotImage)] = []
 }
 
+/// Test wording on screen (Hark's build 122 round 5, items 6 and 7): a screenshot that shows "QA",
+/// "Test" or "Tester" as a word of its own, in a dinner, household or person's name, fails its
+/// test. Whole words and case kept, so "Contest", "Testing" and "TestFlight" pass.
+enum QAScreenText {
+    static let words = ["QA", "Test", "Tester"]
+
+    private static let pattern: NSRegularExpression = {
+        let alternatives = words.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+        // swiftlint:disable:next force_try
+        return try! NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])(?:\(alternatives))(?![\\p{L}\\p{N}])")
+    }()
+
+    /// Whether a label or value shows one of the words on its own.
+    static func showsTestWording(_ text: String) -> Bool {
+        pattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    /// The texts that show test wording, each once, in order.
+    static func offending(_ texts: [String]) -> [String] {
+        var seen = Set<String>()
+        return texts.filter { showsTestWording($0) && seen.insert($0).inserted }
+    }
+}
+
+/// Realistic people for the accounts UI tests make (build 123): an avatar or a member list shows
+/// "Maya Rivera", never "Qa New 12345".
+enum QAPeople {
+    static let names = [
+        "Jordan Avery", "Maya Rivera", "Sam Okafor", "Priya Natarajan", "Elliot Chen", "Rosa Delgado",
+        "Noah Bennett", "Hannah Kim", "Marcus Hale", "Lena Fischer", "Owen Price", "Aisha Rahman",
+    ]
+
+    /// A new person's developer subject, unique per run: "maya-rivera-48213". The app shows it
+    /// as "Maya Rivera" (DeveloperIdentity leaves the number out).
+    static func subject(_ name: String? = nil) -> String {
+        let person = name ?? names.randomElement()!
+        return person.lowercased().replacingOccurrences(of: " ", with: "-") + "-\(Int.random(in: 10000...99999))"
+    }
+
+    /// The name the app gives a subject: its words without the numbers, capitalized.
+    static func displayName(forSubject subject: String) -> String {
+        subject.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .filter { !$0.allSatisfy(\.isNumber) }
+            .map { $0.capitalized }
+            .joined(separator: " ")
+    }
+
+    /// "Rivera Kitchen" for "maya-rivera-48213".
+    static func kitchen(forSubject subject: String) -> String {
+        let last = displayName(forSubject: subject).split(separator: " ").last.map(String.init) ?? "Our"
+        return "\(last) Kitchen"
+    }
+}
+
 /// A screenshot taken but not yet kept: its PNG and its reduced copy for comparing.
 struct QAShot {
     let data: Data
     let image: QAShotImage?
+    /// Visible labels and values that show test wording (QAScreenText) when it was taken.
+    var testWording: [String] = []
 
     func isSameScreen(as other: QAShot) -> Bool {
         guard let image, let otherImage = other.image else { return data == other.data }
@@ -332,7 +388,37 @@ extension XCTestCase {
             orientation == .landscapeLeft || orientation == .landscapeRight
             ? Self.uprightPNG(screenshot.image) : screenshot.pngRepresentation
         let pad = UIDevice.current.userInterfaceIdiom == .pad
-        return QAShot(data: data, image: QAShotCompare.image(png: data, scale: screenshot.image.scale, pad: pad))
+        return QAShot(
+            data: data, image: QAShotCompare.image(png: data, scale: screenshot.image.scale, pad: pad),
+            testWording: testWording(on: app))
+    }
+
+    /// The labels and values on screen that show test wording ("QA Beef Tacos"): text, buttons
+    /// and fields, from one snapshot of the app, so it stays quick.
+    @MainActor
+    func testWording(on app: XCUIApplication) -> [String] {
+        guard let root = try? app.snapshot() else { return [] }
+        let screen = root.frame
+        let kinds: Set<XCUIElement.ElementType> = [.staticText, .button, .textField, .searchField, .textView, .link]
+        var texts: [String] = []
+        var stack = [root]
+        while let element = stack.popLast() {
+            stack.append(contentsOf: element.children)
+            guard kinds.contains(element.elementType) else { continue }
+            let frame = element.frame
+            guard !frame.isEmpty, screen.intersects(frame) else { continue }
+            texts.append(element.label)
+            if let value = element.value as? String { texts.append(value) }
+        }
+        return QAScreenText.offending(texts)
+    }
+
+    /// Fails the test when a screenshot shows test wording, naming the shot and the text.
+    @MainActor
+    func failOnTestWording(_ wording: [String], in name: String) {
+        guard !wording.isEmpty else { return }
+        let shown = wording.prefix(5).map { "“\($0)”" }.joined(separator: ", ")
+        XCTFail("QA-TEST-WORDING: “\(name)” shows test wording: \(shown). Use a realistic name.")
     }
 
     /// Keeps a captured screenshot in the test results under its checklist name, unless it shows
@@ -358,6 +444,9 @@ extension XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        // Kept first, so the results show what was on screen. A shot of what went wrong
+        // (`unique: false`) isn't held to it.
+        if unique { failOnTestWording(shot.testWording, in: name) }
     }
 
     /// Keeps a "scrolled" screenshot only when the page moved: one the same as `before` (a page

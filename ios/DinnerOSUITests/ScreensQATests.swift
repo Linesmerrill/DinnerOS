@@ -26,7 +26,7 @@ final class ScreensQATests: XCTestCase {
             subject.tap()
             subject.press(forDuration: 1.0)
             if app.menuItems["Select All"].waitForExistence(timeout: 2) { app.menuItems["Select All"].tap() }
-            subject.typeText("qa-new-\(Int.random(in: 10000...99999))")
+            subject.typeText(QAPeople.subject("Maya Rivera"))
         } else {
             XCTFail("Already signed in: uninstall the app before this test")
             return

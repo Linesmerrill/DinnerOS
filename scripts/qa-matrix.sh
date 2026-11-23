@@ -15,6 +15,9 @@
 # AUTH_RATE_BURST=1000 so eight simulators signing in at once aren't told to wait. Start 8082 with
 # REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD too, and export the same two here: they reach
 # ReviewAccountQATests as TEST_RUNNER_QA_REVIEW_*. Without them that test is left out.
+# Both APIs must be build 123 or later: the Face ID "back from the background" shot signs in with
+# email as a person of its own run, registered through the development-only
+# POST /auth/dev/email-account (no new variables; AUTH_RATE_BURST covers its sign-ins too).
 # 8083 also gets STARTER_RECIPES_HOUSEHOLD_ID from scripts/qa-starter-library.sh, so the review
 # path test sees a starter library in a brand-new household.
 #

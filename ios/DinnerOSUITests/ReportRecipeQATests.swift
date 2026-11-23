@@ -14,17 +14,18 @@ final class ReportRecipeQATests: XCTestCase {
     @MainActor
     func testReportARecipeThenHideItsCook() async throws {
         let n = Int.random(in: 10000...99999)
-        let reported = "QA Report Pilaf \(n)"
-        let hidden = "QA Hide Pilaf \(n)"
-        let other = "QA Other Pilaf \(n)"
-        let cook = try await QAAPI.signIn(subject: "qa-cook-\(n)")
-        let cookHousehold = try await cook.createHousehold(name: "QA Cook \(n)")
+        let reported = "Lemon Herb Pilaf \(n)"
+        let hidden = "Saffron Pilaf \(n)"
+        let other = "Mushroom Pilaf \(n)"
+        let cookSubject = QAPeople.subject()
+        let cook = try await QAAPI.signIn(subject: cookSubject)
+        let cookHousehold = try await cook.createHousehold(name: "\(QAPeople.kitchen(forSubject: cookSubject)) \(n)")
         for name in [reported, hidden, other] {
             try await cook.shareTypedRecipe(householdID: cookHousehold, name: name)
         }
-        let subject = "qa-report-\(n)"
+        let subject = QAPeople.subject()
         let me = try await QAAPI.signIn(subject: subject)
-        _ = try await me.createHousehold(name: "QA Report \(n)")
+        _ = try await me.createHousehold(name: "\(QAPeople.kitchen(forSubject: subject)) \(n)")
 
         let app = XCUIApplication()
         applyOrientation()

@@ -15,10 +15,10 @@ final class ShopPrepQATests: XCTestCase {
         let own = try ownHousehold("prep") { own in
             try await own.shopAtWalmart()
             let pork = try await own.addRecipe(
-                "QA Sesame Pork Bowls", ingredients: [("Ground Pork", "10", "oz"), ("Jasmine rice", "1", "cup")],
+                "Sesame Pork Bowls", ingredients: [("Ground Pork", "10", "oz"), ("Jasmine rice", "1", "cup")],
                 steps: ["Brown the pork.", "Serve it over the rice."], cuisine: "Asian")
             let beef = try await own.addRecipe(
-                "QA Beef Tacos", ingredients: [("Ground Beef", "10", "oz"), ("Flour Tortillas", "6", nil)],
+                "Beef Tacos", ingredients: [("Ground Beef", "10", "oz"), ("Flour Tortillas", "6", nil)],
                 steps: ["Brown the beef.", "Fill the tortillas."], cuisine: "Mexican")
             try await own.plan(pork, weeksAhead: 0)
             try await own.plan(beef, weeksAhead: 0)

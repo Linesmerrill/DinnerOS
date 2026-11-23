@@ -24,23 +24,29 @@ struct QAOwnHousehold {
     }
 
     /// Signs a new person in on the API and gives them a household with one typed recipe, so the
-    /// Menu opens on a library rather than the empty-library card. `prefix` names the test in
-    /// the subject ("qa-own-addrecipe-12345").
+    /// Menu opens on a library rather than the empty-library card. The person is a realistic one
+    /// ("maya-rivera-48213", shown as Maya Rivera of Rivera Kitchen; build 123: names and
+    /// avatars show on screen); `prefix`, the test's name, goes in the log.
     static func make(_ prefix: String, recipe: String? = nil) async throws -> QAOwnHousehold {
-        // The app lowercases a developer subject, so it's made lowercase here too.
-        let subject = "qa-own-\(prefix.lowercased())-\(Int.random(in: 10000...99999))"
-        let login = try await call("POST", "auth/dev", token: nil, body: ["subject": subject])
+        let subject = QAPeople.subject()
+        print("QA-OWN: \(prefix) signs in as \(subject)")
+        let login = try await call(
+            "POST", "auth/dev", token: nil,
+            body: [
+                "subject": subject, "displayName": QAPeople.displayName(forSubject: subject),
+                "email": "\(subject)@example.com",
+            ])
         let token = try XCTUnwrap(login["accessToken"] as? String, "The development sign-in gave no token")
         let timeZone = "America/Phoenix"
         let created = try await call(
             "POST", "households", token: token,
-            body: ["name": "QA Own Kitchen", "timeZone": timeZone, "defaultServings": 2])
+            body: ["name": QAPeople.kitchen(forSubject: subject), "timeZone": timeZone, "defaultServings": 2])
         let household = (created["household"] as? [String: Any]) ?? created
         let householdID = try XCTUnwrap(household["id"] as? String, "The new household has no id")
         let own = QAOwnHousehold(
             subject: subject, householdID: householdID, token: token, timeZone: timeZone,
             weekStartsOn: household["weekStartsOn"] as? String ?? "sun")
-        _ = try await own.addRecipe(recipe ?? "QA Lemon Rice \(Int.random(in: 100...999))")
+        _ = try await own.addRecipe(recipe ?? "Lemon Rice \(Int.random(in: 100...999))")
         return own
     }
 

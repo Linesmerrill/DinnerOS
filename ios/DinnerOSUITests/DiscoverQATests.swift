@@ -15,10 +15,10 @@ final class DiscoverQATests: XCTestCase {
     @MainActor
     func testDiscoverRowsFiltersSearchSaveAndNoAddOns() async throws {
         let n = Int.random(in: 10000...99999)
-        let subject = "qa-discover-\(n)"
-        let addonName = "QA Addon Garlic Bread \(n)"
+        let subject = QAPeople.subject()
+        let addonName = "Garlic Bread \(n)"
         let api = try await QAAPI.signIn(subject: subject)
-        let householdID = try await api.createHousehold(name: "QA Discover \(n)")
+        let householdID = try await api.createHousehold(name: "\(QAPeople.kitchen(forSubject: subject)) \(n)")
         try await api.importAddon(householdID: householdID, name: addonName, sourceID: "qa-addon-\(n)")
 
         let app = XCUIApplication()
@@ -176,7 +176,7 @@ struct QAAPI {
         struct Tokens: Decodable { let accessToken: String }
         let tokens: Tokens = try await send(
             base: baseURL, token: nil, method: "POST", path: "/api/v1/auth/dev",
-            body: ["subject": subject, "displayName": "QA Discover"])
+            body: ["subject": subject, "displayName": QAPeople.displayName(forSubject: subject)])
         return QAAPI(base: baseURL, token: tokens.accessToken)
     }
 

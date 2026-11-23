@@ -14,9 +14,9 @@ final class AccountDeletionQATests: XCTestCase {
         applyOrientation()
         let app = XCUIApplication()
         app.launch()
-        let subject = "qa-delete-\(Int.random(in: 10000...99999))"
-        _ = signInAsNewPerson(app, householdName: "QA Delete Home", subject: subject)
-        addPastedRecipe(app, name: "QA Delete Soup")
+        let subject = QAPeople.subject()
+        _ = signInAsNewPerson(app, householdName: QAPeople.kitchen(forSubject: subject), subject: subject)
+        addPastedRecipe(app, name: "Tomato Lentil Soup")
         snap(app, "Account deletion › household with a recipe")
 
         // A new household can get the Autopilot questions over the Menu; put them off.

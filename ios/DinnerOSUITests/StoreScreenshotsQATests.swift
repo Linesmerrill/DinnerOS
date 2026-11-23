@@ -243,6 +243,7 @@ final class StoreScreenshotsQATests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        failOnTestWording(testWording(on: app), in: name)
         if dump {
             let tree = XCTAttachment(string: app.debugDescription)
             tree.name = name + " tree"

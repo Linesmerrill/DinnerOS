@@ -18,8 +18,9 @@ final class NextStepDotQATests: XCTestCase {
     @MainActor
     func testAutopilotDotShowsAndClearsOnSetup() async throws {
         let n = Int.random(in: 10000...99999)
-        let subject = "qa-nextstep-\(n)"
-        let seed = try await NextStepSeed.prepare(subject: subject, household: "QA Next Step \(n)")
+        let subject = QAPeople.subject()
+        let seed = try await NextStepSeed.prepare(
+            subject: subject, household: "\(QAPeople.kitchen(forSubject: subject)) \(n)")
         let pending = try await seed.nextSteps()
         XCTAssertTrue(pending.contains("autopilotSetup"), "The API lists \(pending), not Autopilot setup")
 
@@ -120,7 +121,9 @@ private struct NextStepSeed {
     static var base: String { ProcessInfo.processInfo.environment["QA_API_BASE"] ?? "http://localhost:8082" }
 
     static func prepare(subject: String, household: String) async throws -> NextStepSeed {
-        let login = try await call("POST", "/api/v1/auth/dev", token: nil, body: ["subject": subject])
+        let login = try await call(
+            "POST", "/api/v1/auth/dev", token: nil,
+            body: ["subject": subject, "displayName": QAPeople.displayName(forSubject: subject)])
         let token = try XCTUnwrap(login["accessToken"] as? String)
         let created = try await call(
             "POST", "/api/v1/households", token: token, body: ["name": household, "timeZone": "America/Denver"])

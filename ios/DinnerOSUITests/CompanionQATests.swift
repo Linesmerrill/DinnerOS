@@ -18,8 +18,8 @@ final class CompanionQATests: XCTestCase {
     @MainActor
     func testCompanionIsSuggestedAddedAndListed() async throws {
         let run = Int.random(in: 10000...99999)
-        let dinner = "QA Companion Supper \(run)"
-        let companion = "QA Companion Chips \(run)"
+        let dinner = "Black Bean Chili \(run)"
+        let companion = "Tortilla Chips \(run)"
         let seed = try await CompanionSeed.prepare(dinner: dinner)
 
         let app = launchSignedIn(as: seed.own)
@@ -129,7 +129,7 @@ private struct CompanionSeed {
         let stale = Date.now.addingTimeInterval(-12 * 60)
         var used: [String: Int] = [:]
         for c in companions["items"] as? [[String: Any]] ?? [] {
-            guard let id = c["id"] as? String, (c["name"] as? String)?.hasPrefix("QA Companion ") == true,
+            guard let id = c["id"] as? String, (c["name"] as? String)?.hasPrefix("Tortilla Chips ") == true,
                 let created = (c["createdAt"] as? String).flatMap(parseDate)
             else { continue }
             if created < stale {
@@ -174,7 +174,7 @@ private struct CompanionSeed {
         await pruneGroceryItems(api: api, token: token, householdID: householdID, week: week) { item in
             let name = (item["groceryItem"] as? [String: Any])?["name"] as? String ?? ""
             let added = (item["addedAt"] as? String).flatMap(parseDate) ?? .now
-            return name.hasPrefix("QA Companion ") && added < stale
+            return name.hasPrefix("Tortilla Chips ") && added < stale
         }
         let plan = try await call(
             api, "POST", "households/\(householdID)/plans/\(week)/entries", token: token,

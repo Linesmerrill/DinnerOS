@@ -12,7 +12,7 @@ final class SaveThenOpenQATests: XCTestCase {
     func testSaveARecipeWithStepsThenOpenIt() throws {
         // A household of its own: this test saves a recipe (QAOwnHousehold).
         let app = launchSignedIn(as: try ownHousehold("savethenopen"))
-        let name = "QA Fudge \(Int.random(in: 100...999))"
+        let name = "Chocolate Fudge \(Int.random(in: 100...999))"
 
         app.buttons["Week Menu"].tap()
         app.buttons["Add a Recipe"].tap()

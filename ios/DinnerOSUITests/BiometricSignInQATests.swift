@@ -82,11 +82,14 @@ final class BiometricSignInQATests: XCTestCase {
     /// Face ID only unlocks sign-in (Merrill, Nov 22): with it on, leaving the app and coming
     /// back goes straight back to where the person was, with no Face ID check.
     @MainActor
-    func testComingBackFromTheBackgroundNeverAsksForFaceID() throws {
+    func testComingBackFromTheBackgroundNeverAsksForFaceID() async throws {
+        // A person of this run's own, signed in with email, so Account shows a real-looking
+        // name and "Email" rather than the developer account (Hark's build 122 round 5, item 2).
+        let person = try await EmailPerson.register()
         // Every check after the first is "interrupt", which would leave the lock screen up, so
         // any ask on the way back shows.
         var app = launch(fake: "match,interrupt")
-        signInIfNeeded(app)
+        signInWithEmail(app, person)
         answerOffer(app, use: false)
         setToggle(app, on: true)
         let toggle = app.switches["account.biometricSignIn"].firstMatch
@@ -104,6 +107,12 @@ final class BiometricSignInQATests: XCTestCase {
             XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Coming back didn’t return to the Account screen")
             XCTAssertTrue(waitForToggle(app, true), "Coming back turned Face ID off")
         }
+        // Account shows the person and how they signed in (each row reads "Title, value").
+        XCTAssertTrue(app.staticTexts["Name, \(person.name)"].exists, "Account doesn’t show \(person.name)")
+        XCTAssertTrue(app.staticTexts["Email, \(person.email)"].exists, "Account doesn’t show their email")
+        XCTAssertTrue(
+            app.staticTexts["Signed In With, Email"].waitForExistence(timeout: 5),
+            "Account doesn’t say they signed in with email")
         snap(app, "Face ID › Back from the background (\(mode))")
 
         // A new launch still unlocks with Face ID.
@@ -392,6 +401,37 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(householdTab(app).waitForExistence(timeout: 30), "The app didn’t open after sign-in")
     }
 
+    /// Signs in through "Sign in with email" as a registered person, then past the welcome.
+    @MainActor
+    private func signInWithEmail(_ app: XCUIApplication, _ person: EmailPerson) {
+        let open = app.buttons["signIn.email.open"]
+        guard open.waitForExistence(timeout: 15) else {
+            XCTFail("No Sign in with email: the local API needs build 123's development email accounts")
+            return
+        }
+        open.tap()
+        let field = app.textFields["signIn.email.address"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "No email field")
+        field.tap()
+        field.typeText(person.email)
+        let secure = app.secureTextFields["signIn.email.password"]
+        secure.tap()
+        secure.typeText(person.password)
+        app.buttons["signIn.email.submit"].tap()
+        // The seeded household's first sign-in opens on the welcome, over the tabs.
+        let start = app.buttons["Start Planning"].firstMatch
+        let deadline = Date.now.addingTimeInterval(30)
+        while Date.now < deadline {
+            if start.exists {
+                start.tap()
+                break
+            }
+            if householdTab(app).exists, !start.waitForExistence(timeout: 2) { break }
+        }
+        if app.buttons["Thanks"].waitForExistence(timeout: 3) { app.buttons["Thanks"].tap() }
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 30), "The app didn’t open after email sign-in")
+    }
+
     @MainActor
     private func answerOffer(_ app: XCUIApplication, use: Bool) {
         let offer = app.alerts["Use Face ID to sign in next time?"]
@@ -498,4 +538,40 @@ private enum Notify {
             to: (@convention(c) (UnsafePointer<CChar>, UnsafeMutablePointer<Int32>) -> UInt32).self)
     static let setState: @convention(c) (Int32, UInt64) -> UInt32 = unsafeBitCast(
         dlsym(handle, "notify_set_state"), to: (@convention(c) (Int32, UInt64) -> UInt32).self)
+}
+
+/// A person of one test run's own who signs in with email (Hark's build 122 round 5, item 2),
+/// registered on the local development API (POST /auth/dev/email-account, local Mongo only)
+/// rather than the one shared App Review account, so ten simulators can each have their own.
+private struct EmailPerson {
+    let name: String
+    let email: String
+    let password: String
+
+    /// A realistic person ("jordan.avery27@example.test") with a fresh password for this run.
+    static func register() async throws -> EmailPerson {
+        let name = QAPeople.names.randomElement()!
+        let local = name.lowercased().replacingOccurrences(of: " ", with: ".")
+        let person = EmailPerson(
+            name: name, email: "\(local)\(Int.random(in: 10...999))@example.test",
+            password: UUID().uuidString)
+        var request = URLRequest(url: QAOwnHousehold.apiBase.appending(path: "auth/dev/email-account"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "email": person.email, "password": person.password, "displayName": person.name,
+        ])
+        let (_, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 204 else {
+            throw NSError(
+                domain: "EmailPerson", code: status,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Couldn’t register an email account (\(status)): the local API needs build 123 "
+                        + "(development email accounts) with developer sign-in on"
+                ])
+        }
+        return person
+    }
 }

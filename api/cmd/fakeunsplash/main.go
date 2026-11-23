@@ -62,7 +62,7 @@ func main() {
 	photo := func(i int) map[string]any {
 		id := fmt.Sprintf("qa%d", i)
 		img := "https://images.unsplash.com/photo-" + photos[min(i, len(photos)-1)]
-		name, username := "QA Photographer", "qa_photographer"
+		name, username := "Elena Park", "elenapark"
 		if len(list) > 0 {
 			id, img, name, username = list[i].ID, list[i].Image, list[i].Photographer, list[i].Username
 		}

@@ -53,8 +53,9 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(waitGone(screen, timeout: 5), "Accept didn’t close the invite screen")
 
         // 3. Sign in: setup says the code is saved, then the household is made.
-        let newName = "QA Link Kitchen \(Int(Date().timeIntervalSince1970) % 1_000_000)"
-        signIn(app, subject: "qa-link-\(Int.random(in: 10000...99999))")
+        let linkSubject = QAPeople.subject()
+        let newName = "\(QAPeople.kitchen(forSubject: linkSubject)) \(Int(Date().timeIntervalSince1970) % 1_000_000)"
+        signIn(app, subject: linkSubject)
         let saved = app.descendants(matching: .any)["InviteCodeSaved"].firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: 15), "Setup didn’t keep the invite code")
         snap(app, "Setup, invite code saved (\(mode))")
@@ -156,7 +157,7 @@ final class InviteLinkQATests: XCTestCase {
         signOut(app)
 
         // Someone else's code, for a household that's already set up.
-        _ = signInAsNewPerson(app, householdName: "QA Set Up Kitchen \(Int.random(in: 100...999))")
+        _ = signInAsNewPerson(app, householdName: "Hale Kitchen \(Int.random(in: 100...999))")
         try openLink(code)
         XCTAssertTrue(screen.waitForExistence(timeout: 15), "The link didn’t open the invite screen")
         XCTAssertTrue(

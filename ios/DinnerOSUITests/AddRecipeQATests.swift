@@ -11,7 +11,7 @@ final class AddRecipeQATests: XCTestCase {
     func testAddARecipeByHandEndToEnd() throws {
         // A household of its own: this test adds and deletes recipes (QAOwnHousehold).
         let app = launchSignedIn(as: try ownHousehold("addrecipe"))
-        let name = "QA No Bake Cookies \(Int.random(in: 100...999))"
+        let name = "No Bake Cookies \(Int.random(in: 100...999))"
 
         // Open Add a Recipe and write it myself.
         app.buttons["Week Menu"].tap()

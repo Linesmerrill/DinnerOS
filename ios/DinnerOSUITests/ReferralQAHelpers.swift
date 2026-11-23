@@ -56,7 +56,7 @@ extension XCTestCase {
         XCTAssertEqual(subject.value as? String, name, "The sign-in field didn’t take the name")
         // The button names the account once the field has taken the text.
         let button = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch
-        let words = name.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+        let words = QAPeople.displayName(forSubject: name)
         let ready = expectation(
             for: NSPredicate(format: "label ENDSWITH %@", words), evaluatedWith: button)
         _ = XCTWaiter.wait(for: [ready], timeout: 5)
@@ -68,7 +68,7 @@ extension XCTestCase {
     @MainActor
     func signInAsNewPerson(
         _ app: XCUIApplication, householdName: String,
-        subject: String = "qa-invite-\(Int.random(in: 10000...99999))"
+        subject: String = QAPeople.subject()
     ) -> XCUIApplication {
         signIn(app, subject: subject)
         XCTAssertTrue(app.staticTexts["Create a Household"].waitForExistence(timeout: 15))
@@ -128,7 +128,7 @@ extension XCTestCase {
     func planADinner(_ app: XCUIApplication) {
         app.buttons["Menu"].firstMatch.tap()
         app.buttons["Add Recipes"].tap()
-        let add = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Add QA Invite Soup'")).firstMatch
+        let add = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Add Tomato Basil Soup'")).firstMatch
         XCTAssertTrue(add.waitForExistence(timeout: 10), "Nothing to plan")
         add.tap()
         sleep(2)
