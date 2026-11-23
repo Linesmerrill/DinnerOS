@@ -124,7 +124,8 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, category, unit, bought, boughtValue, boughtText, needed, neededValue,
             neededText, surplus, surplusValue, surplusPercent, surplusText, freezable, frozen,
-            instruction, glanceText, glanceNote, onHandText, reminderText, bagLabel, meals, portions, frozenPortions, answeredAt, suggestions
+            instruction, glanceText, glanceNote, onHandText, reminderText, bagLabel, meals, portions, frozenPortions,
+            answeredAt, suggestions
         case imageURLString = "imageUrl"
         case handoffID = "handoffId"
         case lineID = "lineId"
