@@ -55,6 +55,9 @@ nonisolated struct SessionResponse: Decodable, Equatable, Sendable {
 nonisolated struct MeResponse: Decodable, Equatable, Sendable {
     nonisolated struct Identity: Decodable, Equatable, Sendable, Hashable {
         let provider: String
+        /// How Account names the login method ("Apple", "Email"), from the server. Older
+        /// servers leave it out.
+        let name: String?
         let email: String?
     }
 

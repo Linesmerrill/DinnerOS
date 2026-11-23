@@ -84,9 +84,24 @@ struct APIClientTests {
         let transport = StubTransport { _ in (200, Fixtures.meJSON) }
         let me = try await AuthAPI(client: try makeClient(transport)).me(accessToken: "secret-token")
 
-        #expect(me.identities == [MeResponse.Identity(provider: "apple", email: "ada@example.com")])
+        #expect(me.identities == [MeResponse.Identity(provider: "apple", name: nil, email: "ada@example.com")])
         #expect(transport.requests.first?.bearerToken == "secret-token")
         #expect(transport.requests.first?.httpMethod == "GET")
+    }
+
+    /// The server names each login method for the Account screen (build 123): the App Review
+    /// account's is "Email", not its internal "review".
+    @Test func readsTheLoginMethodsName() async throws {
+        let json = Data(
+            """
+            {"user":{"id":"u1","displayName":"Jordan Avery","primaryEmail":"jordan.avery@example.test",
+            "createdAt":"2026-11-01T00:00:00Z"},
+            "identities":[{"provider":"review","name":"Email","email":"jordan.avery@example.test"}]}
+            """.utf8)
+        let transport = StubTransport { _ in (200, json) }
+        let me = try await AuthAPI(client: try makeClient(transport)).me(accessToken: "t")
+
+        #expect(me.identities.map(\.name) == ["Email"])
     }
 
     @Test func logoutAcceptsEmptyNoContentResponse() async throws {

@@ -49,6 +49,16 @@
             #expect(identity.displayName == "dev-simulator")
         }
 
+        /// A UI test's unique subject reads as a person's name on screen (build 123: an avatar
+        /// showed "QN" for "qa-new-12345").
+        @Test func numbersAreLeftOutOfTheName() {
+            let identity = DeveloperIdentity(subject: "maya-rivera-48213")
+
+            #expect(identity.displayName == "Maya Rivera")
+            #expect(identity.email == "maya-rivera-48213@example.com")
+            #expect(DeveloperIdentity(subject: "12345").displayName == "12345")
+        }
+
         @Test func suggestionsLeadWithTheDefault() {
             #expect(DeveloperIdentity.suggestedSubjects.first == DeveloperIdentity.defaultSubject)
             #expect(Set(DeveloperIdentity.suggestedSubjects).count == DeveloperIdentity.suggestedSubjects.count)

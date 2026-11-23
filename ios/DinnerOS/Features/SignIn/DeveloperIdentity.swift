@@ -54,10 +54,14 @@
             return trimmed.isEmpty ? defaultSubject : trimmed
         }
 
-        /// `rachel-sim` → "Rachel Sim". Separators are anything that isn't alphanumeric.
+        /// `rachel-sim` → "Rachel Sim". Separators are anything that isn't alphanumeric. Words
+        /// of digits alone are left out, so a UI test's unique `maya-rivera-48213` is "Maya
+        /// Rivera" on screen (build 123), unless the subject is nothing but digits.
         private static func displayName(for subject: String) -> String {
             let words = subject.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { $0.capitalized }
-            return words.isEmpty ? defaultSubject : words.joined(separator: " ")
+            let named = words.filter { !$0.allSatisfy(\.isNumber) }
+            let shown = named.isEmpty ? words : named
+            return shown.isEmpty ? defaultSubject : shown.joined(separator: " ")
         }
     }
 

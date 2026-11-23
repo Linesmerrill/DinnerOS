@@ -168,7 +168,7 @@ private struct SignInScreen: View {
                             Button(subject) { model.developerSubject = subject }
                         }
                     } label: {
-                        Label("Test accounts", systemImage: "person.2")
+                        Label("Other accounts", systemImage: "person.2")
                             .labelStyle(.iconOnly)
                     }
                     .accessibilityLabel("Choose a test account")

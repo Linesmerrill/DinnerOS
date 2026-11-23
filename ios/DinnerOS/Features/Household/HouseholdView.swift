@@ -491,7 +491,7 @@ struct HouseholdView: View {
             }
             if let me, !me.identities.isEmpty {
                 LabeledContent("Signed in with") {
-                    Text(me.identities.map { Self.providerName($0.provider) }.formatted(.list(type: .and)))
+                    Text(me.identities.map { $0.name ?? Self.providerName($0.provider) }.formatted(.list(type: .and)))
                 }
             }
             if isLoadingAccount && me == nil {
@@ -596,6 +596,7 @@ struct HouseholdView: View {
         switch provider {
         case "apple": "Apple"
         case "google": "Google"
+        case "review": String(localized: "Email")
         case "dev": String(localized: "Developer")
         default: provider
         }
