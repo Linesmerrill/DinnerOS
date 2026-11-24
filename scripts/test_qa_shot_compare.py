@@ -120,6 +120,8 @@ class CompareTests(unittest.TestCase):
         self.assertTrue(compare.is_allowed("a/household-new-household.png", "a/household.png"))
         self.assertFalse(compare.is_allowed("a/household.png", "a/menu-search-typed-imported.png"))
         self.assertFalse(compare.is_allowed("a/household.png", "a/household.png"))
+        self.assertTrue(compare.is_allowed("a/start-cooking-steps.png", "a/cooking-imported.png"))
+        self.assertFalse(compare.is_allowed("a/start-cooking-steps-scrolled.png", "a/cooking-imported.png"))
 
     def test_each_allowed_pair_is_named(self):
         self.assertEqual(compare.allowed_name("a/menu-search-typed-typed-by-hand.png", "b/menu-search-typed-imported.png"),

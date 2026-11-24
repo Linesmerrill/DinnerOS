@@ -103,7 +103,9 @@ enum CookingQAChecks {
         repeat {
             if let image = capture().image {
                 guard image.width == Int(app.frame.width.rounded()) else {
-                    return problems + ["\(screen): the screenshot is \(image.width) wide, the screen \(app.frame.width)"]
+                    return problems + [
+                        "\(screen): the screenshot is \(image.width) wide, the screen \(app.frame.width)"
+                    ]
                 }
                 shown = showsPhoto(photo, in: image)
             }
@@ -122,40 +124,74 @@ enum CookingQAChecks {
 
     /// Scrolls the cooking screen's ingredient list from top to bottom (dragging at `column`
     /// across the screen) and fails on any row that's on the list but not drawn where it rests,
-    /// clear of the bar, and on any of
-    /// `expected` that no drawn row names. Leaves the list scrolled to its end.
+    /// clear of the bar, on any of `expected` that no drawn row names, on a step's heading left
+    /// faded out under the bar above its rows, and on a last row that isn't whole at the end.
+    /// Leaves the list at its true end, its last row whole on screen. `middle` gets the screen
+    /// halfway down a list too long for its top and end screens to show every row between them.
     @MainActor
     static func checkEveryIngredient(
         _ app: XCUIApplication, expected: [String], screen: String, column: CGFloat,
-        capture: () -> QAShot
+        middle: ((QAShot) -> Void)? = nil, capture: () -> QAShot
     ) -> [String] {
         var problems: [String] = []
         var seen = Set<String>()
         var blank = Set<String>()
+        var faded = Set<String>()
         var previous: QAShotImage?
-        for _ in 0..<16 {
+        // Where the list's last row starts out, and where it is on each screen: how far down the
+        // list a screen is.
+        var startLast: CGFloat?
+        var bestMiddle: (shot: QAShot, distance: CGFloat)?
+        var lastWhole = false
+        for _ in 0..<24 {
             let shot = capture()
             guard let image = shot.image else { break }
-            if let previous, QAShotCompare.isSameScreen(image, previous) { break }
-            previous = image
-            let top = barBottom(app) + fadeRoom
+            let bar = barBottom(app)
+            let top = bar + fadeRoom
             let bottom = app.frame.maxY - fadeRoom - 60
             // One snapshot of the screen, walked here: asking each row for its frame took
             // minutes on a long list.
+            var rows: [(label: String, frame: CGRect)] = []
+            var headings: [(label: String, frame: CGRect)] = []
             var stack = (try? app.snapshot()).map { [$0] } ?? []
             while let element = stack.popLast() {
                 stack.append(contentsOf: element.children)
-                guard element.identifier == QAMarkers.cookIngredient else { continue }
                 let frame = element.frame
-                guard frame.minY >= top, frame.maxY <= bottom, !frame.isEmpty else { continue }
-                // A row clear of the bar is drawn at rest, every time: on TestFlight 120 the rows just
-                // under the bar were blank after each scroll, and came back only further down.
-                if isDrawn(frame, in: image) {
-                    seen.insert(element.label)
-                } else {
-                    blank.insert(element.label)
+                guard !frame.isEmpty, inColumn(frame, app: app, column: column) else { continue }
+                if element.identifier == QAMarkers.cookIngredient {
+                    rows.append((element.label, frame))
+                } else if element.elementType == .staticText, isHeading(element.label) {
+                    headings.append((element.label, frame))
                 }
             }
+            for row in rows where row.frame.minY >= top && row.frame.maxY <= bottom {
+                // A row clear of the bar is drawn at rest, every time: on TestFlight 120 the rows
+                // just under the bar were blank after each scroll, and came back only further down.
+                if isDrawn(row.frame, in: image) {
+                    seen.insert(row.label)
+                } else {
+                    blank.insert(row.label)
+                }
+            }
+            // A heading in the band under the bar is drawn: a heading faded out there left a blank
+            // band over its rows with no step named (Hark's review, build 121 round 2, item 4).
+            faded.formUnion(fadedHeadings(headings, bar: bar, in: image, screen: app.frame))
+            let last = rows.map(\.frame).max { $0.maxY < $1.maxY }
+            if let last {
+                if startLast == nil { startLast = last.maxY }
+                lastWhole = last.maxY <= app.frame.maxY - endRoom && isDrawn(last, in: image)
+                // Halfway from where the last row started to where it ends, at the screen's bottom.
+                if let startLast, middle != nil {
+                    let distance = abs(last.maxY - (startLast + app.frame.maxY) / 2)
+                    if distance < (bestMiddle?.distance ?? .infinity) { bestMiddle = (shot, distance) }
+                }
+            }
+            let stopped = previous.map { QAShotCompare.isSameScreen(image, $0) } ?? false
+            previous = image
+            // At the end only when the list has stopped moving with its last row whole: a list
+            // that looked the same after one drag once left Lemon Wedges cut off at the bottom
+            // (Hark's review, build 121 round 2, item 5).
+            if stopped && lastWhole { break }
             // A third of the screen at a time, held at the end so the list doesn't coast on: each
             // row then rests clear of the bar on some screen, even on the Duo's short one.
             let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.75))
@@ -166,13 +202,66 @@ enum CookingQAChecks {
         for label in blank.sorted() {
             problems.append("\(screen): the row “\(label)” is on the list but isn’t drawn")
         }
+        for label in faded.sorted() {
+            problems.append(
+                "\(screen): the heading “\(label)” rests faded out under the bar, a blank band over its rows")
+        }
+        if !lastWhole {
+            problems.append("\(screen): at the end of the list its last row isn’t whole on the screen")
+        }
         let gone = missing(expected, from: seen)
         if !gone.isEmpty {
             problems.append(
                 "\(screen): the list shows \(expected.count - gone.count) of the recipe’s \(expected.count) "
                     + "ingredients; missing \(gone.joined(separator: ", "))")
         }
+        // Only a list longer than its top and end screens together: otherwise the middle is in
+        // one of them.
+        if let middle, let bestMiddle, let startLast, startLast - app.frame.maxY > app.frame.maxY - barBottom(app) {
+            middle(bestMiddle.shot)
+        }
         return problems
+    }
+
+    /// The headings resting in the band under the bar (where the list's first row rests) but not
+    /// drawn: a heading faded out there left a blank band over its rows with no step named.
+    static func fadedHeadings(
+        _ headings: [(label: String, frame: CGRect)], bar: CGFloat, in image: QAShotImage, screen: CGRect
+    ) -> [String] {
+        headings.filter { heading in
+            heading.frame.maxY > bar + 4 && heading.frame.minY < bar + fadeRoom
+                && !isDrawn(heading.frame.intersection(screen), in: image)
+        }.map(\.label)
+    }
+
+    /// The same check on the screen as it is, for a list scrolled some other way.
+    @MainActor
+    static func checkHeadingsShow(_ app: XCUIApplication, screen: String, column: CGFloat, image: QAShotImage?)
+        -> [String]
+    {
+        guard let image else { return [] }
+        let headings = app.staticTexts.allElementsBoundByIndex
+            .filter { isHeading($0.label) && inColumn($0.frame, app: app, column: column) }
+            .map { ($0.label, $0.frame) }
+        return fadedHeadings(headings, bar: barBottom(app), in: image, screen: app.frame).map {
+            "\(screen): the heading “\($0)” rests faded out under the bar, a blank band over its rows"
+        }
+    }
+
+    /// Whether `frame` is in the part of the screen a drag at `column` scrolls: the left pane on an
+    /// iPad (column under half), the whole width on a phone.
+    @MainActor
+    static func inColumn(_ frame: CGRect, app: XCUIApplication, column: CGFloat) -> Bool {
+        column >= 0.5 || frame.maxX <= app.frame.width * 0.5
+    }
+
+    /// Room kept under the list's last row at its end: the home indicator, with a little to spare.
+    static let endRoom: CGFloat = 24
+
+    /// A heading on the cooking screen's ingredient list: Ingredients, Have Ready or a step's.
+    static func isHeading(_ label: String) -> Bool {
+        label == "Ingredients" || label == "Have Ready"
+            || label.range(of: #"^Step \d+$"#, options: .regularExpression) != nil
     }
 }
 

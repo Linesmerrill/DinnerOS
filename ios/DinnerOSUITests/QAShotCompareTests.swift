@@ -135,6 +135,8 @@ final class QAShotCompareTests: XCTestCase {
         XCTAssertTrue(QAShotCompare.isAllowedPair(imported, byHand))
         XCTAssertTrue(QAShotCompare.isAllowedPair(byHand, imported))
         XCTAssertTrue(QAShotCompare.isAllowedPair("Household", "Household › new household"))
+        XCTAssertTrue(QAShotCompare.isAllowedPair("Start Cooking › Steps", "Cooking › imported"))
+        XCTAssertFalse(QAShotCompare.isAllowedPair("Start Cooking › Steps scrolled", "Cooking › imported"))
         XCTAssertFalse(QAShotCompare.isAllowedPair(imported, "Menu"))
         XCTAssertFalse(QAShotCompare.isAllowedPair(imported, imported))
     }

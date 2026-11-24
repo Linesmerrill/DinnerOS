@@ -5,6 +5,13 @@ import XCTest
 /// behind buttons. Each step keeps a screenshot and checks for blank or unnamed buttons.
 /// Light or dark comes from the simulator (`xcrun simctl ui <device> appearance dark`).
 final class ScreensQATests: XCTestCase {
+    /// The typed-by-hand recipe's ingredients (TYPED in scripts/qa-starter-library.sh), each of
+    /// which its cooking list must show on some screen.
+    static let typedIngredients = [
+        "Bow Tie Pasta", "Basil Pesto", "Grape Tomatoes", "Baby Spinach", "Parmesan Cheese", "Lemon", "Olive Oil",
+        "Garlic", "Pine Nuts", "Fresh Basil", "Red Pepper Flakes", "Salt", "Black Pepper",
+    ]
+
     private var problems: [String] = []
 
     override func setUp() {
@@ -260,11 +267,18 @@ final class ScreensQATests: XCTestCase {
                 shot(app, "Cooking › \(kind)")
                 checkStepsShowAtRest(app, "Cooking › \(kind)")
                 // The end of the ingredient list, so every ingredient can be seen in some shot
-                // (Hark's build 123 review, item 10), with every row on the way drawn where it rests.
+                // (Hark's build 123 review, item 10), with every row on the way drawn where it rests,
+                // and its middle when the top and end leave rows between them (Basil Pesto on the
+                // Duo, Hark's build 121 round 2 review, item 6).
                 let top = capture(app)
                 let pad = UIDevice.current.userInterfaceIdiom == .pad
                 problems += CookingQAChecks.checkEveryIngredient(
-                    app, expected: [], screen: "Cooking › \(kind)", column: pad ? 0.2 : 0.5
+                    app, expected: kind == "typed by hand" ? Self.typedIngredients : [],
+                    screen: "Cooking › \(kind)", column: pad ? 0.2 : 0.5,
+                    middle: {
+                        _ = self.keepIfScrolled(
+                            $0, "Cooking › \(kind) › middle of ingredients (\(self.mode))", before: top)
+                    }
                 ) { capture(app, settle: false) }
                 keepIfScrolled(capture(app), "Cooking › \(kind) › end of ingredients (\(mode))", before: top)
             } else {

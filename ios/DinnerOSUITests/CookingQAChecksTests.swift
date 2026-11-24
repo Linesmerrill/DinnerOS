@@ -44,9 +44,43 @@ final class CookingQAChecksTests: XCTestCase {
             "2 tsp Cooking Oil",
         ]
         XCTAssertEqual(
-            CookingQAChecks.missing(["Lemon", "Penne Pasta", "Salt", "Pepper", "Olive Oil", "Cooking Oil"], from: rows),
+            CookingQAChecks.missing(
+                ["Lemon", "Penne Pasta", "Salt", "Pepper", "Olive Oil", "Cooking Oil"], from: rows),
             ["Pepper", "Olive Oil"])
         // A word inside another word isn't the ingredient: "Peppercorns" isn't Pepper.
         XCTAssertEqual(CookingQAChecks.missing(["Pepper"], from: ["Peppercorns"]), ["Pepper"])
+    }
+
+    /// "Step 1" faded out in the band under the bar over ¼ tsp Turmeric on an SE (Hark's review,
+    /// build 121 round 2, item 4): a heading there must be drawn. One drawn there, or gone above
+    /// the bar, is fine.
+    func testAHeadingFadedOutUnderTheBarIsReported() {
+        let bar: CGFloat = 4
+        let heading = (label: "Step 1", frame: CGRect(x: 0, y: 10, width: 40, height: 12))
+        let screenFrame = CGRect(x: 0, y: 0, width: 40, height: 40)
+        XCTAssertEqual(
+            CookingQAChecks.fadedHeadings([heading], bar: bar, in: screen(), screen: screenFrame), ["Step 1"])
+        let drawn = screen { pixels, width in
+            for x in stride(from: 4, to: 36, by: 2) { self.set(&pixels, width, x: x, y: 16, 240) }
+        }
+        XCTAssertEqual(CookingQAChecks.fadedHeadings([heading], bar: bar, in: drawn, screen: screenFrame), [])
+        let above = (label: "Step 1", frame: CGRect(x: 0, y: -10, width: 40, height: 12))
+        XCTAssertEqual(CookingQAChecks.fadedHeadings([above], bar: bar, in: screen(), screen: screenFrame), [])
+    }
+
+    func testTheListsHeadingsAreKnown() {
+        for label in ["Ingredients", "Have Ready", "Step 1", "Step 12"] {
+            XCTAssertTrue(CookingQAChecks.isHeading(label), label)
+        }
+        for label in ["Steps", "Step 3, In a small bowl", "Turmeric", "Notes"] {
+            XCTAssertFalse(CookingQAChecks.isHeading(label), label)
+        }
+    }
+
+    /// Basil Pesto on the typed recipe (the same review, item 6): a list that never shows it fails.
+    func testTheTypedRecipeNeedsBasilPesto() {
+        XCTAssertTrue(ScreensQATests.typedIngredients.contains("Basil Pesto"))
+        let shown: Set<String> = ["8 oz Bow Tie Pasta", "1 cup Grape Tomatoes"]
+        XCTAssertTrue(CookingQAChecks.missing(ScreensQATests.typedIngredients, from: shown).contains("Basil Pesto"))
     }
 }

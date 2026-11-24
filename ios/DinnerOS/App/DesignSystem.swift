@@ -177,6 +177,11 @@ nonisolated enum DS {
         /// Room left under a form's last section, so the field being typed in there and its help
         /// text can scroll clear of the fade above the keyboard (build 122 round 4).
         static let formEndRoom: CGFloat = edgeFade + DS.Space.s
+        /// Room under the end of a list whose rows fade out whole at the bar above it (the cooking
+        /// screen): when it stops at its end and moves back to show its top row whole, a fade
+        /// and a row's height at most, its last row still rests whole on screen (Hark's review,
+        /// build 121 round 2: Lemon Wedges cut off at the bottom of an SE).
+        static let listEndRoom: CGFloat = edgeFade + rowEdgeFade
         /// The narrowest a card in a sideways row gets so a short row fits the screen whole on
         /// an iPad instead of running a card off the edge (build 122 review 4).
         static let carouselCardMinWidth: CGFloat = 240
@@ -614,8 +619,14 @@ nonisolated enum DSRowEdgeFade {
     /// blank band). Negative moves the content back down, bringing the row whole into view;
     /// positive moves on to the next row, when the row is mostly gone and that's the shorter
     /// move, never past `maxForward`. `nil` when nothing rests in the fade.
+    ///
+    /// A heading (its top in `headings`) always comes back whole instead: moving on past it
+    /// left the rows under it with no heading and a blank band above them, since a heading above
+    /// the bar's edge is drawn fully faded (Hark's review, build 121 round 2: "Step 1" gone above
+    /// ¼ tsp Turmeric on an SE).
     static func restingShift(
-        rows: [(top: CGFloat, height: CGFloat)], barEdge: CGFloat?, maxForward: CGFloat = .infinity
+        rows: [(top: CGFloat, height: CGFloat)], barEdge: CGFloat?, maxForward: CGFloat = .infinity,
+        headings: [CGFloat] = []
     ) -> CGFloat? {
         guard let barEdge else { return nil }
         let rest = barEdge + DS.Size.edgeFade
@@ -624,8 +635,10 @@ nonisolated enum DSRowEdgeFade {
         let back = first.top - rest
         // The next row down, brought to where a list's first row rests.
         let next = rows.filter { $0.top >= first.top + first.height - 0.5 }.map(\.top).min()
+        let isHeading = headings.contains { abs($0 - first.top) < 0.5 }
         // Mostly under the bar already: the next row comes up instead, when that's the shorter move.
-        if let next, first.top + first.height / 2 < barEdge, next - rest < -back, next - rest <= maxForward {
+        if !isHeading, let next, first.top + first.height / 2 < barEdge, next - rest < -back, next - rest <= maxForward
+        {
             return next - rest
         }
         return back
@@ -641,6 +654,7 @@ nonisolated enum DSRowEdgeFade {
 
     let space: String
     private var frames: [UUID: (top: CGFloat, height: CGFloat)] = [:]
+    private var headingIDs: Set<UUID> = []
 
     init(space: String = DSRowFrames.contentSpace) {
         self.space = space
@@ -652,8 +666,14 @@ nonisolated enum DSRowEdgeFade {
         frames.values.map { ($0.top - scrolled, $0.height) }
     }
 
-    func set(_ id: UUID, _ frame: (top: CGFloat, height: CGFloat)?) {
+    /// The headings' tops, as `rows(scrolled:)` gives them, for `restingShift(headings:)`.
+    func headingTops(scrolled: CGFloat) -> [CGFloat] {
+        headingIDs.compactMap { frames[$0].map { $0.top - scrolled } }
+    }
+
+    func set(_ id: UUID, _ frame: (top: CGFloat, height: CGFloat)?, isHeading: Bool = false) {
         frames[id] = frame
+        if isHeading, frame != nil { headingIDs.insert(id) } else { headingIDs.remove(id) }
     }
 }
 
@@ -663,6 +683,7 @@ extension EnvironmentValues {
 }
 
 private struct DSRowEdgeFadeModifier: ViewModifier {
+    var isHeading = false
     @Environment(\.dsBarEdge) private var barEdge
     @Environment(\.dsRowFrames) private var rowFrames
     @State private var id = UUID()
@@ -674,8 +695,8 @@ private struct DSRowEdgeFadeModifier: ViewModifier {
         }
         .onGeometryChange(for: CGRect.self) { [space = rowFrames?.space ?? DSRowFrames.contentSpace] proxy in
             proxy.frame(in: .named(space))
-        } action: { frame in
-            rowFrames?.set(id, (frame.minY, frame.height))
+        } action: { [isHeading] frame in
+            rowFrames?.set(id, (frame.minY, frame.height), isHeading: isHeading)
         }
         .onDisappear { rowFrames?.set(id, nil) }
     }
@@ -708,7 +729,8 @@ private struct DSScrollBarEdge: ViewModifier {
                 guard
                     let shift = DSRowEdgeFade.restingShift(
                         rows: rowFrames.rows(scrolled: scrolled), barEdge: barEdge,
-                        maxForward: farthest - geometry.contentOffset.y)
+                        maxForward: farthest - geometry.contentOffset.y,
+                        headings: rowFrames.headingTops(scrolled: scrolled))
                 else { return }
                 // A scroll position counts from the content's resting place, below the top inset.
                 withAnimation(.snappy) { position.scrollTo(y: scrolled + shift) }
@@ -721,8 +743,10 @@ private struct DSScrollBarEdge: ViewModifier {
 extension View {
     /// Fades this row out whole before it reaches the bar pinned over its list (`dsBarEdge`), so
     /// it's never cut in half by the bar's edge. Only moves its drawing; the layout is unchanged.
-    func dsFadesAtBarEdge() -> some View {
-        modifier(DSRowEdgeFadeModifier())
+    /// A `heading` is never left faded out above the rows under it when the list stops: the list
+    /// moves back to show it whole (`DSRowEdgeFade.restingShift(headings:)`).
+    func dsFadesAtBarEdge(heading: Bool = false) -> some View {
+        modifier(DSRowEdgeFadeModifier(isHeading: heading))
     }
 
     /// On a scroll view whose rows pass under a bar at its top edge (a pinned picker above it, or

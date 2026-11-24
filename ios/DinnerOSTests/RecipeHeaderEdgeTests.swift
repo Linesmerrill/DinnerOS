@@ -198,6 +198,55 @@ struct RecipeHeaderEdgeTests {
         #expect(DSRowEdgeFade.restingShift(rows: rows2, barEdge: edge, maxForward: 0) == 2 - DS.Size.edgeFade)
     }
 
+    /// "Step 1" mostly under the bar on an SE's cooking screen: moving on to ¼ tsp Turmeric left
+    /// the heading faded out above it, a blank band with no step named (build 121 round 2, item
+    /// 4). A heading comes back whole instead, even when it's the longer move.
+    @Test func aHeadingMostlyGoneComesBackWhole() throws {
+        let edge: CGFloat = 150
+        let heading: CGFloat = edge - 30
+        let rows: [(top: CGFloat, height: CGFloat)] = [(heading, 56), (heading + 56, 44), (heading + 100, 44)]
+        // As a plain row it would let Turmeric come up to rest.
+        #expect(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge) == heading + 56 - edge - DS.Size.edgeFade)
+        let shift = try #require(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, headings: [heading]))
+        #expect(shift == heading - edge - DS.Size.edgeFade)
+        // Where it then rests, the heading is fully drawn.
+        #expect(DSRowEdgeFade.opacity(top: heading - shift, height: 56, barEdge: edge) == 1)
+        // A heading already whole, or entirely under the bar, isn't moved.
+        #expect(
+            DSRowEdgeFade.restingShift(
+                rows: [(edge + DS.Size.edgeFade, 56)], barEdge: edge, headings: [edge + DS.Size.edgeFade]) == nil)
+        #expect(
+            DSRowEdgeFade.restingShift(
+                rows: [(edge - 60, 56), (edge + DS.Size.edgeFade, 44)], barEdge: edge, headings: [edge - 60]) == nil)
+    }
+
+    /// Lemon Wedges cut off at the bottom of an SE (build 121 round 2, item 5): stopped at its end,
+    /// the list moved back to show its top row whole and pushed its last row off the screen. The
+    /// room under the list covers the longest such move for a row up to a fade's row height.
+    @Test func theLastRowStaysWholeWhenTheEndMovesBack() throws {
+        let edge: CGFloat = 150
+        for height in stride(from: CGFloat(24), through: DS.Size.rowEdgeFade, by: 4) {
+            // The top row as far under the bar as it can be and still count as showing.
+            let rows: [(top: CGFloat, height: CGFloat)] = [(edge - height + 1, height), (edge + 1, 44)]
+            // A heading always comes back whole: the longest move back there is.
+            let shift = try #require(
+                DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, maxForward: 0, headings: [edge - height + 1]))
+            #expect(shift == -(height - 1 + DS.Size.edgeFade))
+            #expect(-shift <= DS.Size.listEndRoom, "a \(height) pt row moves back \(-shift) pt")
+        }
+    }
+
+    /// The row frames say which rows are headings, as the list sits on screen.
+    @Test @MainActor func rowFramesKnowTheirHeadings() {
+        let frames = DSRowFrames()
+        let heading = UUID(), row = UUID()
+        frames.set(heading, (100, 56), isHeading: true)
+        frames.set(row, (156, 44))
+        #expect(frames.headingTops(scrolled: 40) == [60])
+        frames.set(heading, nil, isHeading: true)
+        #expect(frames.headingTops(scrolled: 40).isEmpty)
+    }
+
     /// Rows that rest whole, a list at its top, and tall step cards are left alone.
     @Test func wholeRowsDontMove() {
         let edge: CGFloat = 200

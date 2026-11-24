@@ -49,3 +49,21 @@ class WrongBuildTest(unittest.TestCase):
         other, none = self.folder("120"), self.folder(None)
         wrong = qa.wrong_build("121", [self.folder("121"), other, none])
         self.assertEqual(wrong, [f"{other}: built as 120", f"{none}: built as none"])
+
+
+class RequiredTest(unittest.TestCase):
+    def test_every_config_needs_the_common_screens(self):
+        for config in ("large-light", "small-dark", "duo-light", "ipadL-dark", "ipadP-light"):
+            self.assertTrue(set(qa.REQUIRED) <= set(qa.required(config)))
+
+    def test_the_ipads_need_the_scrolled_steps(self):
+        self.assertIn("Start Cooking › Steps scrolled", qa.required("ipadL-light"))
+        self.assertIn("Start Cooking › Steps scrolled", qa.required("ipadP-dark"))
+        self.assertNotIn("Start Cooking › Steps scrolled", qa.required("small-light"))
+
+    def test_the_short_screens_need_the_middle_of_the_typed_list(self):
+        middle = "Cooking › typed by hand › middle of ingredients"
+        self.assertIn(middle, qa.required("duo-dark"))
+        self.assertIn(middle, qa.required("small-light"))
+        self.assertNotIn(middle, qa.required("large-light"))
+        self.assertNotIn(middle, qa.required("ipadL-light"))

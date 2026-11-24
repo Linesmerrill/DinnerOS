@@ -76,21 +76,27 @@ final class StartCookingQATests: XCTestCase {
             let bar = CookingQAChecks.barBottom(app)
             XCTAssertTrue(
                 first.isHittable && first.frame.minY >= bar,
-                "Step 1 isn’t whole under the bar when the cooking screen opens: it’s at \(first.frame), the bar ends at \(bar)")
-            // Then the later steps, so every config has them (build 122 round 4, Hark's item 15b;
-            // the top of this screen is ScreensQATests' "Cooking › imported"): brought up to rest
-            // with Step 3's start just under the bar, never a step cut off by the fade.
+                "Step 1 isn’t whole under the bar when the cooking screen opens: it’s at \(first.frame), the bar ends at \(bar)"
+            )
+            // The steps as they open, both columns at their tops: the Steps heading and Step 1
+            // (Hark's review, build 121 round 2, item 1: this shot was the steps scrolled to Step 3).
+            XCTAssertTrue(app.staticTexts["Steps"].firstMatch.exists, "The steps column has no Steps heading")
+            snap(app, "Start Cooking › Steps")
+            // Then the later steps, so every config has them (build 122 round 4, Hark's item 15b):
+            // brought up to rest with Step 3's start just under the bar, never a step cut off by
+            // the fade, in a shot named for it.
             bringToTop(stepCard(3, in: app), in: app, column: 0.75)
             XCTAssertTrue(openedCooking(recipe, in: app), "Scrolling the steps left \(recipe)’s cooking screen")
             let third = stepCard(3, in: app)
             XCTAssertTrue(
                 third.exists && third.frame.minY >= CookingQAChecks.barBottom(app),
                 "Step 3 rests under the bar at \(third.frame)")
-            snap(app, "Start Cooking › Steps")
+            snap(app, "Start Cooking › Steps scrolled")
             scrollBackCooking(app, column: 0.75)
         }
 
-        // Partway down the cooking screen, when there's more of it than fits.
+        // Partway down the ingredients, when there's more of them than fits: the list on a phone's
+        // Ingredients tab, the left column on an iPad (named for it, build 121 round 2, item 1).
         let top = capture(app)
         scrollCooking(app)
         var scrolled = capture(app)
@@ -98,7 +104,12 @@ final class StartCookingQATests: XCTestCase {
             scrollCooking(app)
             scrolled = capture(app)
         }
-        keepIfScrolled(scrolled, "Start Cooking › scrolled", before: top)
+        if keepIfScrolled(scrolled, "Start Cooking › Ingredients scrolled", before: top) {
+            // No heading left faded out under the bar over its rows (the same review, item 4).
+            let problems = CookingQAChecks.checkHeadingsShow(
+                app, screen: "Start Cooking › Ingredients scrolled", column: 0.3, image: scrolled.image)
+            XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+        }
 
         // On the Duo's cover screen the rail drops Done once the cooking screen scrolls (build
         // 122): back to the top, where it shows.
@@ -153,7 +164,8 @@ final class StartCookingQATests: XCTestCase {
     /// A step on the cooking screen's steps column: one element, labelled "Step 3, …".
     @MainActor
     private func stepCard(_ index: Int, in app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Step \(index),")).firstMatch
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Step \(index),"))
+            .firstMatch
     }
 
     /// Drags slowly, and holds at the end so nothing coasts, until `element`'s top rests a fade's

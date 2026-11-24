@@ -180,6 +180,8 @@ struct CookingView: View {
                     .padding(DS.Space.xxl)
                     // Clear of the fade under the bar, so the first row starts whole.
                     .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
+                    // Room at the end, so the last row rests whole when the list stops there.
+                    .padding(.bottom, DS.Size.listEndRoom)
                     .dsRowsContent()
                 }
                 // Rows fade out whole before they reach the bar, never cut in half; a pane that
@@ -201,6 +203,7 @@ struct CookingView: View {
                     stepList(dish)
                         .padding(DS.Space.xxl)
                         .padding(.top, DS.Size.edgeFade - DS.Space.xxl)
+                        .padding(.bottom, DS.Size.listEndRoom)
                         .dsRowsContent()
                 }
                 .dsRowsFadeAtTopEdge()
@@ -275,6 +278,8 @@ struct CookingView: View {
                 .padding(DS.Space.l)
                 // Clear of the fade at the top, so the first row starts whole.
                 .padding(.top, DS.Size.edgeFade - DS.Space.l)
+                // Room at the end, so the last row rests whole when the list stops there.
+                .padding(.bottom, DS.Size.listEndRoom)
                 .dsRowsContent()
             }
             // Rows fade out whole before they reach the pinned picker, never cut in half (Hark's
@@ -481,7 +486,7 @@ struct CookIngredientList: View {
                 .foregroundStyle(DS.Colors.accent)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, DS.Space.s)
-                .dsFadesAtBarEdge()
+                .dsFadesAtBarEdge(heading: true)
             if let notes = dish.instructions?.saveForLater, !notes.isEmpty {
                 CookSaveForLaterCard(notes: notes)
                     .padding(.bottom, DS.Space.s)
@@ -534,7 +539,7 @@ struct CookIngredientList: View {
                 .padding(.top, DS.Space.l)
                 .padding(.bottom, DS.Space.xs)
                 .accessibilityAddTraits(.isHeader)
-                .dsFadesAtBarEdge()
+                .dsFadesAtBarEdge(heading: true)
             ForEach(group.items) { item in
                 stepItemRow(item, showsSave: reminders.contains(item.id))
                     .dsFadesAtBarEdge()

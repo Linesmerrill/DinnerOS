@@ -53,6 +53,9 @@ ALLOWED_PAIRS = {
     "Menu search, one card each": frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
     # A household without Plus differs only in its name, initials and Plus line.
     "Household with and without Plus": frozenset({"household-new-household", "household"}),
+    # On an iPad, the cooking screen at rest from Start Cooking on a scrolled recipe page and from
+    # the recipe page at its top: both panes at their tops (Hark's review, build 121 round 2, item 1).
+    "iPad cooking screen at its top, from either way in": frozenset({"start-cooking-steps", "cooking-imported"}),
 }
 # Pixels per point by device.
 SCALES = {"large": 3, "small": 2, "duo": 3, "ipadL": 2, "ipadP": 2}

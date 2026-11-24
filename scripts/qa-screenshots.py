@@ -50,6 +50,22 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
 # (item 3): every config has the same set. The typed recipe has a description, so its page scrolls
 # on the upright iPad too, and MenuCardsQATests runs in every config.
 COVERAGE_EXCEPTIONS: dict = {}
+# Required screens only some devices have, by the device's name in DEVICES.
+REQUIRED_ON = {
+    # An iPad's steps column brought down to Step 3, beside "Start Cooking › Steps" with both
+    # columns at their tops (Hark's review, build 121 round 2, item 1). A phone's Steps tab is a
+    # screen of its own instead.
+    "Start Cooking › Steps scrolled": ("ipadL", "ipadP"),
+    # The middle of the typed recipe's cooking list on the short screens, where its top and end
+    # leave rows between them (Basil Pesto on the Duo, the same review, item 6).
+    "Cooking › typed by hand › middle of ingredients": ("duo", "small"),
+}
+
+
+def required(config):
+    """The screens a config ("duo-light") must have."""
+    device = config.rsplit("-", 1)[0]
+    return REQUIRED + tuple(r for r, devices in REQUIRED_ON.items() if device in devices)
 DEVICES = {
     "large": ("iPhone 17 Pro Max", "portrait"),
     "small": ("iPhone SE", "portrait"),
@@ -205,7 +221,7 @@ def main():
     for m in manifest:
         screens[m["config"]].add(re.sub(r" \((light|dark)\)$", "", m["screen"]))
     for c in configs:
-        missing = [r for r in REQUIRED if r not in screens[c] and (c, r) not in COVERAGE_EXCEPTIONS]
+        missing = [r for r in required(c) if r not in screens[c] and (c, r) not in COVERAGE_EXCEPTIONS]
         if missing:
             problems.append(f"{c} is missing: {', '.join(missing)}")
     if problems:
