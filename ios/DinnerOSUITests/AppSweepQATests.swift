@@ -59,6 +59,9 @@ final class AppSweepQATests: XCTestCase {
             problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)
             problems += MenuQAChecks.checkMealCardsLineUp(app, screen: screen)
             problems += MenuQAChecks.checkLoaded(app, screen: screen)
+            problems += MenuQAChecks.checkMealCountMatchesCards(app, screen: screen)
+            problems += MenuQAChecks.checkSuggestedCardWidths(app, screen: screen)
+            problems += MenuQAChecks.checkNewToYouHasNoMadeMeal(app, screen: screen)
             checkRecipePageLoaded(app, mode: mode)
         case "Shop", "Pantry":
             problems += MenuQAChecks.checkLoaded(app, screen: screen)

@@ -67,6 +67,7 @@ final class MenuCardsQATests: XCTestCase {
         problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)
         problems += MenuQAChecks.checkMealCardsLineUp(app, screen: screen)
         problems += MenuQAChecks.checkLoaded(app, screen: screen)
+        problems += MenuQAChecks.checkMealCountMatchesCards(app, screen: screen)
         snap(app, "Menu › Your Meals at rest (\(mode))")
 
         // Made already: the card asks how it was, and the week still has no band under it.
@@ -92,6 +93,9 @@ final class MenuCardsQATests: XCTestCase {
             problems += MenuQAChecks.checkMealCardRatingRows(app, screen: "\(screen), one made")
             problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: "\(screen), one made")
             problems += MenuQAChecks.checkMealCardsLineUp(app, screen: "\(screen), one made")
+            problems += MenuQAChecks.checkMealCountMatchesCards(app, screen: "\(screen), one made")
+            // Made is no longer New to You (build 121 review round 2, Hark's item 13).
+            problems += MenuQAChecks.checkNewToYouHasNoMadeMeal(app, screen: "\(screen), one made")
             snap(app, "Menu › Your Meals with a meal made (\(mode))")
         } else {
             problems.append("\(screen): no “I Made It” on the card’s long-press menu")
