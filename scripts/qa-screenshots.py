@@ -45,21 +45,15 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # The end of the cooking list for both recipes, and Your Meals with a meal made, in
             # every config (Hark's build 123 review, items 3 and 10).
             "Cooking › imported › end of ingredients", "Cooking › typed by hand › end of ingredients",
-            "Menu › Your Meals with a meal made")
-# Screens a device's configs must have besides REQUIRED. On a phone, Pantry's Butter and Shop's
-# Cream Sauce Base flour sit below the tab's first screen, so the sweep scrolls to each and keeps
-# it, and their percent and amount can be checked on every config (Hark's build 121 review,
-# item 18). An iPad shows both in the tab's own shot.
-REQUIRED_ON = {
-    "small": ("Pantry › scrolled to Butter", "Shop › scrolled to Flour"),
-    "duo": ("Pantry › scrolled to Butter", "Shop › scrolled to Flour"),
-}
-
-
+            "Menu › Your Meals with a meal made",
+            # Pantry's Butter and Shop's Cream Sauce Base flour, so their percent and amount can be
+            # checked in every config (Hark's build 121 review, item 18). On a phone the sweep
+            # scrolls to each; an iPad keeps the shot with the row already in view.
+            "Pantry › scrolled to Butter", "Shop › scrolled to Flour")
 def missing_screens(config, screens):
-    """The required screens `config` ("small-dark") lacks, given the screen names it has."""
-    required = REQUIRED + REQUIRED_ON.get(config.split("-")[0], ())
-    return [r for r in required if r not in screens and (config, r) not in COVERAGE_EXCEPTIONS]
+    """The required screens `config` ("small-dark") lacks, given the screen names it has. Every
+    config must have the same set (Hark's build 123 review, item 3)."""
+    return [r for r in REQUIRED if r not in screens and (config, r) not in COVERAGE_EXCEPTIONS]
 
 
 # Required screens a config may lack, each with its reason. None since Hark's build 123 review

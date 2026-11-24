@@ -35,12 +35,11 @@ final class AppSweepQATests: XCTestCase {
                 problems.append("\(tab): tapping the tab didn’t open it")
                 continue
             }
-            let tabShot = capture(app)
-            keep(tabShot, "\(tab) (\(mode))")
+            snap(app, "\(tab) (\(mode))")
             checkScreen(app, "\(tab) (\(mode))")
             checkNothingMissing(app, tab: tab, mode: mode)
             visitRows(app, tab: tab, mode: mode)
-            if let row = Self.rowsToShow[tab] { snapRow(app, row, tab: tab, mode: mode, tabShot: tabShot) }
+            if let row = Self.rowsToShow[tab] { snapRow(app, row, tab: tab, mode: mode) }
             if tab == "Household" { checkVersion(app, mode: mode) }
         }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
@@ -48,21 +47,34 @@ final class AppSweepQATests: XCTestCase {
 
     /// A row on each of these tabs whose amount is checked in every config (Hark's build 121
     /// review, item 18): Butter's percentage and amount on Pantry, the Cream Sauce Base's flour on
-    /// Shop. Below the first screen on a phone, so the sweep scrolls to them.
+    /// Shop. Below the first screen on a phone, so the sweep scrolls to them; every config keeps
+    /// the shot, so all have the same set.
     static let rowsToShow = ["Pantry": "Butter", "Shop": "All-Purpose Flour"]
 
-    /// Scrolls `row` into the upper half of the tab and keeps "Pantry › scrolled to Butter". Left
-    /// out when the tab didn't move (an iPad shows the row in the tab's own shot already).
+    /// Brings `row` into view and keeps "Pantry › scrolled to Butter", in every config: a row
+    /// already in view on the tab (an iPad) is kept as it is, as the tab shot's allowed
+    /// look-alike (`QAShotCompare.allowedPairs`); one only partly in view is scrolled up.
     @MainActor
-    private func snapRow(_ app: XCUIApplication, _ row: String, tab: String, mode: String, tabShot: QAShot) {
+    private func snapRow(_ app: XCUIApplication, _ row: String, tab: String, mode: String) {
         let text = app.staticTexts[row].firstMatch
-        reveal(text, in: app, maxSwipes: 12)
-        guard text.exists else {
-            problems.append("\(tab) (\(mode)): no \(row) row to show")
+        if !Self.fullyInView(text, in: app) { reveal(text, in: app, maxSwipes: 12) }
+        guard text.exists, Self.fullyInView(text, in: app) else {
+            problems.append("\(tab) (\(mode)): no \(row) row in view to show")
             return
         }
         let short = row.split(separator: " ").last.map(String.init) ?? row
-        keepIfScrolled(capture(app), "\(tab) › scrolled to \(short) (\(mode))", before: tabShot)
+        snap(app, "\(tab) › scrolled to \(short) (\(mode))")
+    }
+
+    /// Whether `element` sits in the top 70% of the screen, clear of a pinned bottom bar and the
+    /// tab bar, with room under it for its amount lines.
+    @MainActor
+    private static func fullyInView(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard element.exists else { return false }
+        let frame = element.frame
+        let screen = app.frame
+        return !frame.isEmpty && frame.minY > screen.minY + screen.height * 0.08
+            && frame.maxY < screen.minY + screen.height * 0.7
     }
 
     /// Build 123 (Hark: "this cannot happen again"): content that should be there and isn't. On

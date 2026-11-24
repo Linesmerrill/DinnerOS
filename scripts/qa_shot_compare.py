@@ -53,6 +53,10 @@ ALLOWED_PAIRS = {
     "Menu search, one card each": frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
     # A household without Plus differs only in its name, initials and Plus line.
     "Household with and without Plus": frozenset({"household-new-household", "household"}),
+    # On an iPad Butter and the flour already show on the tab, so the "scrolled to" shot barely
+    # moves the list, or not at all (Hark's build 121 review, item 18). A phone's pair differs.
+    "Pantry with Butter in view": frozenset({"pantry", "pantry-scrolled-to-butter"}),
+    "Shop with the flour in view": frozenset({"shop", "shop-scrolled-to-flour"}),
 }
 # Pixels per point by device.
 SCALES = {"large": 3, "small": 2, "duo": 3, "ipadL": 2, "ipadP": 2}

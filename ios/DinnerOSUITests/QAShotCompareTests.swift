@@ -135,6 +135,10 @@ final class QAShotCompareTests: XCTestCase {
         XCTAssertTrue(QAShotCompare.isAllowedPair(imported, byHand))
         XCTAssertTrue(QAShotCompare.isAllowedPair(byHand, imported))
         XCTAssertTrue(QAShotCompare.isAllowedPair("Household", "Household › new household"))
+        // An iPad's Pantry and Shop already show Butter and the flour (Hark's build 121, item 18).
+        XCTAssertTrue(QAShotCompare.isAllowedPair("Pantry (light)", "Pantry › scrolled to Butter (light)"))
+        XCTAssertTrue(QAShotCompare.isAllowedPair("Shop › scrolled to Flour (dark)", "Shop (dark)"))
+        XCTAssertFalse(QAShotCompare.isAllowedPair("Pantry", "Shop › scrolled to Flour"))
         XCTAssertFalse(QAShotCompare.isAllowedPair(imported, "Menu"))
         XCTAssertFalse(QAShotCompare.isAllowedPair(imported, imported))
     }
