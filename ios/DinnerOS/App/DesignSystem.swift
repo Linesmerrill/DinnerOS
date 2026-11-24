@@ -279,6 +279,7 @@ struct DSBottomBar<Content: View>: View {
         .overlay(alignment: .top) {
             if showsDivider { Divider() }
         }
+        .qaCover(.bar)
     }
 }
 
@@ -538,6 +539,9 @@ struct DSEdgeFade: View {
     let edge: VerticalEdge
     var color: Color = DS.Colors.barBackground
     var height: CGFloat = DS.Size.edgeFade
+    /// Reported to the UI tests as covering the content (`qaCover`). Off for a fade on a bar that
+    /// reports itself with its fade (the recipe page's pinned picker).
+    var reportsCover = true
 
     var body: some View {
         LinearGradient(
@@ -547,6 +551,7 @@ struct DSEdgeFade: View {
         .frame(height: max(height, 0))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .modifier(DSEdgeFadeCover(isOn: reportsCover))
     }
 
     /// The fade under a pinned bar for content scrolled `scrolledUnder` points past where it
@@ -558,15 +563,25 @@ struct DSEdgeFade: View {
     }
 }
 
+/// `qaCover` on a fade that reports itself.
+private struct DSEdgeFadeCover: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn { content.qaCover(.fade) } else { content }
+    }
+}
+
 extension View {
     /// Hangs a `DSEdgeFade` off this pinned bar's `edge`, outside its frame, so it never changes
     /// the bar's layout. The screen's content needs an inset of the same height at that edge
     /// (`DS.Size.edgeFade`) so its last row can come fully clear of the fade.
     func dsEdgeFade(
-        _ edge: VerticalEdge, color: Color = DS.Colors.barBackground, height: CGFloat = DS.Size.edgeFade
+        _ edge: VerticalEdge, color: Color = DS.Colors.barBackground, height: CGFloat = DS.Size.edgeFade,
+        reportsCover: Bool = true
     ) -> some View {
         overlay(alignment: edge == .bottom ? .bottom : .top) {
-            DSEdgeFade(edge: edge, color: color, height: height)
+            DSEdgeFade(edge: edge, color: color, height: height, reportsCover: reportsCover)
                 .offset(y: edge == .bottom ? max(height, 0) : -max(height, 0))
         }
     }
@@ -711,10 +726,27 @@ private struct DSScrollBarEdge: ViewModifier {
                         maxForward: farthest - geometry.contentOffset.y)
                 else { return }
                 // A scroll position counts from the content's resting place, below the top inset.
-                withAnimation(.snappy) { position.scrollTo(y: scrolled + shift) }
+                withAnimation(.snappy) { position.dsScroll(toY: scrolled + shift) }
             }
             .environment(\.dsBarEdge, barEdge)
             .environment(\.dsRowFrames, rowFrames)
+    }
+}
+
+extension ScrollPosition {
+    /// Scrolls to `y` (from the content's resting place), even when `y` is the last point this
+    /// position was sent to. A position keeps that point after a person scrolls away, so asking
+    /// for it again changed nothing: a recipe page let go short of pinning its picker stayed
+    /// there, with "No ratings yet" half under the bar (Hark's review, build 121 round 2). A
+    /// hundredth of a point off makes it a new point; nobody can see the difference.
+    mutating func dsScroll(toY y: CGFloat) {
+        scrollTo(y: Self.target(y, last: point?.y))
+    }
+
+    /// `y`, or a hundredth of a point past it when it's `last`, the point already asked for.
+    nonisolated static func target(_ y: CGFloat, last: CGFloat?) -> CGFloat {
+        guard let last, abs(last - y) < 0.005 else { return y }
+        return y + 0.01
     }
 }
 

@@ -114,6 +114,16 @@ final class BiometricSignInQATests: XCTestCase {
             app.staticTexts["Signed in with, Email"].waitForExistence(timeout: 5),
             "Account doesn’t say they signed in with email")
         snap(app, "Face ID › Back from the background (\(mode))")
+        // The end of Account: the last rows rest whole above the tab bar, not washed out by its
+        // fade (Hark's review, build 121 round 2: Sign Out and Delete Account on an SE and the Duo).
+        var fades = FadeQAChecks.checkRest(app, screen: "Account, as it opens", edges: .bottom)
+        print("QA-INFO: \(fades)")
+        FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+        fades = FadeQAChecks.checkRest(app, screen: "Account, scrolled to the end", edges: .bottom)
+        fades += FadeQAChecks.checkClear(
+            app.buttons["Delete Account"].firstMatch, what: "Delete Account", in: app, screen: "Account, at the end",
+            image: capture(app).image)
+        XCTAssertTrue(fades.isEmpty, fades.joined(separator: "\n"))
 
         // A new launch still unlocks with Face ID.
         app = relaunch(app, fake: "match")
@@ -315,6 +325,8 @@ final class BiometricSignInQATests: XCTestCase {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
         if let fake { app.launchEnvironment["DINNEROS_FAKE_BIOMETRICS"] = fake }
+        // Where the fades are, for the check at the end of Account (`FadeQAChecks`).
+        app.launchEnvironment["QA_MARKERS"] = "1"
         app.launch()
         assertFullScreen(app)
         return app

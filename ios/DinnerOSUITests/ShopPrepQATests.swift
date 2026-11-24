@@ -58,6 +58,12 @@ final class ShopPrepQATests: XCTestCase {
             app.staticTexts["23 oz left after this week"].exists || card.label.contains("23 ounces left after this week"))
         sleep(1)
         snap(app, "Shop › Freeze card (\(mode))")
+        // The end of the list: its last rows rest whole above the Walmart note, not ghosted in
+        // its fade (Hark's review, build 121 round 2: Add Prices).
+        print("QA-INFO: \(FadeQAChecks.checkRest(app, screen: "Shop, as it opens", edges: .bottom))")
+        FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+        let fades = FadeQAChecks.checkRest(app, screen: "Shop, scrolled to the end", edges: .bottom)
+        XCTAssertTrue(fades.isEmpty, fades.joined(separator: "\n"))
         app.terminate()
     }
 

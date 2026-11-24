@@ -196,6 +196,9 @@ final class ScreensQATests: XCTestCase {
                     "Recipe page › \(kind): the \(tab) tab isn’t selected")
                 pinPicker(picker, in: app)
                 shot(app, "Recipe page › \(kind) › \(tab)")
+                // The tab's first rows start whole under the pinned picker, with nothing resting
+                // half under it or the bar above it (Hark's review, build 121 round 2).
+                problems += FadeQAChecks.checkRest(app, screen: "Recipe page › \(kind) › \(tab)", edges: .top)
                 scrollToTop(app)
             }
             let more = app.buttons["More"].firstMatch
@@ -241,6 +244,11 @@ final class ScreensQATests: XCTestCase {
             // shot, rather than a copy of the top (Hark's review, build 122 item 13c).
             if keepIfScrolled(scrolled, "Recipe page › \(kind) › scrolled (\(mode))", before: top) {
                 checkToolbar(app, "Recipe page › \(kind) › scrolled")
+                // At the end of the page the last rows rest whole, clear of the bottom bar's
+                // fade (Hark's review, build 121 round 2: Add Nutrition under it on the Duo).
+                FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+                problems += FadeQAChecks.checkRest(
+                    app, screen: "Recipe page › \(kind), scrolled to the end", edges: .bottom)
             }
             // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
             // to the top in case it ever scrolls away again.
@@ -317,6 +325,7 @@ final class ScreensQATests: XCTestCase {
             if later.waitForExistence(timeout: 6) {
                 waitStill(app)
                 shot(app, "Autopilot setup")
+                problems += Self.checkProgressBarClear(app, "Autopilot setup")
             } else {
                 snap(app, "Autopilot setup: didn’t open (\(mode))", unique: false)
                 problems.append("Menu: Run Setup Again didn’t open Autopilot setup")
@@ -434,6 +443,23 @@ final class ScreensQATests: XCTestCase {
 
     // MARK: Helpers
 
+    /// The step's progress bar sits clear of the screen's or sheet's top edge, with room above
+    /// it: it touched the top of the Duo's cover screen, and a large iPhone's sheet cut its ends
+    /// off with its rounded corners (Hark's review, build 121 round 2).
+    @MainActor
+    private static func checkProgressBarClear(_ app: XCUIApplication, _ name: String) -> [String] {
+        let bar = app.progressIndicators.firstMatch
+        guard bar.exists, !bar.frame.isEmpty else { return ["\(name): no progress bar"] }
+        // The sheet's own navigation bar starts at the sheet's top edge.
+        let navigation = app.navigationBars.allElementsBoundByIndex.filter {
+            $0.exists && $0.frame.minY <= bar.frame.minY
+        }
+        let top = max(navigation.map(\.frame.minY).max() ?? app.frame.minY, app.frame.minY)
+        print("QA-FADES: \(name): progress bar at \(FadeQAChecks.describe(bar.frame)), top \(top)")
+        let room = bar.frame.minY - top
+        return room >= 12 ? [] : ["\(name): the progress bar is \(Int(room)) points from the top, want 12+"]
+    }
+
     /// A segment or tab that says it's the selected one.
     @MainActor
     private static func isSelected(_ element: XCUIElement) -> Bool {
@@ -546,15 +572,33 @@ final class ScreensQATests: XCTestCase {
     @MainActor
     private func pinPicker(_ picker: XCUIElement, in app: XCUIApplication) {
         let bar = app.navigationBars.firstMatch
-        let top = bar.exists && !bar.frame.isEmpty ? bar.frame.maxY : app.frame.height * 0.12
-        let distance = picker.frame.minY - top
-        guard distance > 8 else { return }
-        let start = app.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: app.frame.width * 0.3, dy: min(picker.frame.maxY + 40, app.frame.height * 0.8)))
-        let end = start.withOffset(CGVector(dx: 0, dy: -distance))
-        // Slow, and held at the end, so the page stops where the drag does.
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
-        sleep(1)
+        var top = bar.exists && !bar.frame.isEmpty ? bar.frame.maxY : app.frame.height * 0.12
+        // Then once more to where it pins, now the bar is up: under the bar and its one-line
+        // title, which the app reports (`FadeQAChecks`). On the Duo's cover screen there's no
+        // navigation bar to measure, and a drag to a guess stopped nearer the large title, so
+        // the page settled there with a strip of the photo under the bar (Hark's review, build
+        // 121 round 2).
+        for attempt in 0..<2 {
+            if attempt > 0 {
+                let bars = (FadeQAChecks.covers(app) ?? []).filter {
+                    !$0.isFade && $0.frame.minY < picker.frame.minY - 1 && $0.frame.maxY <= picker.frame.minY + 1
+                        && $0.frame.minY < app.frame.height * 0.3
+                }
+                guard let pin = bars.map(\.frame.maxY).max() else { return }
+                top = pin
+            }
+            let distance = picker.frame.minY - top
+            // A shorter drag is a tap to the page (it once opened a row): the page's own
+            // resting move covers the last few points.
+            guard distance > 12 else { return }
+            let start = app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(
+                    CGVector(dx: app.frame.width * 0.3, dy: min(picker.frame.maxY + 40, app.frame.height * 0.8)))
+            let end = start.withOffset(CGVector(dx: 0, dy: -distance))
+            // Slow, and held at the end, so the page stops where the drag does.
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+            sleep(1)
+        }
     }
 
     @MainActor
