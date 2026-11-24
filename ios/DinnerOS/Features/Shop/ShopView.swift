@@ -43,7 +43,7 @@ struct ShopView: View {
 
     var body: some View {
         content
-            .tabBarEdge()
+            .tabBarEdge(color: DS.Colors.groupedBackground)
             .tabHeader(String(localized: "Shop"))
             .safeAreaInset(edge: .top, spacing: 0) {
                 if isReady {
@@ -726,7 +726,16 @@ private struct ShopWeekList: View {
     }
 }
 
-private struct NeedsProductRow: View {
+/// How a Shop row shares its width between its text and its buttons.
+nonisolated enum ShopRowLayout {
+    /// The narrowest column a row's text wraps in beside Choose Product. Below it the buttons go
+    /// under the text instead: on an iPhone a long note would wrap a word or two per line.
+    static let minWrappingTextWidth: CGFloat = 260
+}
+
+/// A line without a saved product: its name, amount and notes, then Choose Product and the
+/// remove menu.
+struct NeedsProductRow: View {
     let line: ShoppingExcludedLine
     let canChoose: Bool
     var mealNote: String? = nil
@@ -739,15 +748,26 @@ private struct NeedsProductRow: View {
         if dynamicTypeSize.isAccessibilitySize {
             stacked
         } else {
-            // Beside the text while every line of it fits on one line; otherwise the text takes
-            // the row's full width and the buttons go under it, so a note like "1 for this meal ·
-            // Also in Pesto Bow Tie Pasta" never wraps into a narrow column (Hark's review,
-            // build 122 round 4, iPhone SE).
+            // Beside the text while every line of it fits on one line. A longer note ("1 for this
+            // meal · Also in Chicken Penne al Limone") wraps beside the buttons while the text
+            // still has a comfortable column, so the buttons stay on the right in line with the
+            // other rows (Hark's review, build 123, iPad). Only a row too narrow for that puts
+            // the buttons under the text, so the note never wraps into a narrow column (build
+            // 122 round 4, iPhone SE).
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: DS.Space.m) {
                     details
                         .fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: DS.Space.s)
+                    buttons(pushesRemove: false)
+                }
+                HStack(spacing: DS.Space.m) {
+                    details
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(
+                            minWidth: ShopRowLayout.minWrappingTextWidth,
+                            idealWidth: ShopRowLayout.minWrappingTextWidth,
+                            maxWidth: .infinity, alignment: .leading)
                     buttons(pushesRemove: false)
                 }
                 stacked
