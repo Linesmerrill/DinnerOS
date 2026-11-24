@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// "How was it?" and five stars on a meal whose night has passed: one tap rates it.
+/// Five stars under every planned meal's title: one tap rates it. "How was it?" once its night
+/// has passed or it's marked made; on a meal still ahead, how you rated it last time (Merrill,
+/// Nov 23: build 121 had limited the stars to past and made meals).
 ///
 /// The rating screen is at the bottom of a recipe's Description tab, which is a photo, a title
 /// block and a scroll away from the meal itself, and nothing on the Menu ever mentions it. This is
@@ -16,6 +18,8 @@ struct MealRatingRow: View {
     /// Another card in the row is rated and shows its follow-up button (`MealCardRows`), so an
     /// unrated row keeps that line too.
     var holdsFollowUp = false
+    /// The meal has been had (its night is over, or it's marked made), so an unrated row asks.
+    var asks = true
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(MenuStore.self) private var menu
@@ -31,7 +35,7 @@ struct MealRatingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.hairline) {
             HStack(spacing: DS.Space.s) {
-                Text(score == 0 ? "How was it?" : "Your rating")
+                Text(Self.title(score: score, asks: asks))
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
                 if isSaving {
@@ -66,6 +70,13 @@ struct MealRatingRow: View {
             RatingFeedbackSheet(
                 recipeID: recipe.id, recipeName: recipe.name, score: score, rating: recipe.myRating)
         }
+    }
+
+    /// The line over the stars: what you gave it, else the question once the meal's been had,
+    /// else that it has no rating yet.
+    nonisolated static func title(score: Int, asks: Bool) -> String {
+        if score > 0 { return String(localized: "Your rating") }
+        return asks ? String(localized: "How was it?") : String(localized: "Not rated yet")
     }
 
     private var followUpTitle: LocalizedStringKey {

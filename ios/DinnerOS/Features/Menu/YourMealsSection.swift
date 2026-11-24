@@ -347,48 +347,51 @@ struct MealCard: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            // The stars under the title on every meal, a coming one too, so the week shows how
+            // each was liked last time (Merrill, Nov 23).
+            switch MealRating.row(canRate: feedbackRecipe != nil, weekAsks: rows.holdsRating) {
+            case .shown:
+                if let feedbackRecipe {
+                    MealRatingRow(recipe: feedbackRecipe, holdsFollowUp: rows.holdsFollowUp, asks: asks)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier(Self.ratingRowID)
+                }
+            case .heldSpace:
+                // The menu card isn't loaded, so its rating isn't known: the row's height is kept
+                // so the card lines up with its neighbours (`MealCardRows`).
+                MealRatingRow.Space(holdsFollowUp: rows.holdsFollowUp)
+            case .none:
+                EmptyView()
+            }
             if isEditable {
                 ServingsStepper(
                     label: MenuFormat.servings(entry.servings), isBusy: isBusy,
                     decrease: { changeServings(-1) }, increase: { changeServings(1) })
             }
-            // What happened comes before how it was: one is a fact about the night, the other an
-            // opinion about the food. A meal counts as made unless someone says it wasn't
-            // (decision 662), so the row only offers that, once a night in the week is over.
-            MealOutcomeRow(entry: entry, weekOffers: rows.holdsOutcome)
-            switch MealRating.row(
-                outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date),
-                canRate: feedbackRecipe != nil, weekAsks: rows.holdsRating)
-            {
-            case .shown:
-                if let feedbackRecipe {
-                    MealRatingRow(recipe: feedbackRecipe, holdsFollowUp: rows.holdsFollowUp)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier(Self.ratingRowID)
-                }
-            case .heldSpace:
-                // Not asked yet, but a neighbour asks: the row's height is kept so the cards
-                // line up (`MealCardRows`). Stars stay on past and made meals only.
-                MealRatingRow.Space(holdsFollowUp: rows.holdsFollowUp)
-            case .none:
-                EmptyView()
-            }
+            // Last, on the left: a meal counts as made unless someone says it wasn't (decision
+            // 662), so the row only offers that once the night is over.
+            MealOutcomeRow(entry: entry, holdsSpace: rows.holdsOutcome)
         }
+        .qaMarker(QAMarkers.mealCardFrame, label: "", isShown: true)
         .contextMenu { menuItems }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(
             Self.cardID(
                 entryID: entry.id, isAddOn: isAddOn,
-                asks: MealRating.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date))))
+                asks: asks))
+    }
+
+    /// The meal has been had: marked made, or its night is over and nobody said it wasn't.
+    private var asks: Bool {
+        MealRating.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date))
     }
 
     /// For the UI tests: every card, an add-on's told apart, and the stars on a card.
     static let cardIDPrefix = "menu.mealCard."
     static let addOnCardIDPrefix = "menu.mealCard.addOn."
-    static let ratingRowID = "menu.mealCard.rating"
-    /// Ends the identifier of a card whose meal should ask how it was: made, or its night over.
-    /// Worked out from the plan alone, not from whether the stars could be drawn, so a card that
-    /// should ask and doesn't fails the sweep (build 123, Hark).
+    static let ratingRowID = "menu.mealRating"
+    /// Ends the identifier of a card whose meal asks how it was ("How was it?" over its stars):
+    /// made, or its night over. Worked out from the plan alone. Every card shows the stars.
     static let asksSuffix = ".asks"
 
     static func cardID(entryID: String, isAddOn: Bool, asks: Bool) -> String {
@@ -653,9 +656,9 @@ struct MoveToWeekMenu: View {
 
 /// When a planned meal asks "How was it?" (build 121, Hark's review item 12).
 nonisolated enum MealRating {
-    /// Only once it's been cooked: marked made, or its night is over and nobody said it wasn't
-    /// (a meal counts as made unless someone says otherwise, decision 662). A meal still ahead,
-    /// or one that wasn't made, has nothing to rate.
+    /// Whether the stars ask "How was it?": once it's been cooked, marked made, or its night is
+    /// over and nobody said it wasn't (decision 662). The stars themselves show on every meal
+    /// (Merrill, Nov 23, undoing build 121's stars only on cooked meals).
     static func shows(outcome: MealOutcome?, nightHasPassed: Bool) -> Bool {
         switch outcome {
         case .cooked: true
@@ -665,17 +668,18 @@ nonisolated enum MealRating {
     }
 
     /// The rating row on a planned meal's card: the stars; the same space left empty, so the
-    /// card lines up with a neighbour that asks; or nothing, when no card in the week asks.
+    /// card lines up with neighbours that show them; or nothing, when no card can.
     enum Row: Equatable {
         case shown
         case heldSpace
         case none
     }
 
-    /// `canRate`: the card has the menu card's recipe, which carries the member's own rating.
-    /// `weekAsks`: some card in the same carousel shows the stars (`MealCardRows`).
-    static func row(outcome: MealOutcome?, nightHasPassed: Bool, canRate: Bool = true, weekAsks: Bool) -> Row {
-        if canRate, shows(outcome: outcome, nightHasPassed: nightHasPassed) { return .shown }
+    /// `canRate`: the card has the menu card's recipe, which carries the member's own rating;
+    /// without it the stars could ask again about a meal already rated. `weekAsks`: some card in
+    /// the same carousel shows the stars (`MealCardRows`).
+    static func row(canRate: Bool = true, weekAsks: Bool) -> Row {
+        if canRate { return .shown }
         return weekAsks ? .heldSpace : .none
     }
 }
@@ -691,15 +695,16 @@ nonisolated enum MealRating {
 ///
 /// Build 123 still left an empty band of about 120 points under the servings control on the
 /// second and third cards when only the first had "Didn't make it?" and the stars (Hark's
-/// review, item 2). Now when one card offers "Didn't make it?", every card does, in the same
-/// place, so the only room held is the stars' (and a rated neighbour's follow-up line).
+/// review, item 2). Now the stars are on every card, under the title (Merrill, Nov 23), so the
+/// only room held is "Didn't make it?"'s one line at the bottom, beside a card whose night is
+/// over, and a rated neighbour's follow-up line.
 ///
 /// Worked out from the plan and the answers, never from measured sizes, so nothing about the
 /// layout feeds back into it: the carousel's height is settled in one pass, the iPad in
 /// landscape has nothing to re-measure while it scrolls (QA, build 121), and every card in a
 /// week is one height.
 nonisolated struct MealCardRows: Equatable {
-    /// Some card shows "Didn't make it?" or "I Made It", so every card offers one.
+    /// Some card shows "Didn't make it?" or "I Made It".
     var holdsOutcome: Bool
     /// Some card shows the stars.
     var holdsRating: Bool
@@ -719,16 +724,11 @@ nonisolated struct MealCardRows: Equatable {
     }
 
     static func of(_ meals: [Meal]) -> MealCardRows {
-        func asks(_ meal: Meal) -> Bool {
-            MealRating.row(
-                outcome: meal.outcome, nightHasPassed: meal.nightHasPassed, canRate: meal.canRate, weekAsks: false)
-                == .shown
-        }
-        return MealCardRows(
+        MealCardRows(
             holdsOutcome: meals.contains {
                 MealOutcomeRow.shows(outcome: $0.outcome, nightHasPassed: $0.nightHasPassed)
             },
-            holdsRating: meals.contains(where: asks),
-            holdsFollowUp: meals.contains { asks($0) && $0.isRated })
+            holdsRating: meals.contains(where: \.canRate),
+            holdsFollowUp: meals.contains { $0.canRate && $0.isRated })
     }
 }

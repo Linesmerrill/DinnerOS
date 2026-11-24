@@ -22,6 +22,10 @@ nonisolated enum QAMarkers {
     static let cookPhoto = "cook.photo"
     /// An ingredient row on the cooking screen's list (an identifier on the row itself).
     static let cookIngredient = "cook.ingredient"
+
+    /// The whole of a Your Meals card, held space included: a card's own accessibility frame
+    /// covers only what VoiceOver reads, so the line-up check measures this instead.
+    static let mealCardFrame = "menu.mealCardFrame"
 }
 
 extension View {

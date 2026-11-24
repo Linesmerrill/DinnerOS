@@ -6,8 +6,10 @@ import XCTest
 /// Every card kept room for "Didn't make it?" and the stars, which only show once a meal's night
 /// is over, so the Menu had an empty band of more than 100 points between the servings control
 /// and Shared Recipes. Cards now keep that room only when a card in the week shows those rows
-/// (`MealCardRows`). This checks the week at rest, then marks a meal made and checks it asks how
-/// it was, with the cards still lining up and still no band.
+/// (`MealCardRows`). Since Nov 23 (Merrill) the stars show on every card, a meal still ahead
+/// included, and only "How was it?" waits for the night. This checks the week at rest (stars on
+/// all four cards), then marks a meal made and checks it asks how it was, with the cards still
+/// lining up and still no band.
 final class MenuCardsQATests: XCTestCase {
     private var problems: [String] = []
 
@@ -54,10 +56,12 @@ final class MenuCardsQATests: XCTestCase {
             "The add-on card isn’t Garlic Bread’s")
         sleep(2)
 
-        // At rest, nothing asks yet (every night is ahead), and nothing holds room for it.
+        // At rest every night is ahead, and every card still shows its stars (Merrill, Nov 23):
+        // the week shows how each meal was liked last time. Nothing asks "How was it?" yet.
         XCTAssertEqual(
-            app.descendants(matching: .any).matching(identifier: MenuQAChecks.ratingRow).count, 0,
-            "A meal whose night is still ahead asks how it was")
+            app.descendants(matching: .any).matching(identifier: MenuQAChecks.ratingRow).count, 4,
+            "Every meal card should show its stars, a meal still ahead included")
+        XCTAssertFalse(app.staticTexts["How was it?"].exists, "A meal whose night is still ahead asks how it was")
         problems += MenuQAChecks.checkAddOnCards(app, screen: screen)
         problems += MenuQAChecks.checkMealCardRatingRows(app, screen: screen)
         problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)

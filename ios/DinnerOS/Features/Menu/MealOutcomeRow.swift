@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// "Didn't make it?" on a planned meal, and "I Made It" on one marked not made.
+/// "Didn't make it?" on a planned meal whose night is over, and "I Made It" on one marked not
+/// made.
 ///
 /// A meal counts as made unless someone says otherwise: the server marks every unanswered meal
 /// of a week made when the week ends, and next week's list already counts on it (decision 662).
 /// So there's nothing to ask on the night, only a quiet way to say it didn't happen, which also
-/// gives back what the meal took from the pantry.
+/// gives back what the meal took from the pantry. A night still ahead shows nothing.
 ///
-/// It sits in one place on every card, under the servings control and lined up on the left
-/// (build 123 review, Hark's item 2). A meal whose night is over offers it, and so does every
-/// other meal of a week where one does: build 123 showed it under the first card only, and its
-/// neighbours carried an empty band in its place.
+/// It's the card's last line, lined up on the left (build 123 review, Hark's item 2: it sat at
+/// the right edge of the first card, with an empty band beside it on the others).
 struct MealOutcomeRow: View {
     let entry: PlanEntry
-    /// Some card in the same row offers "Didn't make it?" (`MealCardRows`), so this one does too.
-    var weekOffers = false
+    /// A neighbour in the same row shows the row (`MealCardRows`): keep its one line, so the
+    /// cards stay one height.
+    var holdsSpace = false
 
     /// Whether the meal itself has something to show: an answer, or a night that's over.
     nonisolated static func shows(outcome: MealOutcome?, nightHasPassed: Bool) -> Bool {
@@ -27,13 +27,16 @@ struct MealOutcomeRow: View {
         case madeIt
         /// "Didn't make it?" with its reasons.
         case didntMakeIt
-        /// Nothing: no meal in the week has anything to answer yet.
+        /// Its line kept empty: the night is ahead, and a neighbour shows the row.
+        case heldSpace
+        /// Nothing: the night is ahead, and no card beside it shows the row.
         case nothing
     }
 
-    nonisolated static func content(outcome: MealOutcome?, nightHasPassed: Bool, weekOffers: Bool) -> Content {
+    nonisolated static func content(outcome: MealOutcome?, nightHasPassed: Bool, holdsSpace: Bool) -> Content {
         if case .skipped = outcome { return .madeIt }
-        return shows(outcome: outcome, nightHasPassed: nightHasPassed) || weekOffers ? .didntMakeIt : .nothing
+        if shows(outcome: outcome, nightHasPassed: nightHasPassed) { return .didntMakeIt }
+        return holdsSpace ? .heldSpace : .nothing
     }
 
     @Environment(PlanStore.self) private var plans
@@ -55,7 +58,7 @@ struct MealOutcomeRow: View {
                 undoRow(undoable)
             } else {
                 switch Self.content(
-                    outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date), weekOffers: weekOffers)
+                    outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date), holdsSpace: holdsSpace)
                 {
                 case .madeIt:
                     Button("I Made It", systemImage: "checkmark") {
@@ -69,6 +72,10 @@ struct MealOutcomeRow: View {
                         Text("Didn’t make it?")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                case .heldSpace:
+                    Text("Didn’t make it?")
+                        .hidden()
+                        .accessibilityHidden(true)
                 case .nothing:
                     EmptyView()
                 }

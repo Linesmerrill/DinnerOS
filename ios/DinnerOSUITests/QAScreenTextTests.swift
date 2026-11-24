@@ -21,8 +21,9 @@ final class QAScreenTextTests: XCTestCase {
         }
     }
 
-    /// Build 123 review, item 2: three cards, "Didn't make it?" on the first only, the others
-    /// shorter. Then the fix: one height, the row on every card at its left edge.
+    /// Build 123 review, item 2: "Didn't make it?" at the right of the first card, the others
+    /// shorter. Then the fix: one height, the row at the left edge, the stars level (Merrill,
+    /// Nov 23: stars on every card).
     func testMealCardsLineUp() {
         typealias Card = MenuQAChecks.LinedUpCard
         let before = [
@@ -32,27 +33,28 @@ final class QAScreenTextTests: XCTestCase {
             Card(name: "Garlic Bread", frame: CGRect(x: 412, y: 300, width: 380, height: 400), outcome: nil),
         ]
         let found = MenuQAChecks.lineUpProblems(before, screen: "Menu")
-        XCTAssertEqual(found.count, 3, "\(found)")
+        XCTAssertEqual(found.count, 2, "\(found)")
         XCTAssertTrue(found.contains { $0.contains("400 points tall") })
-        XCTAssertTrue(found.contains { $0.contains("no “Didn’t make it?”") })
         XCTAssertTrue(found.contains { $0.contains("points in from the card’s left edge") })
 
         let after = [
             Card(
                 name: "Pasta", frame: CGRect(x: 20, y: 300, width: 380, height: 520),
-                outcome: CGRect(x: 20, y: 700, width: 120, height: 20)),
+                outcome: CGRect(x: 20, y: 700, width: 120, height: 20),
+                stars: CGRect(x: 20, y: 600, width: 200, height: 50)),
             Card(
                 name: "Garlic Bread", frame: CGRect(x: 412, y: 300, width: 380, height: 521),
-                outcome: CGRect(x: 412, y: 700.5, width: 120, height: 20)),
+                outcome: nil, stars: CGRect(x: 412, y: 600.5, width: 200, height: 50)),
         ]
         XCTAssertEqual(MenuQAChecks.lineUpProblems(after, screen: "Menu"), [])
-        // Nobody offers it yet: only the heights are checked.
-        let ahead = after.map { Card(name: $0.name, frame: $0.frame, outcome: nil) }
-        XCTAssertEqual(MenuQAChecks.lineUpProblems(ahead, screen: "Menu"), [])
         // Offered on both, but one sits lower.
         var lower = after
         lower[1].outcome = CGRect(x: 412, y: 740, width: 120, height: 20)
         XCTAssertEqual(MenuQAChecks.lineUpProblems(lower, screen: "Menu").count, 1)
+        // Stars at different heights.
+        var uneven = after
+        uneven[1].stars = CGRect(x: 412, y: 640, width: 200, height: 50)
+        XCTAssertEqual(MenuQAChecks.lineUpProblems(uneven, screen: "Menu").count, 1)
     }
 
     /// Build 123 review, item 7: the search result's add button 200 points in from the edge of an

@@ -45,8 +45,9 @@ final class AppSweepQATests: XCTestCase {
     }
 
     /// Build 123 (Hark: "this cannot happen again"): content that should be there and isn't. On
-    /// Menu, every meal that should ask how it was shows its stars, the add-ons the subtitle
-    /// counts have their cards, and there's no empty band under the cards; on Menu, a recipe
+    /// Menu, every meal card shows its stars (a meal still ahead included, Merrill, Nov 23), the
+    /// add-ons the subtitle counts have their cards, the cards line up with no empty band under
+    /// them, and "Didn't make it?" sits on the left; on Menu, a recipe
     /// page, Shop and Pantry, nothing is still loading after 10 seconds (`MenuQAChecks`).
     @MainActor
     private func checkNothingMissing(_ app: XCUIApplication, tab: String, mode: String) {

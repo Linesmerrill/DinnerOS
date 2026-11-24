@@ -7,9 +7,12 @@ import XCTest
 enum MenuQAChecks {
     static let cardPrefix = "menu.mealCard."
     static let addOnPrefix = "menu.mealCard.addOn."
-    static let ratingRow = "menu.mealCard.rating"
+    static let ratingRow = "menu.mealRating"
     static let asksSuffix = ".asks"
     static let photoPlaceholder = "photo.placeholder"
+    /// Spans a whole meal card, held space included (`QAMarkers.mealCardFrame` in the app): a
+    /// card's own frame covers only what VoiceOver reads.
+    static let cardFrameMarker = "menu.mealCardFrame"
     /// Room allowed between the last meal card's content and what comes next, beyond the Menu's
     /// own 24-point gap between sections. Build 122's empty band was over 100 points.
     static let allowedExtraGap: CGFloat = 40
@@ -22,15 +25,15 @@ enum MenuQAChecks {
             .allElementsBoundByIndex
     }
 
-    /// (1) Every card whose meal should ask how it was (made, or its night over) shows the stars.
-    /// A meal still ahead shows none, by design (build 121, Hark's item 12).
+    /// (1) Every meal card shows the stars, a meal still ahead included, so the week shows how
+    /// each was liked last time (Merrill, Nov 23, undoing build 121's stars only on cooked meals).
     @MainActor
     static func checkMealCardRatingRows(_ app: XCUIApplication, screen: String) -> [String] {
         var problems: [String] = []
-        for card in cards(app) where card.identifier.hasSuffix(asksSuffix) {
+        for card in cards(app) {
             let stars = card.descendants(matching: .any)[ratingRow]
             if !stars.exists {
-                problems.append("\(screen): the card “\(name(of: card))” should ask “How was it?” but has no stars")
+                problems.append("\(screen): the card “\(name(of: card))” has no stars")
             }
         }
         return problems
@@ -93,9 +96,10 @@ enum MenuQAChecks {
         return ["\(screen): \(Int(gap)) points of blank space under the meal cards (allowed \(Int(limit)))"]
     }
 
-    /// (6) The meal cards in a row are one height, and "Didn't make it?" (or "I Made It") is on
-    /// every card or none, at the card's left edge and the same height on each (build 123
-    /// review, Hark's item 2: it sat under the first card only, with an empty band beside it).
+    /// (6) The meal cards in a row are one height, their stars level, and "Didn't make it?" (or
+    /// "I Made It"), where a past meal shows it, at the card's left edge and level with any other
+    /// (build 123 review, Hark's item 2: it sat at the right of the first card only, with an empty
+    /// band beside it).
     ///
     /// Measured on one snapshot of the screen, like the blank-band check.
     @MainActor
@@ -113,16 +117,20 @@ enum MenuQAChecks {
         return lineUpProblems(
             cards.map { card in
                 LinedUpCard(
-                    name: cardName(card.label.isEmpty ? card.identifier : card.label), frame: card.frame,
-                    outcome: outcomeControl(in: card)?.frame)
+                    name: cardName(card.label.isEmpty ? card.identifier : card.label),
+                    frame: firstDescendant(of: card, identifier: cardFrameMarker)?.frame ?? card.frame,
+                    outcome: outcomeControl(in: card)?.frame,
+                    stars: firstDescendant(of: card, identifier: ratingRow)?.frame)
             }, screen: screen)
     }
 
-    /// A meal card as the line-up check sees it: its frame, and its "Didn't make it?" control's.
+    /// A meal card as the line-up check sees it: its frame, its "Didn't make it?" control's, and
+    /// its stars'.
     struct LinedUpCard {
         var name: String
         var frame: CGRect
         var outcome: CGRect?
+        var stars: CGRect?
     }
 
     /// How far cards may differ, in points: rounding, not a missing row.
@@ -137,11 +145,9 @@ enum MenuQAChecks {
                 "\(screen): “\(card.name)” is \(Int(card.frame.height)) points tall, “\(first.name)” \(Int(first.frame.height))"
             )
         }
+        problems += levelProblems(cards, row: \.stars, what: "The stars", screen: screen)
         let offering = cards.filter { $0.outcome != nil }
         guard let reference = offering.first, let referenceRow = reference.outcome else { return problems }
-        for card in cards where card.outcome == nil {
-            problems.append("\(screen): “\(card.name)” has no “Didn’t make it?” but “\(reference.name)” does")
-        }
         let referenceTop = referenceRow.minY - reference.frame.minY
         for card in offering {
             guard let row = card.outcome else { continue }
@@ -155,6 +161,25 @@ enum MenuQAChecks {
             }
         }
         return problems
+    }
+
+    /// Cards whose `row` sits at a different height in the card from the first card's.
+    static func levelProblems(
+        _ cards: [LinedUpCard], row: KeyPath<LinedUpCard, CGRect?>, what: String, screen: String
+    ) -> [String] {
+        let placed = cards.compactMap { card in card[keyPath: row].map { (card, $0.minY - card.frame.minY) } }
+        guard let (reference, top) = placed.first else { return [] }
+        return placed.dropFirst().filter { abs($0.1 - top) > lineUpTolerance }.map {
+            "\(screen): \(what) on “\($0.0.name)” aren’t level with “\(reference.name)”"
+        }
+    }
+
+    static func firstDescendant(of element: any XCUIElementSnapshot, identifier: String) -> (any XCUIElementSnapshot)? {
+        for child in element.children {
+            if child.identifier == identifier { return child }
+            if let found = firstDescendant(of: child, identifier: identifier) { return found }
+        }
+        return nil
     }
 
     /// The card's "Didn't make it?" menu ("Didn’t make Tacos") or its "I Made It" button.

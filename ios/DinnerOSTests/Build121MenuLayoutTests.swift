@@ -149,7 +149,7 @@ struct Build121MenuLayoutTests {
                 selected: selected, available: [selected], stripWidth: 1210, pillWidth: 240) == selected)
     }
 
-    // MARK: - Your Meals: stars only once it's cooked (#12)
+    // MARK: - Your Meals: "How was it?" only once it's cooked (#12)
 
     @Test func onlyACookedMealAsksHowItWas() {
         #expect(MealRating.shows(outcome: .cooked, nightHasPassed: false))
@@ -166,13 +166,11 @@ struct Build121MenuLayoutTests {
         #expect(!AllMealsLayout.showsTitle(nil, isSearching: false))
     }
 
-    /// An uncooked meal keeps the rating row's space beside a card that asks, so the week's cards
-    /// are one height (QA build 121). Build 123 keeps it only then (`Build123MenuCardsTests`).
-    @Test func anUncookedMealHoldsTheRatingRowsSpace() {
-        #expect(MealRating.row(outcome: .cooked, nightHasPassed: false, weekAsks: true) == .shown)
-        #expect(MealRating.row(outcome: nil, nightHasPassed: true, weekAsks: true) == .shown)
-        #expect(MealRating.row(outcome: nil, nightHasPassed: false, weekAsks: true) == .heldSpace)
-        #expect(MealRating.row(outcome: .skipped(nil), nightHasPassed: true, weekAsks: true) == .heldSpace)
+    /// Build 121 showed the stars only once a meal was cooked; since Nov 23 (Merrill) every meal
+    /// shows them, cooked or not (`Build124MenuCardsTests`). Only "How was it?" waits.
+    @Test func everyMealWithItsCardShowsTheStars() {
+        #expect(MealRating.row(canRate: true, weekAsks: true) == .shown)
+        #expect(MealRating.row(canRate: true, weekAsks: false) == .shown)
     }
 
     @Test func theEmptyWeekHintIsASentence() {
