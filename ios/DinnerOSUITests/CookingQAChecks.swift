@@ -223,8 +223,15 @@ enum CookingQAChecks {
             // end so the list doesn't coast on: the space less the tallest row on screen and the
             // most the list moves by itself as it settles. A long iPad list takes few drags, and the
             // Duo's short screen skips no row (build 121 round 2).
+            // On a phone, the third of a screen at a time that every phone config has passed with;
+            // only an iPad, where the 10 minutes ran out, takes the longer drags (build 121 round 2).
             let tallest = rows.map(\.frame.height).filter { $0 < bottom - top }.max() ?? 56
-            drag(app, column: column, by: step(top: top, bottom: bottom, tallest: tallest, screen: screenFrame))
+            let pad = UIDevice.current.userInterfaceIdiom == .pad
+            drag(
+                app, column: column,
+                by: pad
+                    ? step(top: top, bottom: bottom, tallest: tallest, screen: screenFrame)
+                    : screenFrame.height * 0.33)
             sleep(1)
         }
         for label in everyRow.subtracting(seen).subtracting(blank).subtracting(tooTall).sorted() {
