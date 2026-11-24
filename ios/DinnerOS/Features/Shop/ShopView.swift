@@ -728,9 +728,11 @@ private struct ShopWeekList: View {
 
 /// How a Shop row shares its width between its text and its buttons.
 nonisolated enum ShopRowLayout {
-    /// The narrowest column a row's text wraps in beside Choose Product. Below it the buttons go
-    /// under the text instead: on an iPhone a long note would wrap a word or two per line.
+    /// The narrowest column a row's text wraps in beside Choose Product. Below it the note goes
+    /// under the name instead: on an iPhone a long note would wrap a word or two per line.
     static let minWrappingTextWidth: CGFloat = 260
+    /// The narrowest column a phone row's name wraps in beside Choose Product: a word or two a line.
+    static let minNameWidth: CGFloat = 80
 }
 
 /// A line without a saved product: its name, amount and notes, then Choose Product and the
@@ -770,6 +772,26 @@ struct NeedsProductRow: View {
                             maxWidth: .infinity, alignment: .leading)
                     buttons(pushesRemove: false)
                 }
+                // On a phone the note goes on lines of its own under the name, so the buttons
+                // stay on the row beside the name like every other row (Hark's review, build
+                // 121) and the note keeps the row's full width.
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                    HStack(alignment: .top, spacing: DS.Space.m) {
+                        // A long name ("Chicken Breast Strips") wraps beside the buttons too.
+                        head
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(
+                                minWidth: ShopRowLayout.minNameWidth, idealWidth: ShopRowLayout.minNameWidth,
+                                maxWidth: .infinity, alignment: .leading)
+                        buttons(pushesRemove: false)
+                    }
+                    // No width of its own: it wraps in whatever the row has, so this layout is
+                    // picked whenever the name and buttons fit on one line.
+                    notes
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityElement(children: .contain)
                 stacked
             }
         }
@@ -787,12 +809,27 @@ struct NeedsProductRow: View {
 
     private var details: some View {
         VStack(alignment: .leading, spacing: DS.Space.hairline) {
+            head
+            notes
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The name and amount.
+    private var head: some View {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             Text(line.name)
             if !line.quantityText.isEmpty {
                 Text(line.quantityText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// What else it's called and which meals it's for.
+    private var notes: some View {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
                 Text(alsoCalled)
                     .font(.footnote)

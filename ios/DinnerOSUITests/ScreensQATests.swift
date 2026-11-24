@@ -329,6 +329,7 @@ final class ScreensQATests: XCTestCase {
         // Shop: choosing products in Walmart, given time to load.
         app.buttons["Shop"].firstMatch.tap()
         sleep(1)
+        problems += ShopQAChecks.checkChooseProductBesideName(app, screen: "Shop")
         let choose = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH 'Choose' AND label CONTAINS 'Walmart'")).firstMatch
         // The Shop can still be loading its list; a missing button fails the run instead of
