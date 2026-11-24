@@ -263,7 +263,7 @@ final class ScreensQATests: XCTestCase {
                 let pad = UIDevice.current.userInterfaceIdiom == .pad
                 problems += CookingQAChecks.checkEveryIngredient(
                     app, expected: [], screen: "Cooking › \(kind)", column: pad ? 0.2 : 0.5
-                ) { capture(app) }
+                ) { capture(app, settle: false) }
                 keepIfScrolled(capture(app), "Cooking › \(kind) › end of ingredients (\(mode))", before: top)
             } else {
                 snap(app, "Cooking › \(kind): not the cooking screen (\(mode))", unique: false)

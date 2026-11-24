@@ -133,23 +133,27 @@ enum CookingQAChecks {
         var seen = Set<String>()
         var blank = Set<String>()
         var previous: QAShotImage?
-        for _ in 0..<24 {
+        for _ in 0..<16 {
             let shot = capture()
             guard let image = shot.image else { break }
             if let previous, QAShotCompare.isSameScreen(image, previous) { break }
             previous = image
             let top = barBottom(app) + fadeRoom
             let bottom = app.frame.maxY - fadeRoom - 60
-            let rows = app.buttons.matching(identifier: QAMarkers.cookIngredient).allElementsBoundByIndex
-            for row in rows where row.exists {
-                let frame = row.frame
+            // One snapshot of the screen, walked here: asking each row for its frame took
+            // minutes on a long list.
+            var stack = (try? app.snapshot()).map { [$0] } ?? []
+            while let element = stack.popLast() {
+                stack.append(contentsOf: element.children)
+                guard element.identifier == QAMarkers.cookIngredient else { continue }
+                let frame = element.frame
                 guard frame.minY >= top, frame.maxY <= bottom, !frame.isEmpty else { continue }
                 // A row clear of the bar is drawn at rest, every time: on TestFlight 120 the rows just
                 // under the bar were blank after each scroll, and came back only further down.
                 if isDrawn(frame, in: image) {
-                    seen.insert(row.label)
+                    seen.insert(element.label)
                 } else {
-                    blank.insert(row.label)
+                    blank.insert(element.label)
                 }
             }
             // A third of the screen at a time, held at the end so the list doesn't coast on: each

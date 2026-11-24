@@ -144,6 +144,9 @@ final class StartCookingQATests: XCTestCase {
             app, expected: recipe.ingredients.map(\.name), screen: screen, column: pad ? 0.2 : 0.5
         ) { capture(app) }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+        // Signed out, so the next test signs in to the shared test household, not this one.
+        if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
+        signOut(app)
         app.terminate()
     }
 
