@@ -79,7 +79,7 @@ struct SuggestedMealsRow: View {
                         card(slot)
                             .frame(maxHeight: .infinity)
                             .containerRelativeFrame(.horizontal) { width, _ in
-                                Self.cardWidth(in: width, count: slots.count)
+                                Self.cardWidth(in: width)
                             }
                     }
                 }
@@ -95,23 +95,13 @@ struct SuggestedMealsRow: View {
         }
     }
 
-    /// A card's width in a row `width` wide. A phone shows one card and a peek of the next. A
-    /// wider screen shows a short week's cards across the whole row, margin to margin: on an
-    /// iPad in portrait the third ran off the edge (build 122 review 4), and then two cards took
-    /// two-thirds of the row with their reasons cut short (build 123 review, Hark's item 6). Too
-    /// many to fit at a readable size, and they scroll at the usual width instead.
-    static func cardWidth(in width: CGFloat, count: Int) -> CGFloat {
-        guard width >= 600 else { return width * 0.62 }
-        let usual = min(width * 0.5, max(280, (width - 48) / 4))
-        guard count > 0 else { return usual }
-        let cards = CGFloat(count)
-        let fitting = (width - 2 * DS.Space.l - (cards - 1) * DS.Space.m) / cards
-        guard fitting >= DS.Size.carouselCardMinWidth else { return usual }
-        return min(fitting, maxCardWidth)
+    /// A card's width in a row `width` wide: a phone shows one card and a peek of the next; a
+    /// wider screen gives a suggestion the planned meals' card width above it, however few there
+    /// are (build 121 review round 2, Hark's item 12: one suggestion alone was a 575-point banner
+    /// with a tall photo under 360-point meal cards).
+    static func cardWidth(in width: CGFloat) -> CGFloat {
+        MealCarouselLayout.cardWidth(in: width, phoneShare: 0.62)
     }
-
-    /// The widest a suggestion gets: one alone on an iPad stays card-sized.
-    static let maxCardWidth: CGFloat = 600
 
     /// The photo's shape on a card `width` wide: 4:3, widening on a broad card so the photo is
     /// never much taller than on a planned meal's card above it.
