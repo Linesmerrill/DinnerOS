@@ -19,7 +19,14 @@ struct DiscoverView: View {
     @FocusState private var searchFocused: Bool
 
     private var canAdd: Bool { households.access?.can(.recipesEdit) == true }
-    private var margin: CGFloat { DiscoverLayout.margin(isWide: sizeClass == .regular) }
+    /// The page's width, for centering short rows (`DiscoverLayout.columnInset`).
+    @State private var pageWidth: CGFloat = 0
+
+    private var margin: CGFloat {
+        DiscoverLayout.columnInset(
+            rowWidth: pageWidth, isWide: sizeClass == .regular,
+            longestRow: discover.home?.sections.map(\.items.count).max() ?? 0)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -34,6 +41,11 @@ struct DiscoverView: View {
                         .id(Self.browseAnchor)
                 }
                 .padding(.vertical, DS.Space.l)
+            }
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                pageWidth = $0
             }
             // The fade into the solid band under the tab bar, as on the tab roots.
             .tabBarEdge()
@@ -276,15 +288,37 @@ enum DiscoverLayout {
     /// screen, whose content stops short of the screen's edge). Never narrower than
     /// `gridMinimum`. `rowWidth` of zero (not measured yet) gives the plain width.
     static func fittedCardWidth(rowWidth: CGFloat, isWide: Bool) -> CGFloat {
+        let available = rowWidth - margin(isWide: isWide) * 2
+        guard available > 0 else { return cardWidth(isWide: isWide) }
+        let count = CGFloat(fittedCount(rowWidth: rowWidth, isWide: isWide))
+        return ((available - rowSpacing * (count - 1)) / count).rounded(.down)
+    }
+
+    /// How many whole cards fill a row `rowWidth` wide at `fittedCardWidth`.
+    static func fittedCount(rowWidth: CGFloat, isWide: Bool) -> Int {
         let base = cardWidth(isWide: isWide)
         let available = rowWidth - margin(isWide: isWide) * 2
-        guard available > 0 else { return base }
+        guard available > 0 else { return 1 }
         var count = max(1, ((available + rowSpacing) / (base + rowSpacing)).rounded())
         func width(_ count: CGFloat) -> CGFloat {
             ((available - rowSpacing * (count - 1)) / count).rounded(.down)
         }
         while count > 1, width(count) < gridMinimum { count -= 1 }
-        return width(count)
+        return Int(count)
+    }
+
+    /// The page's left and right inset: the margin, plus whatever centers the rows when even the
+    /// longest has fewer recipes than fill a row. Three recipes a row on an iPad in landscape
+    /// stopped at 56% of the screen under a centered title (build 121 review round 2, Hark's item
+    /// 11); the rows, their titles, and Browse All now sit in one centered column.
+    static func columnInset(rowWidth: CGFloat, isWide: Bool, longestRow: Int) -> CGFloat {
+        let edge = margin(isWide: isWide)
+        let fits = fittedCount(rowWidth: rowWidth, isWide: isWide)
+        guard rowWidth > 0, longestRow > 0, longestRow < fits else { return edge }
+        let card = fittedCardWidth(rowWidth: rowWidth, isWide: isWide)
+        let count = CGFloat(longestRow)
+        let cards = count * card + (count - 1) * rowSpacing
+        return (edge + (rowWidth - 2 * edge - cards) / 2).rounded(.down)
     }
 
     /// How wide a row's title line is, so See All sits over the row's last card: the cards' own
