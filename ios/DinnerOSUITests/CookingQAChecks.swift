@@ -219,14 +219,12 @@ enum CookingQAChecks {
             // that looked the same after one drag once left Lemon Wedges cut off at the bottom
             // (Hark's review, build 121 round 2, item 5).
             if stopped && lastWhole { break }
-            // The next row not yet checked comes up to just under the top of the checked space, held
-            // at the end so the list doesn't coast on: no row is skipped, on the Duo's short screen
-            // too, and a long iPad list takes few drags (build 121 round 2).
-            let next = rows.filter { $0.frame.minY > top && !seen.contains($0.label) && !blank.contains($0.label) }
-                .min { $0.frame.minY < $1.frame.minY }
-            let distance = next.map { $0.frame.minY - (top + 12) } ?? step(bar: bar, screen: screenFrame)
-            // Never so short it's taken as a tap, nor longer than the checked space.
-            drag(app, column: column, by: min(max(distance, 60), bottom - top))
+            // As far as every row still rests whole in the checked space on some screen, held at the
+            // end so the list doesn't coast on: the space less the tallest row on screen and the
+            // most the list moves by itself as it settles. A long iPad list takes few drags, and the
+            // Duo's short screen skips no row (build 121 round 2).
+            let tallest = rows.map(\.frame.height).filter { $0 < bottom - top }.max() ?? 56
+            drag(app, column: column, by: step(top: top, bottom: bottom, tallest: tallest, screen: screenFrame))
             sleep(1)
         }
         for label in everyRow.subtracting(seen).subtracting(blank).subtracting(tooTall).sorted() {
@@ -267,7 +265,7 @@ enum CookingQAChecks {
                 sleep(1)
                 middle(capture())
                 for _ in 0..<2 {
-                    drag(app, column: column, by: max(distance, screenFrame.height * 0.3))
+                    drag(app, column: column, by: screenFrame.height * 0.5)
                     sleep(1)
                 }
             }
@@ -278,11 +276,15 @@ enum CookingQAChecks {
     /// How fast the list is dragged: quicker than `.slow`, and held at the end so it doesn't coast.
     static let dragSpeed = XCUIGestureVelocity(1000)
 
-    /// How far one drag moves the list: the space where a row is checked (under the bar's fade,
-    /// above the bottom's) less a tall row, so each row rests whole in it on some screen.
-    static func step(bar: CGFloat, screen: CGRect) -> CGFloat {
-        let window = screen.maxY - fadeRoom - 60 - (bar + fadeRoom)
-        return min(max(window - 2 * 56, screen.height * 0.25), screen.height * 0.55)
+    /// The most a list moves by itself as it settles after a drag (`DSRowEdgeFade.restingShift`):
+    /// back to show a heading whole, a fade and a heading's height.
+    static let settleShift: CGFloat = 32 + 56
+
+    /// How far one drag moves the list: the space where a row is checked (`top` to `bottom`) less
+    /// the tallest row and the most the list moves as it settles, so every row rests whole in that
+    /// space on some screen. Never shorter than a drag that's taken as a tap.
+    static func step(top: CGFloat, bottom: CGFloat, tallest: CGFloat, screen: CGRect) -> CGFloat {
+        min(max(bottom - top - tallest - settleShift, 60), screen.height * 0.55)
     }
 
     /// Drags the list up by `distance` points from low on the screen, held at the end.
