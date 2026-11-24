@@ -113,16 +113,20 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts["Signed in with, Email"].waitForExistence(timeout: 5),
             "Account doesn’t say they signed in with email")
-        snap(app, "Face ID › Back from the background (\(mode))")
+        let opened = capture(app)
+        keep(opened, "Face ID › Back from the background (\(mode))")
         // The end of Account: the last rows rest whole above the tab bar, not washed out by its
-        // fade (Hark's review, build 121 round 2: Sign Out and Delete Account on an SE and the Duo).
+        // fade, and are seen whole in a shot of their own (Hark's review, build 121 round 2: Sign
+        // Out and Delete Account under the fade as Account opens on an SE and the Duo).
         var fades = FadeQAChecks.checkRest(app, screen: "Account, as it opens", edges: .bottom)
         print("QA-INFO: \(fades)")
         FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
         fades = FadeQAChecks.checkRest(app, screen: "Account, scrolled to the end", edges: .bottom)
+        let end = capture(app)
         fades += FadeQAChecks.checkClear(
             app.buttons["Delete Account"].firstMatch, what: "Delete Account", in: app, screen: "Account, at the end",
-            image: capture(app).image)
+            image: end.image)
+        keepEndIfNew(end, "Face ID › Back from the background › end (\(mode))", before: opened)
         XCTAssertTrue(fades.isEmpty, fades.joined(separator: "\n"))
 
         // A new launch still unlocks with Face ID.

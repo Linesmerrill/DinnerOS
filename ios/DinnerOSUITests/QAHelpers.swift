@@ -490,6 +490,29 @@ extension XCTestCase {
         return true
     }
 
+    /// Keeps a screenshot of a screen scrolled to its end (`name`, a "› end" shot), unless it
+    /// shows nothing new: the same as `before` (the screen fits, so it didn't scroll) or a shot
+    /// this run already kept (a short tab whose end is its pinned shot). Then it's left out with a
+    /// QA-SKIP line, as the publisher expects (its COVERAGE_EXCEPTIONS). Returns whether it was
+    /// kept. Hark's review, build 121 round 2: the rows under the bottom fade as a screen opens
+    /// are seen whole in some shot.
+    @MainActor
+    @discardableResult
+    func keepEndIfNew(_ shot: QAShot, _ name: String, before: QAShot) -> Bool {
+        if shot.isSameScreen(as: before) {
+            print("QA-SKIP: “\(name)” left out: the page didn’t scroll (it fits on the screen)")
+            return false
+        }
+        if let image = shot.image,
+            let same = QAShots.kept.first(where: { QAShotCompare.isSameScreen(image, $0.image) })
+        {
+            print("QA-SKIP: “\(name)” left out: it’s the same screen as “\(same.name)”")
+            return false
+        }
+        keep(shot, name)
+        return true
+    }
+
     /// The screenshot as PNG data with its rotation applied to the pixels and no EXIF tag.
     static func uprightPNG(_ image: UIImage) -> Data {
         let format = UIGraphicsImageRendererFormat()

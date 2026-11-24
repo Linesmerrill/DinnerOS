@@ -49,3 +49,23 @@ class WrongBuildTest(unittest.TestCase):
         other, none = self.folder("120"), self.folder(None)
         wrong = qa.wrong_build("121", [self.folder("121"), other, none])
         self.assertEqual(wrong, [f"{other}: built as 120", f"{none}: built as none"])
+
+
+class CoverageTest(unittest.TestCase):
+    """Each exception names a real config and a required screen: a typo would quietly let a
+    config publish without that screen (Hark's build 121 round 2: Account's end shot, left out
+    only where Account fits on the screen)."""
+
+    def test_exceptions_name_real_configs_and_required_screens(self):
+        configs = {f"{d}-{m}" for d in qa.DEVICES for m in ("light", "dark")}
+        for (config, screen), reason in qa.COVERAGE_EXCEPTIONS.items():
+            self.assertIn(config, configs)
+            self.assertIn(screen, qa.REQUIRED)
+            self.assertTrue(reason)
+
+    def test_the_small_phones_and_the_duo_keep_every_end_shot(self):
+        for config in ("small-light", "small-dark", "duo-light", "duo-dark"):
+            for screen in ("Face ID › Back from the background › end", "Shop › Freeze card › order",
+                           "Shop › Freeze card › this week’s cost"):
+                self.assertIn(screen, qa.REQUIRED)
+                self.assertNotIn((config, screen), qa.COVERAGE_EXCEPTIONS)
