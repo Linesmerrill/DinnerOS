@@ -7,7 +7,7 @@ import Testing
 /// on the cards beside it. And Merrill, Nov 23: the stars show on every meal card again, coming
 /// meals included, so the week shows how each was liked last time. "Didn't make it?" stays on
 /// past meals, as the cards' last line, on the left; every card in a row is one height.
-struct Build124MenuCardsTests {
+struct MenuCardLineUpTests {
     private typealias Meal = MealCardRows.Meal
 
     /// Sunday's pasta is made; Monday's garlic bread and Tuesday's tacos are still ahead. All
