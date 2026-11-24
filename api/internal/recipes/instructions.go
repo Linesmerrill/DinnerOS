@@ -110,22 +110,16 @@ func kitchenRound(m Measure) Measure {
 	return m
 }
 
-// spoonsMixed writes 6 tsp or more that didn't tidy to whole or half
-// tablespoons as tablespoons plus teaspoons: "3 Tbsp + 1 tsp", not "10 tsp".
-// It is "" for anything else.
+// spoonsMixed writes 3 tsp or more that didn't tidy to whole or half
+// tablespoons as a kitchen measures them: "3 Tbsp + 1 tsp", not "10 tsp";
+// "1 Tbsp + 1 tsp", not "4 tsp"; "⅓ cup", not "5 Tbsp + 1 tsp" (Hark's build
+// 121 review). It is "" for anything else.
 func spoonsMixed(m Measure) string {
-	if m.Unit != "tsp" || m.Quantity.Cmp(ingredients.NewQuantity(6, 1)) < 0 {
+	if m.Unit != "tsp" || m.Quantity.Cmp(ingredients.NewQuantity(3, 1)) < 0 {
 		return ""
 	}
-	r := m.Quantity.Rat()
-	tbsp := new(big.Int).Quo(r.Num(), new(big.Int).Mul(r.Denom(), big.NewInt(3)))
-	rest := new(big.Rat).Sub(r, new(big.Rat).SetInt(new(big.Int).Mul(tbsp, big.NewInt(3))))
-	whole := Measure{Quantity: ingredients.NewQuantity(tbsp.Int64(), 1), Unit: "tbsp", Exact: true}
-	if rest.Sign() == 0 {
-		return whole.Text()
-	}
-	part := Measure{Quantity: ingredients.NewQuantity(1, 1).MulRat(rest), Unit: "tsp", Exact: true}
-	return whole.Text() + " + " + part.Text()
+	text, _ := ingredients.KitchenSpoons(m.Quantity, m.Unit)
+	return text
 }
 
 // tidySpoons moves 3 tsp or more up to tablespoons, and 8 Tbsp or more up to

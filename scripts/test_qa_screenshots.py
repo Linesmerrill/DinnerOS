@@ -30,9 +30,6 @@ class FailedTestsTest(unittest.TestCase):
         self.assertEqual(qa.failed_tests([run]), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class WrongBuildTest(unittest.TestCase):
     def folder(self, number):
@@ -49,3 +46,26 @@ class WrongBuildTest(unittest.TestCase):
         other, none = self.folder("120"), self.folder(None)
         wrong = qa.wrong_build("121", [self.folder("121"), other, none])
         self.assertEqual(wrong, [f"{other}: built as 120", f"{none}: built as none"])
+
+
+class CoverageTest(unittest.TestCase):
+    def test_a_phone_needs_the_butter_and_flour_rows(self):
+        for config in ("small-light", "duo-dark"):
+            self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED)),
+                             ["Pantry › scrolled to Butter", "Shop › scrolled to Flour"])
+            everything = set(qa.REQUIRED) | {"Pantry › scrolled to Butter", "Shop › scrolled to Flour"}
+            self.assertEqual(qa.missing_screens(config, everything), [])
+
+    def test_an_ipad_shows_them_in_the_tab_shot(self):
+        for config in ("ipadL-light", "ipadP-dark"):
+            self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED)), [])
+
+    def test_the_sweep_names_match(self):
+        sweep = open(os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests",
+                                  "AppSweepQATests.swift")).read()
+        self.assertIn('"Pantry": "Butter", "Shop": "All-Purpose Flour"', sweep)
+        self.assertIn("› scrolled to", sweep)
+
+
+if __name__ == "__main__":
+    unittest.main()

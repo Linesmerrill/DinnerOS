@@ -156,4 +156,24 @@ final class QAScreenTextTests: XCTestCase {
         let overflowing = [CGRect(x: 20, y: 200, width: 1500, height: 300)]
         XCTAssertEqual(MenuQAChecks.centeredProblems(spans: overflowing, screen: screen, name: "Shared"), [])
     }
+
+    /// Hark's build 121 review, item 8: Account showed "hannah.kim395@example.test". An email
+    /// reads like a person's (no digits, no .test) and stays on a domain kept for examples.
+    func testEmailsLookLikePeoplesOnExampleDomains() {
+        let pattern = #"^hannah(\.[a-z]\.kim|[a-z]kim)@example\.(com|net|org)$|^h[a-z]kim@example\.(com|net|org)$"#
+        var seen = Set<String>()
+        for _ in 0..<200 {
+            let email = QAPeople.email(for: "Hannah Kim")
+            XCTAssertNotNil(email.range(of: pattern, options: .regularExpression), email)
+            XCTAssertFalse(email.contains { $0.isNumber }, email)
+            seen.insert(email)
+        }
+        XCTAssertGreaterThan(seen.count, 60, "Emails repeat too often for simulators running together")
+        for name in QAPeople.names {
+            let email = QAPeople.email(for: name)
+            let domain = email.split(separator: "@").last.map(String.init) ?? ""
+            XCTAssertTrue(QAPeople.emailDomains.contains(domain), email)
+            XCTAssertFalse(QAScreenText.showsTestWording(email), email)
+        }
+    }
 }

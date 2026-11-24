@@ -563,13 +563,10 @@ private struct EmailPerson {
     let email: String
     let password: String
 
-    /// A realistic person ("jordan.avery27@example.test") with a fresh password for this run.
+    /// A realistic person ("jordan.m.avery@example.com", no run number) with a fresh password.
     static func register() async throws -> EmailPerson {
         let name = QAPeople.names.randomElement()!
-        let local = name.lowercased().replacingOccurrences(of: " ", with: ".")
-        let person = EmailPerson(
-            name: name, email: "\(local)\(Int.random(in: 10...999))@example.test",
-            password: UUID().uuidString)
+        let person = EmailPerson(name: name, email: QAPeople.email(for: name), password: UUID().uuidString)
         var request = URLRequest(url: QAOwnHousehold.apiBase.appending(path: "auth/dev/email-account"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

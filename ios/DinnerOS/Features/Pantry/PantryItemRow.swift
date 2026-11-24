@@ -18,7 +18,7 @@ struct PantryItemRow: View {
                         FrozenBadge()
                     }
                 }
-                let amount = PantryFormat.amount(item)
+                let amount = PantryUsageFormat.rowAmount(item)
                 if let amount {
                     Text(amount)
                         .font(.subheadline)
