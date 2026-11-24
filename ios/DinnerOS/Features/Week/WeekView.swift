@@ -116,6 +116,9 @@ struct WeekView: View {
                 }
             }
         }
+        // Room under the week strip: on the Duo's cover screen the first card touched its divider
+        // (build 121 review round 2, Hark's item 9).
+        .contentMargins(.top, DS.Space.m, for: .scrollContent)
         // A centered column on an iPad, like Pantry and Shop, not rows the width of the screen.
         .dsReadableForm()
         .refreshable {

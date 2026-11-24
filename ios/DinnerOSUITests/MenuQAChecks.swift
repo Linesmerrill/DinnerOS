@@ -375,6 +375,8 @@ enum MenuQAChecks {
         }
         let atRest = headers()
         var problems = byDayTopProblems(atRest, stripBottom: stripBottom, screen: screen)
+        let firstCard = app.cells.allElementsBoundByIndex.map(\.frame).filter { !$0.isEmpty }.map(\.minY).min()
+        problems += byDayGapProblems(firstCardTop: firstCard, stripBottom: stripBottom, screen: screen)
         var seen: [String] = atRest.map(\.id).filter { $0.hasPrefix("byDay.day.") }
         for _ in 0..<6 where seen.count < 7 {
             app.swipeUp()
@@ -404,6 +406,12 @@ enum MenuQAChecks {
         }
         if days.isEmpty { problems.append("\(screen): no day showing at rest") }
         return problems
+    }
+
+    /// The first card keeps some room under the strip (on the Duo it touched the divider).
+    static func byDayGapProblems(firstCardTop: CGFloat?, stripBottom: CGFloat, screen: String) -> [String] {
+        guard let top = firstCardTop, top < stripBottom + 8 else { return [] }
+        return ["\(screen): the first card is \(Int(top - stripBottom)) points under the week strip, touching it"]
     }
 
     /// Seven days, each once, in a week's order (any first day).

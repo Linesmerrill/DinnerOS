@@ -126,6 +126,8 @@ final class QAScreenTextTests: XCTestCase {
         XCTAssertEqual(MenuQAChecks.byDayTopProblems(atTop, stripBottom: 150, screen: "By Day"), [])
         let scrolled = [header("byDay.unscheduled", 120), header("byDay.day.mon", 260)]
         XCTAssertEqual(MenuQAChecks.byDayTopProblems(scrolled, stripBottom: 150, screen: "By Day").count, 1)
+        XCTAssertEqual(MenuQAChecks.byDayGapProblems(firstCardTop: 240, stripBottom: 240, screen: "By Day").count, 1)
+        XCTAssertEqual(MenuQAChecks.byDayGapProblems(firstCardTop: 280, stripBottom: 240, screen: "By Day"), [])
         let week = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map { "byDay.day." + $0 }
         XCTAssertEqual(MenuQAChecks.byDayWeekProblems(week, screen: "By Day"), [])
         XCTAssertEqual(MenuQAChecks.byDayWeekProblems(Array(week.dropFirst()), screen: "By Day").count, 1)
