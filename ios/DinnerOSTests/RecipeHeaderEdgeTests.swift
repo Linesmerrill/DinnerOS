@@ -232,7 +232,8 @@ struct RecipeHeaderEdgeTests {
             let shift = try #require(
                 DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, maxForward: 0, headings: [edge - height + 1]))
             #expect(shift == -(height - 1 + DS.Size.edgeFade))
-            #expect(-shift <= DS.Size.listEndRoom, "a \(height) pt row moves back \(-shift) pt")
+            // With a gap left under the last row.
+            #expect(-shift + DS.Space.l <= DS.Size.listEndRoom, "a \(height) pt row moves back \(-shift) pt")
         }
     }
 

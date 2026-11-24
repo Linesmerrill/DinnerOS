@@ -178,10 +178,10 @@ nonisolated enum DS {
         /// text can scroll clear of the fade above the keyboard (build 122 round 4).
         static let formEndRoom: CGFloat = edgeFade + DS.Space.s
         /// Room under the end of a list whose rows fade out whole at the bar above it (the cooking
-        /// screen): when it stops at its end and moves back to show its top row whole, a fade
-        /// and a row's height at most, its last row still rests whole on screen (Hark's review,
-        /// build 121 round 2: Lemon Wedges cut off at the bottom of an SE).
-        static let listEndRoom: CGFloat = edgeFade + rowEdgeFade
+        /// screen): when it stops at its end and moves back to show its top row or heading whole,
+        /// a fade and a row's height at most, its last row still rests whole on screen with a gap
+        /// under it (Hark's review, build 121 round 2: Lemon Wedges cut off at the bottom of an SE).
+        static let listEndRoom: CGFloat = edgeFade + rowEdgeFade + DS.Space.l
         /// The narrowest a card in a sideways row gets so a short row fits the screen whole on
         /// an iPad instead of running a card off the edge (build 122 review 4).
         static let carouselCardMinWidth: CGFloat = 240
