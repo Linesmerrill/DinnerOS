@@ -56,6 +56,10 @@ ALLOWED_PAIRS = {
     # On an iPad, the cooking screen at rest from Start Cooking on a scrolled recipe page and from
     # the recipe page at its top: both panes at their tops (Hark's review, build 121 round 2, item 1).
     "iPad cooking screen at its top, from either way in": frozenset({"start-cooking-steps", "cooking-imported"}),
+    # On an iPad Butter and the flour already show on the tab, so the "scrolled to" shot barely
+    # moves the list, or not at all (Hark's build 121 review, item 18). A phone's pair differs.
+    "Pantry with Butter in view": frozenset({"pantry", "pantry-scrolled-to-butter"}),
+    "Shop with the flour in view": frozenset({"shop", "shop-scrolled-to-flour"}),
 }
 # Pixels per point by device.
 SCALES = {"large": 3, "small": 2, "duo": 3, "ipadL": 2, "ipadP": 2}

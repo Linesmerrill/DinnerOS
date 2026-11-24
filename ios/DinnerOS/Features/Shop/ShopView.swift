@@ -43,7 +43,6 @@ struct ShopView: View {
 
     var body: some View {
         content
-            .tabBarEdge(DS.Colors.groupedBackground)
             .tabHeader(String(localized: "Shop"))
             .safeAreaInset(edge: .top, spacing: 0) {
                 if isReady {
@@ -54,6 +53,7 @@ struct ShopView: View {
                         }
                     }
                     .background(.bar)
+                    .qaCover(.bar)
                 }
             }
             .dsMenuPopover(isPresented: $showsOptions, anchor: optionsAnchor, items: optionItems)
@@ -138,6 +138,7 @@ struct ShopView: View {
         case .idle, .loading:
             ProgressView("Loading your store…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .tabBarEdge(DS.Colors.groupedBackground)
         case .failed(let message):
             ContentUnavailableView {
                 Label("Couldn’t Load Shopping", systemImage: "exclamationmark.triangle")
@@ -149,13 +150,16 @@ struct ShopView: View {
                 }
                 .buttonStyle(.dsPrimary(.small))
             }
+            .tabBarEdge(DS.Colors.groupedBackground)
         case .loaded:
             if shopping.isConfigured {
+                // Its own scrim, under its Walmart bar (`ShopWeekList`).
                 ShopWeekList(
                     choose: { choice = $0 }, openStoreSetup: { isEditingStore = true },
                     openWeekCost: { weekCostSheet = $0 }, openPrep: { isShowingPrep = true })
             } else {
                 ShopSetupView()
+                    .tabBarEdge(DS.Colors.groupedBackground)
             }
         }
     }
@@ -361,6 +365,11 @@ private struct ShopWeekList: View {
             groceryModel = model
             await model.load()
         }
+        // The tab bar's scrim on the list itself, inside the Walmart bar below, so the bar draws
+        // over it: on the whole Shop screen its fade lay across the bar's note ("What you picked
+        // is in your Walmart cart"), washing out its last line on every phone (Hark's review,
+        // build 121 round 2).
+        .tabBarEdge(DS.Colors.groupedBackground)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Also while a notice is up: "nothing to add" arrives exactly when there are no
             // lines left to show, and would otherwise never be seen.
@@ -1823,6 +1832,7 @@ private struct ShopHandoffBar: View {
         .padding(DS.Space.l)
         .dsReadableWidth()
         .background(DS.Colors.groupedBackground)
+        .qaCover(.bar)
         // A row passing under the bar fades away whole instead of being cut by a hard line;
         // the list keeps the same height clear at its end (Hark's review, build 122 round 4).
         .dsEdgeFade(.top, color: DS.Colors.groupedBackground, height: DS.Size.rowEdgeFade)

@@ -127,7 +127,8 @@ enum CookingQAChecks {
     /// clear of the bar, on any of `expected` that no drawn row names, on a step's heading left
     /// faded out under the bar above its rows, and on a last row that isn't whole at the end.
     /// Leaves the list at its true end, its last row whole on screen. `middle` gets the screen
-    /// halfway down a list too long for its top and end screens to show every row between them.
+    /// halfway down the list: the screen on the way closest to it, or, when none was near (a short
+    /// list), the list brought back there before it goes on to its end again.
     @MainActor
     static func checkEveryIngredient(
         _ app: XCUIApplication, expected: [String], screen: String, column: CGFloat,
@@ -141,7 +142,8 @@ enum CookingQAChecks {
         // Where the list's last row starts out, and where it is on each screen: how far down the
         // list a screen is.
         var startLast: CGFloat?
-        var bestMiddle: (shot: QAShot, distance: CGFloat)?
+        var endLast: CGFloat?
+        var onTheWay: [(last: CGFloat, shot: QAShot)] = []
         var lastWhole = false
         // Asked once: each ask is a query of the app, and a long list has hundreds of elements.
         let screenFrame = app.frame
@@ -197,11 +199,8 @@ enum CookingQAChecks {
             if let last {
                 if startLast == nil { startLast = last.maxY }
                 lastWhole = last.maxY <= screenFrame.maxY - endRoom && isDrawn(last, in: image)
-                // Halfway from where the last row started to where it ends, at the screen's bottom.
-                if let startLast, middle != nil {
-                    let distance = abs(last.maxY - (startLast + screenFrame.maxY) / 2)
-                    if distance < (bestMiddle?.distance ?? .infinity) { bestMiddle = (shot, distance) }
-                }
+                endLast = last.maxY
+                if middle != nil { onTheWay.append((last.maxY, shot)) }
             }
             let stopped = previous.map { QAShotCompare.isSameScreen(image, $0) } ?? false
             previous = image
@@ -232,10 +231,29 @@ enum CookingQAChecks {
                 "\(screen): the list shows \(expected.count - gone.count) of the recipe’s \(expected.count) "
                     + "ingredients; missing \(gone.joined(separator: ", "))")
         }
-        // Only a list longer than its top and end screens together: otherwise the middle is in
-        // one of them.
-        if let middle, let bestMiddle, let startLast, startLast - screenFrame.maxY > screenFrame.maxY - barBottom(app) {
-            middle(bestMiddle.shot)
+        if let middle, let startLast, let endLast {
+            // Halfway from where the last row started to where it ends.
+            let target = (startLast + endLast) / 2
+            let near = max((startLast - endLast) / 4, 24)
+            if let best = onTheWay.min(by: { abs($0.last - target) < abs($1.last - target) }),
+                abs(best.last - target) <= near
+            {
+                middle(best.shot)
+            } else {
+                // Back down to halfway, slowly and held so it doesn't coast, then on to the end again.
+                let distance = min(target - endLast, screenFrame.height * 0.45)
+                let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.4))
+                let to = from.withOffset(CGVector(dx: 0, dy: distance))
+                from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
+                sleep(1)
+                middle(capture())
+                for _ in 0..<4 {
+                    let start = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.75))
+                    let end = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.3))
+                    start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+                    sleep(1)
+                }
+            }
         }
         return problems
     }

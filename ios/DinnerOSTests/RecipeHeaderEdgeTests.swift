@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import DinnerOS
@@ -72,6 +73,61 @@ struct RecipeHeaderEdgeTests {
         #expect(RecipeDetailHeader.barFade(pickerTop: 110, pinLine: 100) == 10)
         #expect(RecipeDetailHeader.barFade(pickerTop: 100, pinLine: 100) == 0)
         #expect(RecipeDetailHeader.barFade(pickerTop: -40, pinLine: 100) == 0)
+    }
+
+    // MARK: Build 121 round 2 (Hark's items 3 and 2)
+
+    /// Resting just under the bar, the large title keeps only the photo's gap above it, so the
+    /// photo ends at the bar's edge and no strip of it shows through the fade (the Duo).
+    @Test func theZoneStartsWithThePhotoWhollyUnderTheBar() throws {
+        let zone = try #require(
+            RecipeDetailHeader.snapZone(
+                titleTop: 400, pickerTop: 700, pinLine: 100, fade: RecipeDetailHeader.titleGap))
+        // The title rests the gap below the bar's edge: the photo ends right at it.
+        #expect(400 - zone.lowerBound == 100 + RecipeDetailHeader.titleGap)
+    }
+
+    @Test func theBarFadeNeverReachesTheLargeTitle() {
+        // The title resting the gap below the bar: the fade covers the gap only.
+        #expect(
+            RecipeDetailHeader.barFade(pickerTop: 500, pinLine: 100, titleTop: 100 + RecipeDetailHeader.titleGap)
+                == RecipeDetailHeader.titleGap)
+        // Far below, or long gone under the bar: the usual fade.
+        #expect(RecipeDetailHeader.barFade(pickerTop: 500, pinLine: 100, titleTop: 600) == DS.Size.edgeFade)
+        #expect(RecipeDetailHeader.barFade(pickerTop: 500, pinLine: 100, titleTop: -300) == DS.Size.edgeFade)
+        // Going under: the fade grows back with it.
+        #expect(RecipeDetailHeader.barFade(pickerTop: 500, pinLine: 100, titleTop: 80) == 20)
+    }
+
+    /// The page let go past the pin moves back to show its first row whole, but never so far
+    /// that the picker comes loose and the title's last line rests under the bar (large iPhone).
+    @Test func aRestingMoveNeverUnpinsThePicker() {
+        let zone: ClosedRange<CGFloat> = 135...459
+        #expect(RecipeDetailHeader.keepingPinned(-34, offset: 459, zone: zone) == nil)
+        #expect(RecipeDetailHeader.keepingPinned(-40, offset: 480, zone: zone) == -21)
+        #expect(RecipeDetailHeader.keepingPinned(60, offset: 459, zone: zone) == 60)
+        // Above the zone, or with none, the move is left alone.
+        #expect(RecipeDetailHeader.keepingPinned(-20, offset: 50, zone: zone) == -20)
+        #expect(RecipeDetailHeader.keepingPinned(-20, offset: 500, zone: nil) == -20)
+    }
+
+    /// A tab picked with the picker pinned and the last tab scrolled on starts at its top, right
+    /// under the picker; one picked with the picker still loose leaves the page where it is.
+    @Test func aNewTabStartsUnderThePinnedPicker() {
+        let zone: ClosedRange<CGFloat> = 91...439
+        #expect(RecipeDetailHeader.tabStart(offset: 499, zone: zone) == 439)
+        #expect(RecipeDetailHeader.tabStart(offset: 439, zone: zone) == nil)
+        #expect(RecipeDetailHeader.tabStart(offset: 200, zone: zone) == nil)
+        #expect(RecipeDetailHeader.tabStart(offset: 900, zone: nil) == nil)
+    }
+
+    /// Asking a scroll position for the point it was last sent to again still moves the page:
+    /// a page let go short of the pin twice stayed short the second time.
+    @Test func theSamePointTwiceIsStillAMove() {
+        #expect(ScrollPosition.target(459, last: nil) == 459)
+        #expect(ScrollPosition.target(459, last: 300) == 459)
+        #expect(ScrollPosition.target(459, last: 459) == 459.01)
+        #expect(ScrollPosition.target(459, last: 459.01) == 459)
     }
 
     /// The fade under a pinned bar (the recipe page's picker, the cooking screen's panes) starts

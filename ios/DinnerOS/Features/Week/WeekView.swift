@@ -70,22 +70,25 @@ struct WeekView: View {
         }
     }
 
+    /// The whole week from its first day, with the meals still waiting for a day at the top under
+    /// their own heading. Build 122 opened on today instead, which scrolled the week's first day
+    /// (and its meal) out of sight under the week strip and cut the first card flat under it
+    /// (build 121 review round 2, Hark's item 9).
     private func planList(_ plan: Plan) -> some View {
-        ScrollViewReader { proxy in
-            dayList(plan)
-                // Opens on today, with the meals still waiting for a day just above it, not on
-                // days already gone: on a Saturday the week's meals were below the fold under
-                // five empty days (build 122 review 4). On the week's first day the top of the
-                // list already is today.
-                .task(id: plans.week) {
-                    guard let today = plans.today, today != plans.weekStartsOn else { return }
-                    await Task.yield()
-                    proxy.scrollTo(plan.entries(on: nil).isEmpty ? today.rawValue : Self.unscheduledID, anchor: .top)
-                }
-        }
+        dayList(plan)
     }
 
-    private static let unscheduledID = "unscheduled"
+    /// What the list shows, top to bottom, once the week has meals.
+    enum ListPart: Hashable {
+        case unscheduled
+        case day(PlanDay)
+    }
+
+    /// Meals without a day first (when there are any), then every day of the week in order from
+    /// the household's first day, past days included.
+    static func listParts(weekStartsOn: PlanDay, hasUnscheduled: Bool) -> [ListPart] {
+        (hasUnscheduled ? [.unscheduled] : []) + PlanDay.week(startingOn: weekStartsOn).map { .day($0) }
+    }
 
     private func dayList(_ plan: Plan) -> some View {
         List {
@@ -103,15 +106,19 @@ struct WeekView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                let days = PlanDay.week(startingOn: plans.weekStartsOn)
-                // Meals without a day sit just above today (the week's first day when it isn't
-                // this week), so they open in view instead of under every day of the week.
-                let split = plans.today.flatMap { days.firstIndex(of: $0) } ?? 0
-                ForEach(days[..<split]) { day in daySection(day, in: plan) }
-                unscheduledSection(plan)
-                ForEach(days[split...]) { day in daySection(day, in: plan) }
+                let parts = Self.listParts(
+                    weekStartsOn: plans.weekStartsOn, hasUnscheduled: !plan.entries(on: nil).isEmpty)
+                ForEach(parts, id: \.self) { part in
+                    switch part {
+                    case .unscheduled: unscheduledSection(plan)
+                    case .day(let day): daySection(day, in: plan)
+                    }
+                }
             }
         }
+        // Room under the week strip: on the Duo's cover screen the first card touched its divider
+        // (build 121 review round 2, Hark's item 9).
+        .contentMargins(.top, DS.Space.m, for: .scrollContent)
         // A centered column on an iPad, like Pantry and Shop, not rows the width of the screen.
         .dsReadableForm()
         .refreshable {
@@ -137,8 +144,7 @@ struct WeekView: View {
                 title: day.title(in: plans.week, weekStartsOn: plans.weekStartsOn),
                 isToday: day == plans.today
             )
-            // On the header, so today opens with its date showing above its meals.
-            .id(day.rawValue)
+            .accessibilityIdentifier(QAMarkers.byDayHeaderPrefix + day.rawValue)
         }
     }
 
@@ -151,10 +157,10 @@ struct WeekView: View {
                     row(entry)
                 }
             } header: {
-                Text("Pick a Day")
-                    .id(Self.unscheduledID)
-            } footer: {
-                Text("Planned for this week without a day.")
+                // A heading above its meals, like the days' (Hark's item 9: as a caption under
+                // the card it read as part of the next day).
+                Text("Planned for this week without a day")
+                    .accessibilityIdentifier(QAMarkers.byDayUnscheduledHeader)
             }
         }
     }

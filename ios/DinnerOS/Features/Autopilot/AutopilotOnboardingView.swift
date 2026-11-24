@@ -156,9 +156,16 @@ struct AutopilotOnboardingView: View {
                 .foregroundStyle(DS.Colors.secondaryText)
         }
         .padding(.horizontal, DS.Space.l)
+        // Room above the progress bar: it touched the top of the Duo's cover screen, and a large
+        // iPhone's sheet cut its ends off with its rounded corners (Hark's review, build 121
+        // round 2).
+        .padding(.top, AutopilotOnboardingView.headerTop)
         .padding(.bottom, DS.Space.m)
         .accessibilityElement(children: .contain)
     }
+
+    /// The space above the step's progress bar, clear of a sheet's rounded corners.
+    static let headerTop: CGFloat = DS.Space.xl
 
     private var finished: some View {
         VStack(spacing: DS.Space.xl) {

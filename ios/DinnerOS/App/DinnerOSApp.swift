@@ -14,6 +14,8 @@ struct DinnerOSApp: App {
             RootView()
                 // Every copy in the app shows the same Copied HUD, above sheets too.
                 .copiedHUD()
+                // Where fades and pinned bars cover the content, for the UI tests (`QACovers`).
+                .qaCoversElement()
                 .environment(\.appConfiguration, dependencies.configuration)
                 .environment(\.googleSignIn, dependencies.googleSignIn)
                 .environment(dependencies.session)

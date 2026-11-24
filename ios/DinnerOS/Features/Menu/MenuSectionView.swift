@@ -53,6 +53,8 @@ struct MenuSectionView: View {
             }
         }
         .accessibilityElement(children: .contain)
+        // For the UI tests: "menu.section.new_to_you" must never hold a meal marked made.
+        .accessibilityIdentifier("menu.section." + section.id)
     }
 }
 

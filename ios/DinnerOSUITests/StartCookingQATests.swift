@@ -63,6 +63,16 @@ final class StartCookingQATests: XCTestCase {
             sleep(1)
             XCTAssertTrue(openedCooking(recipe, in: app), "The Steps tab left \(recipe)’s cooking screen")
             snap(app, "Start Cooking › Steps")
+            // Then Step 3 brought up to rest just under the bar, as on an iPad, so every config has
+            // the same shot (Hark's review, build 121 round 2, item 1).
+            bringToTop(stepCard(3, in: app), in: app, column: 0.5)
+            let third = stepCard(3, in: app)
+            XCTAssertTrue(
+                third.exists && third.frame.minY >= CookingQAChecks.barBottom(app),
+                "Step 3 rests under the bar at \(third.frame)")
+            snap(app, "Start Cooking › Steps scrolled")
+            // Back to the top, so the Ingredients tab is shown as it opens.
+            for _ in 0..<4 where !stepCard(1, in: app).isHittable { scrollBackCooking(app, column: 0.5) }
             let ingredients =
                 app.segmentedControls.buttons["Ingredients"].firstMatch.exists
                 ? app.segmentedControls.buttons["Ingredients"].firstMatch : app.buttons["Ingredients"].firstMatch

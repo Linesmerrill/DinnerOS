@@ -590,6 +590,10 @@ func skipText(item grocery.Item) string {
 
 // amountText renders "1 ½ cups", "2 cloves", or "3" for counts.
 func amountText(a grocery.Amount) string {
+	// "⅓ cup" of milk, not "16 tsp" (Hark's build 121 review).
+	if spoons, ok := ingredients.KitchenSpoons(a.Quantity, a.Unit.Code); ok {
+		return spoons
+	}
 	text := a.Quantity.Format()
 	if label := a.Unit.Label(a.Quantity); label != "" {
 		text += " " + label

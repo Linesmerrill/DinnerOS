@@ -1,7 +1,7 @@
 import XCTest
 
-/// Your Meals on a week like Merrill's on Nov 22 (build 122): three dinners Monday to Wednesday
-/// and garlic bread with Monday's pasta, seen on the week's first day, so no night has passed.
+/// Your Meals on a week like Merrill's on Nov 22 (build 122): three dinners on three nights and
+/// garlic bread with the first night's pasta, all still ahead, so no night has passed.
 ///
 /// Every card kept room for "Didn't make it?" and the stars, which only show once a meal's night
 /// is over, so the Menu had an empty band of more than 100 points between the servings control
@@ -20,6 +20,14 @@ final class MenuCardsQATests: XCTestCase {
 
     private var mode: String { ProcessInfo.processInfo.environment["QA_MODE"] ?? "light" }
 
+    /// Today and the two nights after it as plan days ("tue"), kept inside a week that ends on
+    /// Saturday.
+    static func nightsFromToday(_ now: Date = Date(), calendar: Calendar = .current) -> [String] {
+        let names = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+        let today = calendar.component(.weekday, from: now) - 1
+        return (0..<3).map { names[min(today + $0, 6)] }
+    }
+
     @MainActor
     func testYourMealsRatingAndAddOnRowsWithNoBlankBand() throws {
         let photos = "https://img.hellofresh.com/f_auto,fl_lossy,q_auto,w_1200/hellofresh_s3/image/"
@@ -30,9 +38,13 @@ final class MenuCardsQATests: XCTestCase {
                 ("Sesame-Soy Pork Bowls", photos + "5fa06a5f20b9661c0d5e342f-9d881539-9859fadd.jpg", false),
                 ("Garlic Bread", "https://dinneros.app/img/recipes/6aa943c326393a8c809cf023.jpg", true),
             ])
+            // Today and the next two nights, so no night has passed whatever day the run is on
+            // (the test planned Monday to Wednesday and broke on a Tuesday). A Sunday-to-Saturday
+            // week: late in it, the meals share Saturday.
+            let days = Self.nightsFromToday()
             for (name, day) in [
-                ("Chicken Penne al Limone", "mon"), ("One-Pan Beef Stir-Fry Tacos", "tue"),
-                ("Sesame-Soy Pork Bowls", "wed"), ("Garlic Bread", "mon"),
+                ("Chicken Penne al Limone", days[0]), ("One-Pan Beef Stir-Fry Tacos", days[1]),
+                ("Sesame-Soy Pork Bowls", days[2]), ("Garlic Bread", days[0]),
             ] {
                 let id = try XCTUnwrap(ids[name], "\(name) wasn’t imported")
                 try await own.plan(id, weeksAhead: 0, day: day)
@@ -67,6 +79,7 @@ final class MenuCardsQATests: XCTestCase {
         problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)
         problems += MenuQAChecks.checkMealCardsLineUp(app, screen: screen)
         problems += MenuQAChecks.checkLoaded(app, screen: screen)
+        problems += MenuQAChecks.checkMealCountMatchesCards(app, screen: screen)
         snap(app, "Menu › Your Meals at rest (\(mode))")
 
         // Made already: the card asks how it was, and the week still has no band under it.
@@ -92,6 +105,9 @@ final class MenuCardsQATests: XCTestCase {
             problems += MenuQAChecks.checkMealCardRatingRows(app, screen: "\(screen), one made")
             problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: "\(screen), one made")
             problems += MenuQAChecks.checkMealCardsLineUp(app, screen: "\(screen), one made")
+            problems += MenuQAChecks.checkMealCountMatchesCards(app, screen: "\(screen), one made")
+            // Made is no longer New to You (build 121 review round 2, Hark's item 13).
+            problems += MenuQAChecks.checkNewToYouHasNoMadeMeal(app, screen: "\(screen), one made")
             snap(app, "Menu › Your Meals with a meal made (\(mode))")
         } else {
             problems.append("\(screen): no “I Made It” on the card’s long-press menu")

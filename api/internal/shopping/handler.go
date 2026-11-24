@@ -890,6 +890,10 @@ func amounts(list []Amount) ([]AmountResponse, string) {
 		if label := u.Label(q); label != "" {
 			text += " " + label
 		}
+		// "⅓ cup" of milk, not "16 tsp" (Hark's build 121 review).
+		if spoons, ok := ingredients.KitchenSpoons(q, u.Code); ok {
+			text = spoons
+		}
 		texts = append(texts, text)
 		out = append(out, AmountResponse{Quantity: a.Quantity, QuantityValue: q.Float64(), Unit: a.Unit, Text: text})
 	}
