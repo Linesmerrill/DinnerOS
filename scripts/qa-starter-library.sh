@@ -157,23 +157,43 @@ TYPED = {
         {"name": "parmesan cheese", "quantity": "1/4", "unit": "cup", "pantryStaple": False, "note": "grated"},
         {"name": "lemon", "quantity": "1/2", "unit": "count", "pantryStaple": False},
         {"name": "olive oil", "quantity": "1", "unit": "tbsp", "pantryStaple": True},
+        {"name": "garlic", "quantity": "2", "unit": "clove", "pantryStaple": False, "note": "minced"},
+        {"name": "pine nuts", "quantity": "2", "unit": "tbsp", "pantryStaple": False},
+        {"name": "fresh basil", "quantity": "1/4", "unit": "cup", "pantryStaple": False, "note": "torn"},
+        {"name": "red pepper flakes", "quantity": "1/4", "unit": "tsp", "pantryStaple": True},
+        {"name": "salt", "quantity": "", "unit": "", "pantryStaple": True},
+        {"name": "black pepper", "quantity": "", "unit": "", "pantryStaple": True},
     ],
     "steps": [
         "Boil the pasta in salted water until tender, about 11 minutes. Save a splash of the water, then drain.",
-        "Toss the hot pasta with the pesto and the saved water until glossy.",
-        "Fold in the tomatoes, spinach and a squeeze of lemon. Drizzle with the oil and top with the parmesan.",
+        "Meanwhile, toast the pine nuts in a dry pan until golden, 2 to 3 minutes. Move them to a plate. "
+        "Warm the oil in the same pan, add the garlic and red pepper flakes, and cook until fragrant, 30 seconds.",
+        "Toss the hot pasta with the pesto, the garlic oil and the saved water until glossy.",
+        "Fold in the tomatoes, spinach and a squeeze of lemon. Season with salt and pepper.",
+        "Top with the parmesan, pine nuts and basil.",
     ],
 }
-for typed_id_existing in [r["id"] for r in all_recipes() if r["name"] == TYPED["name"]]:
-    full = call("GET", f"/households/{hid}/recipes/{typed_id_existing}")
-    if not (full.get("description") or (full.get("recipe") or {}).get("description")):
-        # Made before it had a description, and the API can't edit one: set it in the local
-        # database the QA APIs use (local Mongo only).
-        db = os.environ.get("QA_MONGO_DB", "dinneros_multistore")
-        script = ("db.getSiblingDB(%s).recipes.updateOne({_id: ObjectId(%s)}, {$set: {description: %s}})"
-                  % (json.dumps(db), json.dumps(typed_id_existing), json.dumps(TYPED_DESCRIPTION)))
-        subprocess.run(["mongosh", "--quiet", "mongodb://localhost:27017", "--eval", script], check=True,
-                       stdout=subprocess.DEVNULL)
+# The typed recipe as it was first made (7 ingredients, no description) fits on the upright iPad's
+# screen, page and cooking list alike, so that config had no scrolled shots (Hark's build 123 review,
+# item 3). Bring an older copy up to date in place, keeping its planned meals: make the current one,
+# copy its description, ingredients and steps onto the old one in the local database the QA APIs
+# use (local Mongo only; the API can't edit a description), and delete the new one.
+for old in [r for r in all_recipes() if r["name"] == TYPED["name"]]:
+    full = call("GET", f"/households/{hid}/recipes/{old['id']}")
+    full = full.get("recipe") or full
+    if len(full.get("ingredients") or []) >= len(TYPED["ingredients"]) and full.get("description"):
+        continue
+    fresh = call("POST", f"/households/{hid}/recipes", TYPED)["id"]
+    db = os.environ.get("QA_MONGO_DB", "dinneros_multistore")
+    script = (
+        "const d = db.getSiblingDB(%s).recipes;"
+        "const f = d.findOne({_id: ObjectId(%s)});"
+        "d.updateOne({_id: ObjectId(%s)}, {$set: {description: f.description, ingredients: f.ingredients,"
+        " steps: f.steps, updatedAt: new Date()}})"
+        % (json.dumps(db), json.dumps(fresh), json.dumps(old["id"])))
+    subprocess.run(["mongosh", "--quiet", "mongodb://localhost:27017", "--eval", script], check=True,
+                   stdout=subprocess.DEVNULL)
+    call("DELETE", f"/households/{hid}/recipes/{fresh}")
 retired = set(filter(None, os.environ.get("QA_RETIRED_RECIPES", "Sip Fudge").split("|")))
 keep = set(filter(None, os.environ.get("QA_KEEP_RECIPES", TYPED["name"]).split("|")))
 recipes = all_recipes()

@@ -230,10 +230,23 @@ final class ScreensQATests: XCTestCase {
                 }
             }
             scrollToTop(app)
-            let top = capture(app)
+            var top = capture(app)
             scrollContent(app)
             var scrolled = capture(app)
             if scrolled.isSameScreen(as: top) {
+                scrollContent(app)
+                scrolled = capture(app)
+            }
+            // A first tab that fits on the screen (the typed recipe's description on the upright
+            // iPad): the Ingredients tab from the page's top instead, so every config has this shot
+            // (Hark's build 123 review, item 3).
+            let ingredientsTab = app.descendants(matching: .any)["recipeTab.ingredients"].firstMatch
+            if scrolled.isSameScreen(as: top), ingredientsTab.exists {
+                ingredientsTab.tap()
+                sleep(1)
+                scrollToTop(app)
+                top = capture(app)
+                scrollContent(app)
                 scrollContent(app)
                 scrolled = capture(app)
             }
