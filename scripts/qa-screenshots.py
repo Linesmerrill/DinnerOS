@@ -46,21 +46,27 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # every config (Hark's build 123 review, items 3 and 10).
             "Cooking › imported › end of ingredients", "Cooking › typed by hand › end of ingredients",
             "Menu › Your Meals with a meal made",
+            # Pantry's Butter and Shop's Cream Sauce Base flour, so their percent and amount can be
+            # checked in every config (Hark's build 121 review, item 18). On a phone the sweep
+            # scrolls to each; an iPad keeps the shot with the row already in view.
+            "Pantry › scrolled to Butter", "Shop › scrolled to Flour",
             # What sits under a bottom fade as a screen opens, seen whole in a shot of its own
-            # (Hark's build 121 round 2 review, item 2): the end of Account, and the freeze card
+            # (Hark's build 121 round 2 review, item 2): the end of Account (where Account fits on
+            # the screen, the same screen as it opens: an allowed look-alike), and the freeze card
             # screen's two cards brought up under the week bar. The typed recipe's Add Nutrition
             # shows whole in its Nutrition shot, so its More menu has no end shot.
             "Face ID › Back from the background › end", "Shop › Freeze card › order",
             "Shop › Freeze card › this week’s cost")
-# Required screens a config may lack, each with its reason. Since Hark's build 123 review (item 3)
-# every config has the same set but one: Account fits on the screen of a large iPhone and an iPad,
-# so nothing of it is under the tab bar's fade and its end is the shot as it opens (the test leaves
-# it out with a QA-SKIP line).
-ACCOUNT_FITS = "Account fits on the screen: its end is the shot as it opens"
-COVERAGE_EXCEPTIONS: dict = {
-    (f"{device}-{mode}", "Face ID › Back from the background › end"): ACCOUNT_FITS
-    for device in ("large", "ipadL", "ipadP") for mode in ("light", "dark")
-}
+def missing_screens(config, screens):
+    """The required screens `config` ("small-dark") lacks, given the screen names it has. Every
+    config must have the same set (Hark's build 123 review, item 3)."""
+    return [r for r in REQUIRED if r not in screens and (config, r) not in COVERAGE_EXCEPTIONS]
+
+
+# Required screens a config may lack, each with its reason. None since Hark's build 123 review
+# (item 3): every config has the same set. The typed recipe has a description, so its page scrolls
+# on the upright iPad too, and MenuCardsQATests runs in every config.
+COVERAGE_EXCEPTIONS: dict = {}
 DEVICES = {
     "large": ("iPhone 17 Pro Max", "portrait"),
     "small": ("iPhone SE", "portrait"),
@@ -216,7 +222,7 @@ def main():
     for m in manifest:
         screens[m["config"]].add(re.sub(r" \((light|dark)\)$", "", m["screen"]))
     for c in configs:
-        missing = [r for r in REQUIRED if r not in screens[c] and (c, r) not in COVERAGE_EXCEPTIONS]
+        missing = missing_screens(c, screens[c])
         if missing:
             problems.append(f"{c} is missing: {', '.join(missing)}")
     if problems:

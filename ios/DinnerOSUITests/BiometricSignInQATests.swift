@@ -113,8 +113,7 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts["Signed in with, Email"].waitForExistence(timeout: 5),
             "Account doesn’t say they signed in with email")
-        let opened = capture(app)
-        keep(opened, "Face ID › Back from the background (\(mode))")
+        snap(app, "Face ID › Back from the background (\(mode))")
         // The end of Account: the last rows rest whole above the tab bar, not washed out by its
         // fade, and are seen whole in a shot of their own (Hark's review, build 121 round 2: Sign
         // Out and Delete Account under the fade as Account opens on an SE and the Duo).
@@ -126,7 +125,9 @@ final class BiometricSignInQATests: XCTestCase {
         fades += FadeQAChecks.checkClear(
             app.buttons["Delete Account"].firstMatch, what: "Delete Account", in: app, screen: "Account, at the end",
             image: end.image)
-        keepEndIfNew(end, "Face ID › Back from the background › end (\(mode))", before: opened)
+        // Kept on every config: where Account fits, the same screen as it opened (an allowed
+        // look-alike, QAShotCompare.allowedPairs).
+        keep(end, "Face ID › Back from the background › end (\(mode))")
         XCTAssertTrue(fades.isEmpty, fades.joined(separator: "\n"))
 
         // A new launch still unlocks with Face ID.
@@ -567,13 +568,10 @@ private struct EmailPerson {
     let email: String
     let password: String
 
-    /// A realistic person ("jordan.avery27@example.test") with a fresh password for this run.
+    /// A realistic person ("jordan.m.avery@example.com", no run number) with a fresh password.
     static func register() async throws -> EmailPerson {
         let name = QAPeople.names.randomElement()!
-        let local = name.lowercased().replacingOccurrences(of: " ", with: ".")
-        let person = EmailPerson(
-            name: name, email: "\(local)\(Int.random(in: 10...999))@example.test",
-            password: UUID().uuidString)
+        let person = EmailPerson(name: name, email: QAPeople.email(for: name), password: UUID().uuidString)
         var request = URLRequest(url: QAOwnHousehold.apiBase.appending(path: "auth/dev/email-account"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -61,6 +61,55 @@ struct PantryUsageFormattingTests {
         }
     }
 
+    /// Garlic read "8 cloves" under its name and "~88% left (7 cloves)" under that (Hark's
+    /// build 121 review, item 15). The row shows one amount, what's left, and the percentage
+    /// beside it doesn't repeat it. A count is whole.
+    @Test func theRowShowsOneAmount() {
+        func row(_ item: PantryItem) -> [String] {
+            let amount = PantryUsageFormat.rowAmount(item, locale: locale)
+            let estimate = item.estimate.map { PantryUsageFormat.remainingShort($0, besides: amount, locale: locale) }
+            return [amount ?? "", estimate ?? ""]
+        }
+        let garlic = PantryFixtures.item(
+            name: "Garlic", quantity: "8", quantityValue: 8, unit: "clove",
+            estimate: PantryFixtures.estimate(percentRemaining: 88, unit: "clove", start: 8, remaining: 7.04))
+        #expect(row(garlic) == ["7 cloves", "~88% left"])
+
+        let partClove = PantryFixtures.item(
+            name: "Garlic", quantity: "8", quantityValue: 8, unit: "clove",
+            estimate: PantryFixtures.estimate(percentRemaining: 81, unit: "clove", start: 8, remaining: 6.5))
+        #expect(row(partClove) == ["7 cloves", "~81% left"])
+
+        let lastClove = PantryFixtures.item(
+            name: "Garlic", quantity: "8", quantityValue: 8, unit: "clove",
+            estimate: PantryFixtures.estimate(percentRemaining: 4, unit: "clove", start: 8, remaining: 0.3))
+        #expect(row(lastClove) == ["1 clove", "~4% left"])
+
+        let onions = PantryFixtures.item(
+            name: "Yellow Onions", quantity: "3", quantityValue: 3, unit: "count",
+            estimate: PantryFixtures.estimate(percentRemaining: 67, unit: "count", start: 3, remaining: 2))
+        #expect(row(onions) == ["2", "~67% left"])
+
+        let butter = PantryFixtures.item(
+            quantity: "1", quantityValue: 1, unit: "lb",
+            estimate: PantryFixtures.estimate(percentRemaining: 85, unit: "lb", start: 1, remaining: 0.85))
+        #expect(row(butter) == ["0.85 lb", "~85% left"])
+
+        // Tracked in another unit than the item's: both stay, each saying something different.
+        let creamCheese = PantryFixtures.item(
+            name: "Cream Cheese", quantity: "1", quantityValue: 1, unit: "package",
+            estimate: PantryFixtures.estimate(percentRemaining: 100, unit: "oz", start: 8, remaining: 8))
+        #expect(row(creamCheese) == ["1 package", "~100% left (8 oz)"])
+
+        // Nothing left by the estimate: the amount the item was given.
+        let empty = PantryFixtures.item(
+            name: "Garlic", quantity: "8", quantityValue: 8, unit: "clove",
+            estimate: PantryFixtures.estimate(percentRemaining: 0, unit: "clove", start: 8, remaining: 0))
+        #expect(row(empty) == ["8 cloves", "~0% left"])
+
+        #expect(PantryUsageFormat.rowAmount(PantryFixtures.item(quantity: "2", quantityValue: 2, unit: "lb")) == "2 lb")
+    }
+
     @Test func levelFollowsTheThreshold() {
         #expect(PantryUsageFormat.level(PantryFixtures.estimate()) == .plenty)
         #expect(PantryUsageFormat.level(PantryFixtures.estimate(percentRemaining: 15, belowThreshold: true)) == .low)

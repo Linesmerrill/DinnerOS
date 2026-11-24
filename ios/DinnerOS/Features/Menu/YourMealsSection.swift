@@ -168,8 +168,8 @@ struct YourMealsSection: View {
                         card(entry, rows: rows)
                             .containerRelativeFrame(.horizontal) { width, _ in
                                 // A phone shows one big card; wider screens show several at a
-                                // readable size instead of one card the width of an iPad.
-                                width < 600 ? width * 0.84 : min(width * 0.84, max(360, (width - 48) / 3))
+                                // readable size and a peek of the next (`MealCarouselLayout`).
+                                MealCarouselLayout.cardWidth(in: width)
                             }
                             .prefetchesPhotos(after: index, in: mealPhotoURLs, pointWidth: MealCard.photoWidth)
                     }

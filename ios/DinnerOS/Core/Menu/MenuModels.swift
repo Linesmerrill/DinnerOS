@@ -215,6 +215,20 @@ nonisolated struct MenuSection: Decodable, Hashable, Sendable, Identifiable {
         case id, kind, title, subtitle, items, moreQuery
     }
 
+    /// The server's "New to You" section.
+    static let newToYouID = "new_to_you"
+
+    /// The section without the meals `madeRecipeIDs` when it's New to You: a meal marked made on
+    /// this device leaves it at once, before the menu reloads and offline too (build 121 review
+    /// round 2, Hark's item 13: Chicken Penne al Limone was marked Made and still New to You).
+    /// The server leaves out every meal anyone has made when it builds the section.
+    func droppingMade(_ madeRecipeIDs: Set<String>) -> MenuSection {
+        guard id == Self.newToYouID, !madeRecipeIDs.isEmpty else { return self }
+        var section = self
+        section.items.removeAll { madeRecipeIDs.contains($0.recipe.id) }
+        return section
+    }
+
     init(
         id: String, kind: MenuSectionKind = .carousel, title: String, subtitle: String? = nil, items: [MenuCard],
         moreQuery: MenuRecipeQuery? = nil

@@ -239,6 +239,7 @@ struct WeekStrip: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Weeks")
+        .accessibilityIdentifier(QAMarkers.weekStrip)
     }
 
     /// The strip in one line: the week you are on, and a way back to the rest of them.

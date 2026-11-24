@@ -3,40 +3,33 @@ import Testing
 
 @testable import DinnerOS
 
-/// The Suggested for You cards fit a short week inside the margins on an iPad (build 122 review
-/// 4: on an iPad in portrait the third card ran off the right edge).
+/// The Menu's big cards: Your Meals and Suggested for You are one width, and a wide row shows a
+/// peek of the card past the edge.
 @MainActor
 struct SuggestedCardWidthTests {
-    /// The row's width taken by `count` cards, their gaps and the margins on both sides.
-    private func rowWidth(_ width: CGFloat, count: Int) -> CGFloat {
-        let card = SuggestedMealsRow.cardWidth(in: width, count: count)
-        return CGFloat(count) * card + CGFloat(count - 1) * DS.Space.m + 2 * DS.Space.l
+    /// Build 121 review round 2, Hark's item 12: one suggestion on an iPad in portrait was a
+    /// 575-point banner under 360-point meal cards. Every suggestion is a meal card's width.
+    @Test(arguments: [834.0, 1210.0, 1032.0, 1366.0, 744.0])
+    func aSuggestionIsAMealCardsWidth(width: CGFloat) {
+        #expect(SuggestedMealsRow.cardWidth(in: width) == MealCarouselLayout.cardWidth(in: width))
+        #expect(SuggestedMealsRow.cardWidth(in: width) <= 420)
     }
 
-    @Test(arguments: [834.0, 1210.0, 1032.0, 1366.0])
-    func threeCardsFitAnIPad(width: CGFloat) {
-        #expect(rowWidth(width, count: 3) <= width + 0.5)
-        #expect(SuggestedMealsRow.cardWidth(in: width, count: 3) >= DS.Size.carouselCardMinWidth)
+    /// Build 121 review round 2, Hark's item 10: on an iPad in landscape three meal cards filled
+    /// the row exactly, so a fourth meal had no sign of being there. A wide row ends in a peek.
+    @Test(arguments: [834.0, 1210.0, 1032.0, 1366.0, 744.0])
+    func aWideRowShowsAPeekOfTheNextCard(width: CGFloat) {
+        let card = MealCarouselLayout.cardWidth(in: width)
+        let whole = CGFloat(MealCarouselLayout.wholeCards(in: width))
+        let shown = width - DS.Space.l - whole * (card + DS.Space.m)
+        #expect(shown >= card * 0.2)
+        #expect(shown < card)
+        #expect(card >= MealCarouselLayout.minWideCard)
     }
 
-    @Test func aLongWeekKeepsReadableCardsAndScrolls() {
-        let card = SuggestedMealsRow.cardWidth(in: 834, count: 7)
-        #expect(card >= 280)
-        #expect(rowWidth(834, count: 7) > 834)
-    }
-
-    /// Build 123 review, Hark's item 6: two suggestions on an iPad in portrait took two-thirds
-    /// of the row, their reasons cut short and the right third empty. A short week fills the
-    /// row margin to margin.
-    @Test(arguments: [(834.0, 2), (834.0, 3), (1210.0, 2), (1210.0, 3), (1210.0, 4), (1032.0, 2)])
-    func aShortWeekFillsTheRow(width: CGFloat, count: Int) {
-        #expect(abs(rowWidth(width, count: count) - width) < 0.5)
-    }
-
-    /// One suggestion alone stays card-sized rather than a banner across an iPad.
-    @Test func oneCardStaysCardSized() {
-        #expect(SuggestedMealsRow.cardWidth(in: 1210, count: 1) == SuggestedMealsRow.maxCardWidth)
-        #expect(SuggestedMealsRow.cardWidth(in: 834, count: 1) == SuggestedMealsRow.maxCardWidth)
+    @Test func anIPadShowsTwoOrThreeWholeCards() {
+        #expect(MealCarouselLayout.wholeCards(in: 834) == 2)
+        #expect(MealCarouselLayout.wholeCards(in: 1210) == 3)
     }
 
     /// A wide card's photo widens instead of growing taller than a planned meal's photo.
@@ -48,6 +41,7 @@ struct SuggestedCardWidthTests {
     }
 
     @Test func aPhoneShowsOneCardAndAPeek() {
-        #expect(SuggestedMealsRow.cardWidth(in: 402, count: 3) == 402 * 0.62)
+        #expect(SuggestedMealsRow.cardWidth(in: 402) == 402 * 0.62)
+        #expect(MealCarouselLayout.cardWidth(in: 402) == 402 * 0.84)
     }
 }

@@ -30,9 +30,6 @@ class FailedTestsTest(unittest.TestCase):
         self.assertEqual(qa.failed_tests([run]), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class WrongBuildTest(unittest.TestCase):
     def folder(self, number):
@@ -52,20 +49,59 @@ class WrongBuildTest(unittest.TestCase):
 
 
 class CoverageTest(unittest.TestCase):
-    """Each exception names a real config and a required screen: a typo would quietly let a
-    config publish without that screen (Hark's build 121 round 2: Account's end shot, left out
-    only where Account fits on the screen)."""
+    ROWS = ["Pantry › scrolled to Butter", "Shop › scrolled to Flour"]
 
-    def test_exceptions_name_real_configs_and_required_screens(self):
-        configs = {f"{d}-{m}" for d in qa.DEVICES for m in ("light", "dark")}
-        for (config, screen), reason in qa.COVERAGE_EXCEPTIONS.items():
-            self.assertIn(config, configs)
-            self.assertIn(screen, qa.REQUIRED)
-            self.assertTrue(reason)
+    def test_every_config_needs_the_butter_and_flour_rows(self):
+        # One identical set for every config (Hark's build 123 review, item 3): iPads included.
+        for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
+            have = set(qa.REQUIRED) - set(self.ROWS)
+            self.assertEqual(qa.missing_screens(config, have), self.ROWS)
+            self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED)), [])
 
-    def test_the_small_phones_and_the_duo_keep_every_end_shot(self):
-        for config in ("small-light", "small-dark", "duo-light", "duo-dark"):
-            for screen in ("Face ID › Back from the background › end", "Shop › Freeze card › order",
-                           "Shop › Freeze card › this week’s cost"):
-                self.assertIn(screen, qa.REQUIRED)
-                self.assertNotIn((config, screen), qa.COVERAGE_EXCEPTIONS)
+    def test_no_device_has_a_set_of_its_own(self):
+        self.assertFalse(hasattr(qa, "REQUIRED_ON"))
+        self.assertEqual(qa.COVERAGE_EXCEPTIONS, {})
+
+    def test_the_ipad_look_alikes_are_allowed(self):
+        import qa_shot_compare
+        self.assertEqual(qa_shot_compare.allowed_name("ipadL-light/pantry.png", "ipadL-light/pantry-scrolled-to-butter.png"),
+                         "Pantry with Butter in view")
+        self.assertEqual(qa_shot_compare.allowed_name("ipadP-dark/shop-scrolled-to-flour.png", "ipadP-dark/shop.png"),
+                         "Shop with the flour in view")
+        self.assertIsNone(qa_shot_compare.allowed_name("a/pantry.png", "a/shop-scrolled-to-flour.png"))
+        # The published file names are what the sweep's screenshot names slug to.
+        self.assertEqual(qa.slug("Pantry › scrolled to Butter"), "pantry-scrolled-to-butter")
+        self.assertEqual(qa.slug("Shop › scrolled to Flour"), "shop-scrolled-to-flour")
+
+    def test_the_sweep_and_the_swift_list_match(self):
+        root = os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests")
+        sweep = open(os.path.join(root, "AppSweepQATests.swift")).read()
+        self.assertIn('"Pantry": "Butter", "Shop": "All-Purpose Flour"', sweep)
+        self.assertIn("› scrolled to", sweep)
+        helpers = open(os.path.join(root, "QAHelpers.swift")).read()
+        self.assertIn('"Pantry with Butter in view": ["pantry", "pantry-scrolled-to-butter"]', helpers)
+        self.assertIn('"Shop with the flour in view": ["shop", "shop-scrolled-to-flour"]', helpers)
+
+    def test_every_config_needs_the_end_shots(self):
+        # The end of Account and the freeze card's two cards, in every config: no exceptions,
+        # even where Account fits on the screen (Hark's build 121 round 2 review, item 2).
+        ends = ["Face ID › Back from the background › end", "Shop › Freeze card › order",
+                "Shop › Freeze card › this week’s cost"]
+        for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
+            have = set(qa.REQUIRED) - set(ends)
+            self.assertEqual(qa.missing_screens(config, have), ends)
+
+    def test_account_that_fits_may_match_its_end(self):
+        import qa_shot_compare
+        self.assertEqual(
+            qa_shot_compare.allowed_name("large-light/face-id-back-from-the-background.png",
+                                         "large-light/face-id-back-from-the-background-end.png"),
+            "Account that fits on the screen")
+        self.assertEqual(qa.slug("Face ID › Back from the background › end"), "face-id-back-from-the-background-end")
+        helpers = open(os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests", "QAHelpers.swift")).read()
+        self.assertIn('"Account that fits on the screen": [', helpers)
+        self.assertIn('"face-id-back-from-the-background", "face-id-back-from-the-background-end",', helpers)
+
+
+if __name__ == "__main__":
+    unittest.main()

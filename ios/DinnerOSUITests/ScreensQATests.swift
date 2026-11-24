@@ -60,6 +60,7 @@ final class ScreensQATests: XCTestCase {
         sleep(3)
         shot(app, "Shared Recipes")
         problems += MenuQAChecks.checkSharedRecipeRows(app, screen: "Shared Recipes")
+        problems += MenuQAChecks.checkSharedRecipesCentered(app, screen: "Shared Recipes (\(mode))")
         // A recipe card in one of the rows (decision 710).
         let first = app.buttons["DiscoverCard"].firstMatch
         if first.waitForExistence(timeout: 5) {
@@ -407,6 +408,9 @@ final class ScreensQATests: XCTestCase {
         } else {
             keep(shown, "Menu › By Day (\(mode))")
             checkToolbar(app, "Menu › By Day")
+            // The whole week from its first day, nothing under the strip (build 121 review round
+            // 2, Hark's item 9). After the shot: it scrolls.
+            problems += MenuQAChecks.checkByDayWholeWeek(app, screen: "Menu › By Day (\(mode))")
         }
         let back = app.segmentedControls.buttons["Menu"].firstMatch
         if back.exists { back.tap() }

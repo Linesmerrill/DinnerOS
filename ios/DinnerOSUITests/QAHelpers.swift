@@ -194,6 +194,12 @@ enum QAShotCompare {
     static let allowedPairs: [String: Set<String>] = [
         "Menu search, one card each": ["menu-search-typed-imported", "menu-search-typed-typed-by-hand"],
         "Household with and without Plus": ["household-new-household", "household"],
+        "Pantry with Butter in view": ["pantry", "pantry-scrolled-to-butter"],
+        "Shop with the flour in view": ["shop", "shop-scrolled-to-flour"],
+        // Account fits on a large iPhone's and an iPad's screen: its end is the screen as it opens.
+        "Account that fits on the screen": [
+            "face-id-back-from-the-background", "face-id-back-from-the-background-end",
+        ],
     ]
 
     /// The published file name for a checklist name, as scripts/qa-screenshots.py makes it:
@@ -271,6 +277,26 @@ enum QAPeople {
     static func subject(_ name: String? = nil) -> String {
         let person = name ?? names.randomElement()!
         return person.lowercased().replacingOccurrences(of: " ", with: "-") + "-\(Int.random(in: 10000...99999))"
+    }
+
+    /// The domains an email for a screenshot person can be on: kept for examples (RFC 2606), so
+    /// never a real person's inbox, and ones the development API's email accounts accept.
+    static let emailDomains = ["example.com", "example.net", "example.org"]
+
+    /// A realistic email for a person, with no run number in it (Hark's build 121 review, item 8:
+    /// "hannah.kim395@example.test" read as a test account): "hannah.j.kim@example.com",
+    /// "hannahjkim@example.net" or "hjkim@example.org". The middle initial, the form and the
+    /// domain are picked at random, about 160 emails per name, so simulators running together
+    /// almost never share one; a repeat is the same person again, which every test allows.
+    static func email(for name: String) -> String {
+        let words = name.lowercased().split(separator: " ").map(String.init)
+        let first = words.first ?? "sam"
+        let last = words.count > 1 ? words[words.count - 1] : "lee"
+        let initial = String("abcdefghjklmnprstw".randomElement()!)
+        let local = [
+            "\(first).\(initial).\(last)", "\(first)\(initial)\(last)", "\(first.prefix(1))\(initial)\(last)",
+        ].randomElement()!
+        return "\(local)@\(emailDomains.randomElement()!)"
     }
 
     /// The name the app gives a subject: its words without the numbers, capitalized.

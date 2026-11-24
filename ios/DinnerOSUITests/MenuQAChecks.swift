@@ -322,6 +322,177 @@ enum MenuQAChecks {
         return beside?.label ?? "an item at \(Int(row.midX)),\(Int(row.midY))"
     }
 
+    // MARK: - Build 121 review round 2 (Hark's items 9 to 13)
+
+    /// (8) Your Meals' "N meals planned" is the meal cards, add-ons not counted, and a card past
+    /// the screen's edge always shows a peek of itself (item 10: on an iPad in landscape three
+    /// cards filled the row exactly and the fourth meal had no sign of being there).
+    @MainActor
+    static func checkMealCountMatchesCards(_ app: XCUIApplication, screen: String) -> [String] {
+        let subtitle = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", #"^\d+ meals? planned.*"#))
+            .firstMatch
+        guard subtitle.exists, let promised = mealCount(in: subtitle.label) else { return [] }
+        let meals = cards(app).filter { !$0.identifier.hasPrefix(addOnPrefix) }
+        var problems = countProblems(label: subtitle.label, promised: promised, mealCards: meals.count, screen: screen)
+        problems += peekProblems(cards: cards(app).map(\.frame), screen: app.frame, name: screen)
+        return problems
+    }
+
+    /// "3 meals planned · 1 add-on" → 3.
+    static func mealCount(in label: String) -> Int? {
+        guard let range = label.range(of: #"^\d+ meals?\b"#, options: .regularExpression) else { return nil }
+        return Int(label[range].split(separator: " ").first ?? "")
+    }
+
+    static func countProblems(label: String, promised: Int, mealCards: Int, screen: String) -> [String] {
+        promised == mealCards ? [] : ["\(screen): “\(label)” but \(mealCards) meal card(s), add-ons not counted"]
+    }
+
+    /// A card wholly past the screen's right edge needs a card cut by that edge, at least 20
+    /// points of it showing, so the row says there's more.
+    static func peekProblems(cards: [CGRect], screen: CGRect, name: String) -> [String] {
+        let edge = screen.maxX
+        let hidden = cards.filter { $0.minX >= edge - 1 }
+        guard !hidden.isEmpty else { return [] }
+        let peeking = cards.contains { $0.minX <= edge - 20 && $0.maxX > edge + 1 }
+        return peeking ? [] : ["\(name): \(hidden.count) card(s) past the edge with none peeking in"]
+    }
+
+    /// (9) By Day shows the whole week from its first day: at rest the list starts at the top,
+    /// nothing tucked under the week strip, and scrolling down meets all seven days in order
+    /// (item 9: it opened on Monday, today, with Sunday's meal scrolled away under the strip).
+    @MainActor
+    static func checkByDayWholeWeek(_ app: XCUIApplication, screen: String) -> [String] {
+        let strip = app.descendants(matching: .any)["menu.weekStrip"]
+        guard strip.waitForExistence(timeout: 5) else { return ["\(screen): no week strip"] }
+        let stripBottom = strip.frame.maxY
+        func headers() -> [(id: String, frame: CGRect)] {
+            app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH 'byDay.'")).allElementsBoundByIndex
+                .map { ($0.identifier, $0.frame) }
+                .filter { !$0.1.isEmpty }
+                .sorted { $0.1.minY < $1.1.minY }
+        }
+        let atRest = headers()
+        var problems = byDayTopProblems(atRest, stripBottom: stripBottom, screen: screen)
+        let firstCard = app.cells.allElementsBoundByIndex.map(\.frame).filter { !$0.isEmpty }.map(\.minY).min()
+        problems += byDayGapProblems(firstCardTop: firstCard, stripBottom: stripBottom, screen: screen)
+        var seen: [String] = atRest.map(\.id).filter { $0.hasPrefix("byDay.day.") }
+        for _ in 0..<6 where seen.count < 7 {
+            app.swipeUp()
+            sleep(1)
+            for header in headers() where header.id.hasPrefix("byDay.day.") && !seen.contains(header.id) {
+                seen.append(header.id)
+            }
+        }
+        problems += byDayWeekProblems(seen, screen: screen)
+        for _ in 0..<6 { app.swipeDown() }
+        return problems
+    }
+
+    /// At rest the first heading is the list's first, below the strip: the meals without a day,
+    /// else the week's first day.
+    static func byDayTopProblems(
+        _ headers: [(id: String, frame: CGRect)], stripBottom: CGFloat, screen: String
+    ) -> [String] {
+        guard let first = headers.first else { return ["\(screen): no day headings"] }
+        var problems: [String] = []
+        if first.frame.minY < stripBottom - 1 {
+            problems.append("\(screen): the first heading is under the week strip, the list isn't at its top")
+        }
+        let days = headers.filter { $0.id.hasPrefix("byDay.day.") }
+        if headers.contains(where: { $0.id == "byDay.unscheduled" }), first.id != "byDay.unscheduled" {
+            problems.append("\(screen): the meals without a day aren't at the top")
+        }
+        if days.isEmpty { problems.append("\(screen): no day showing at rest") }
+        return problems
+    }
+
+    /// The first card keeps some room under the strip (on the Duo it touched the divider).
+    static func byDayGapProblems(firstCardTop: CGFloat?, stripBottom: CGFloat, screen: String) -> [String] {
+        guard let top = firstCardTop, top < stripBottom + 8 else { return [] }
+        return ["\(screen): the first card is \(Int(top - stripBottom)) points under the week strip, touching it"]
+    }
+
+    /// Seven days, each once, in a week's order (any first day).
+    static func byDayWeekProblems(_ seen: [String], screen: String) -> [String] {
+        let order = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+        let days = seen.map { String($0.dropFirst("byDay.day.".count)) }
+        guard days.count == 7, Set(days).count == 7, let start = order.firstIndex(of: days[0]) else {
+            return ["\(screen): the week shows \(days.count) day(s) (\(days.joined(separator: ", "))), not 7"]
+        }
+        let expected = (0..<7).map { order[(start + $0) % 7] }
+        return days == expected ? [] : ["\(screen): the days are out of order: \(days.joined(separator: ", "))"]
+    }
+
+    /// (10) On an iPad, Suggested for You's cards are the meal cards' width (item 12: one
+    /// suggestion was 575 points wide under 360-point meal cards).
+    @MainActor
+    static func checkSuggestedCardWidths(_ app: XCUIApplication, screen: String) -> [String] {
+        guard app.frame.width >= 600 else { return [] }
+        let suggested = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Suggested for '"))
+            .allElementsBoundByIndex.map(\.frame.width).filter { $0 > 0 }
+        let meals = cards(app).map(\.frame.width).filter { $0 > 0 }
+        return widthProblems(suggested: suggested, meals: meals, screen: screen)
+    }
+
+    static func widthProblems(suggested: [CGFloat], meals: [CGFloat], screen: String) -> [String] {
+        guard let meal = meals.max(), meal > 0 else { return [] }
+        return suggested.filter { abs($0 - meal) > meal * 0.1 }.map {
+            "\(screen): a suggestion is \(Int($0)) points wide, the meal cards \(Int(meal))"
+        }
+    }
+
+    /// (11) New to You never has a meal marked made (item 13).
+    @MainActor
+    static func checkNewToYouHasNoMadeMeal(_ app: XCUIApplication, screen: String) -> [String] {
+        let made = cards(app).flatMap { card in
+            card.buttons.matching(NSPredicate(format: "label CONTAINS ', Made'")).allElementsBoundByIndex
+                .map { cardName($0.label) }
+        }
+        let section = app.descendants(matching: .any)["menu.section.new_to_you"]
+        guard !made.isEmpty, section.exists else { return [] }
+        let newToYou = section.buttons.allElementsBoundByIndex.map { cardName($0.label) }
+        return madeInNewToYouProblems(made: made, newToYou: newToYou, screen: screen)
+    }
+
+    static func madeInNewToYouProblems(made: [String], newToYou: [String], screen: String) -> [String] {
+        Set(made).intersection(newToYou).sorted().map { "\(screen): “\($0)” is marked made and still New to You" }
+    }
+
+    /// (12) Shared Recipes' rows that fit on screen sit centered, the same room on both sides
+    /// (item 11: three recipes a row on an iPad in landscape stopped at 56% of the screen under
+    /// a centered title).
+    @MainActor
+    static func checkSharedRecipesCentered(_ app: XCUIApplication, screen: String) -> [String] {
+        let rows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'DiscoverSection-'")).allElementsBoundByIndex
+        let spans: [CGRect] = rows.compactMap { row in
+            let frames = row.buttons.matching(identifier: "DiscoverCard").allElementsBoundByIndex.map(\.frame)
+                .filter { !$0.isEmpty }
+            return frames.dropFirst().reduce(frames.first) { $0?.union($1) }
+        }
+        return centeredProblems(spans: spans, screen: app.frame, name: screen)
+    }
+
+    /// The widest row that fits on screen is centered, and every row starts at its left edge: a
+    /// shorter row lines up under it rather than being centered on its own.
+    static func centeredProblems(spans: [CGRect], screen: CGRect, name: String) -> [String] {
+        let fitting = spans.filter { $0.maxX <= screen.maxX + 1 }
+        guard let widest = fitting.max(by: { $0.width < $1.width }) else { return [] }
+        let left = widest.minX - screen.minX
+        let right = screen.maxX - widest.maxX
+        var problems: [String] = []
+        if abs(left - right) > 24 {
+            problems.append(
+                "\(name): the recipes are off center, \(Int(left)) points on the left, \(Int(right)) on the right")
+        }
+        if spans.contains(where: { abs($0.minX - widest.minX) > 2 }) {
+            problems.append("\(name): the rows of recipes don't start at one left edge")
+        }
+        return problems
+    }
+
     @MainActor
     static func name(of card: XCUIElement) -> String {
         if !card.label.isEmpty { return card.label }

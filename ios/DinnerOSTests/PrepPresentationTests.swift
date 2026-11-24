@@ -88,8 +88,9 @@ struct PrepPresentationTests {
     @Test func aCardWithoutAPhotoHasNoURL() throws {
         #expect(try #require(PrepPreviewData.noPhoto).imageURL == nil)
         #expect(try #require(PrepPreviewData.oneBag).imageURL?.absoluteString.hasPrefix("https://") == true)
-        #expect(PrepIngredientTile.symbol(for: "meat-seafood") == "fork.knife")
-        #expect(PrepIngredientTile.symbol(for: "produce") == "carrot")
+        // Every thumbnail without a photo shows the same fallback, whatever its aisle.
+        #expect(IngredientFallbackGlyph.symbol == "fork.knife")
+        #expect(IngredientFallbackGlyph.symbol == DS.Colors.thumbnailGlyphSymbol)
     }
 
     // MARK: - VoiceOver

@@ -240,7 +240,7 @@ private struct PrepThisWeekCard: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.l))
         layout {
             PrepIngredientTile(
-                url: presentation.card.imageURL, category: presentation.card.category,
+                url: presentation.card.imageURL,
                 size: min(photoSize, 140))
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text("This week")
@@ -373,7 +373,7 @@ private struct PrepBagCard: View {
             : AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
         layout {
             PrepIngredientTile(
-                url: presentation.card.imageURL, category: presentation.card.category, size: min(photoSize, 96)
+                url: presentation.card.imageURL, size: min(photoSize, 96)
             )
             .overlay(alignment: .topTrailing) {
                 Image(systemName: "snowflake")
@@ -522,11 +522,10 @@ enum PrepStyle {
     }
 }
 
-/// The ingredient's photo on a rounded square, or a clean category glyph on the same tile when
-/// there is no photo or it can't be loaded — never a broken image.
+/// The ingredient's photo on a rounded square, or the design system's one fallback glyph on the
+/// same tile when there is no photo or it can't be loaded — never a broken image.
 struct PrepIngredientTile: View {
     let url: URL?
-    let category: String
     var size: CGFloat = 88
 
     @Environment(\.displayScale) private var displayScale
@@ -553,22 +552,7 @@ struct PrepIngredientTile: View {
     }
 
     private var glyph: some View {
-        Image(systemName: Self.symbol(for: category))
-            .font(.system(size: size * 0.38, weight: .medium))
-            .foregroundStyle(DS.Colors.thumbnailGlyph)
-    }
-
-    /// A food glyph for the ingredient's grocery category.
-    static func symbol(for category: String) -> String {
-        switch category {
-        case "produce": "carrot"
-        case "dairy-eggs": "cup.and.saucer"
-        case "frozen": "snowflake"
-        case "beverages": "waterbottle"
-        case "spices": "leaf"
-        case "bakery", "pantry", "deli", "condiments": "basket"
-        default: "fork.knife"
-        }
+        IngredientFallbackGlyph(size: size)
     }
 }
 
@@ -664,7 +648,7 @@ struct PrepSessionBanner: View {
     /// extra and what was on hand. Stacked, not trailing, so the size fits on an iPhone SE.
     private func itemRow(_ row: PrepCardPresentation) -> some View {
         HStack(alignment: .top, spacing: DS.Space.sm) {
-            PrepIngredientTile(url: row.card.imageURL, category: row.card.category, size: min(rowPhotoSize, 52))
+            PrepIngredientTile(url: row.card.imageURL, size: min(rowPhotoSize, 52))
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.card.name)
                     .font(.subheadline)
@@ -692,7 +676,7 @@ struct PrepSessionBanner: View {
             layout {
                 HStack(spacing: DS.Space.m) {
                     PrepIngredientTile(
-                        url: presentation.card?.imageURL, category: presentation.card?.category ?? "",
+                        url: presentation.card?.imageURL,
                         size: min(photoSize, 72))
                     summary
                 }

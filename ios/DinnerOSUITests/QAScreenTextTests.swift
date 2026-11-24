@@ -102,4 +102,78 @@ final class QAScreenTextTests: XCTestCase {
             XCTAssertEqual(QAPeople.displayName(forSubject: QAPeople.subject(name)), name)
         }
     }
+
+    /// Build 121 review round 2, Hark's item 10: the count leaves out add-ons, and a meal past
+    /// the edge shows a peek.
+    func testMealCountAndPeek() {
+        XCTAssertEqual(MenuQAChecks.mealCount(in: "3 meals planned · 1 add-on"), 3)
+        XCTAssertEqual(MenuQAChecks.mealCount(in: "1 meal planned"), 1)
+        XCTAssertNil(MenuQAChecks.mealCount(in: "Nothing planned"))
+        XCTAssertEqual(MenuQAChecks.countProblems(label: "3 meals", promised: 3, mealCards: 3, screen: "Menu"), [])
+        XCTAssertEqual(MenuQAChecks.countProblems(label: "3 meals", promised: 3, mealCards: 2, screen: "Menu").count, 1)
+        let screen = CGRect(x: 0, y: 0, width: 1210, height: 834)
+        let flush = [0.0, 403, 806, 1210].map { CGRect(x: $0, y: 300, width: 387, height: 400) }
+        XCTAssertEqual(MenuQAChecks.peekProblems(cards: flush, screen: screen, name: "Menu").count, 1)
+        let peek = [20.0, 387, 754, 1121].map { CGRect(x: $0, y: 300, width: 351, height: 400) }
+        XCTAssertEqual(MenuQAChecks.peekProblems(cards: peek, screen: screen, name: "Menu"), [])
+    }
+
+    /// Hark's item 9: By Day starts at the top with every day of the week in order.
+    func testByDayShowsTheWholeWeek() {
+        typealias Header = (id: String, frame: CGRect)
+        func header(_ id: String, _ y: CGFloat) -> Header { (id, CGRect(x: 20, y: y, width: 300, height: 20)) }
+        let atTop = [header("byDay.unscheduled", 160), header("byDay.day.sun", 300)]
+        XCTAssertEqual(MenuQAChecks.byDayTopProblems(atTop, stripBottom: 150, screen: "By Day"), [])
+        let scrolled = [header("byDay.unscheduled", 120), header("byDay.day.mon", 260)]
+        XCTAssertEqual(MenuQAChecks.byDayTopProblems(scrolled, stripBottom: 150, screen: "By Day").count, 1)
+        XCTAssertEqual(MenuQAChecks.byDayGapProblems(firstCardTop: 240, stripBottom: 240, screen: "By Day").count, 1)
+        XCTAssertEqual(MenuQAChecks.byDayGapProblems(firstCardTop: 280, stripBottom: 240, screen: "By Day"), [])
+        let week = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map { "byDay.day." + $0 }
+        XCTAssertEqual(MenuQAChecks.byDayWeekProblems(week, screen: "By Day"), [])
+        XCTAssertEqual(MenuQAChecks.byDayWeekProblems(Array(week.dropFirst()), screen: "By Day").count, 1)
+        let mondayFirst = Array(week[1...]) + [week[0]]
+        XCTAssertEqual(MenuQAChecks.byDayWeekProblems(mondayFirst, screen: "By Day"), [])
+        XCTAssertEqual(MenuQAChecks.byDayWeekProblems([week[1], week[0]] + week[2...], screen: "By Day").count, 1)
+    }
+
+    /// Hark's items 12, 13 and 11: suggestion widths, made meals in New to You, centered rows.
+    func testSuggestedWidthsNewToYouAndCenteredRows() {
+        XCTAssertEqual(MenuQAChecks.widthProblems(suggested: [350, 351], meals: [347], screen: "Menu"), [])
+        XCTAssertEqual(MenuQAChecks.widthProblems(suggested: [575], meals: [360], screen: "Menu").count, 1)
+        XCTAssertEqual(
+            MenuQAChecks.madeInNewToYouProblems(
+                made: ["Chicken Penne"], newToYou: ["Tacos", "Chicken Penne"], screen: "Menu"),
+            ["Menu: “Chicken Penne” is marked made and still New to You"])
+        XCTAssertEqual(
+            MenuQAChecks.madeInNewToYouProblems(made: ["Chicken Penne"], newToYou: ["Tacos"], screen: "Menu"), [])
+        let screen = CGRect(x: 0, y: 0, width: 1210, height: 834)
+        let left = [CGRect(x: 20, y: 200, width: 690, height: 300)]
+        XCTAssertEqual(MenuQAChecks.centeredProblems(spans: left, screen: screen, name: "Shared").count, 1)
+        let centered = [
+            CGRect(x: 260, y: 200, width: 690, height: 300), CGRect(x: 260, y: 600, width: 450, height: 300),
+        ]
+        XCTAssertEqual(MenuQAChecks.centeredProblems(spans: centered, screen: screen, name: "Shared"), [])
+        let overflowing = [CGRect(x: 20, y: 200, width: 1500, height: 300)]
+        XCTAssertEqual(MenuQAChecks.centeredProblems(spans: overflowing, screen: screen, name: "Shared"), [])
+    }
+
+    /// Hark's build 121 review, item 8: Account showed "hannah.kim395@example.test". An email
+    /// reads like a person's (no digits, no .test) and stays on a domain kept for examples.
+    func testEmailsLookLikePeoplesOnExampleDomains() {
+        let pattern = #"^hannah(\.[a-z]\.kim|[a-z]kim)@example\.(com|net|org)$|^h[a-z]kim@example\.(com|net|org)$"#
+        var seen = Set<String>()
+        for _ in 0..<200 {
+            let email = QAPeople.email(for: "Hannah Kim")
+            XCTAssertNotNil(email.range(of: pattern, options: .regularExpression), email)
+            XCTAssertFalse(email.contains { $0.isNumber }, email)
+            seen.insert(email)
+        }
+        XCTAssertGreaterThan(seen.count, 60, "Emails repeat too often for simulators running together")
+        for name in QAPeople.names {
+            let email = QAPeople.email(for: name)
+            let domain = email.split(separator: "@").last.map(String.init) ?? ""
+            XCTAssertTrue(QAPeople.emailDomains.contains(domain), email)
+            XCTAssertFalse(QAScreenText.showsTestWording(email), email)
+        }
+    }
 }

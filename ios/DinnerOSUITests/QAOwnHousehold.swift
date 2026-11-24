@@ -32,12 +32,12 @@ struct QAOwnHousehold {
         -> QAOwnHousehold
     {
         let subject = QAPeople.subject()
+        let displayName = QAPeople.displayName(forSubject: subject)
         print("QA-OWN: \(prefix) signs in as \(subject)")
         let login = try await call(
             "POST", "auth/dev", token: nil,
             body: [
-                "subject": subject, "displayName": QAPeople.displayName(forSubject: subject),
-                "email": "\(subject)@example.com",
+                "subject": subject, "displayName": displayName, "email": QAPeople.email(for: displayName),
             ])
         let token = try XCTUnwrap(login["accessToken"] as? String, "The development sign-in gave no token")
         let timeZone = "America/Phoenix"

@@ -38,16 +38,38 @@ nonisolated enum PantryUsageFormat {
         return String(localized: "About \(percentText) left, about \(left)")
     }
 
-    /// The remaining amount rounded for a glance: "8 oz", "2.5 oz", "0.75 lb". An estimate
-    /// isn't exact, so "5.33 oz" would claim precision it doesn't have. `nil` when there is
-    /// no amount to show, or it would only repeat a bare count.
+    /// The remaining amount rounded for a glance: "8 oz", "2.5 oz", "0.75 lb", "7 cloves" (a
+    /// count is whole, at least 1). An estimate isn't exact, so "5.33 oz" would claim precision
+    /// it doesn't have. `nil` when there is no amount to show, or it would only repeat a bare
+    /// count.
     static func remainingGlance(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String? {
+        guard let (number, label) = glanceParts(estimate, locale: locale), !label.isEmpty else { return nil }
+        return "\(number) \(label)"
+    }
+
+    /// The amount a pantry row shows under the name: what's left by the estimate when there is
+    /// one in the item's own unit, so it's the one amount on the row ("7 cloves", "~88% left";
+    /// Hark's build 121 review: "8 cloves" sat above "~88% left (7 cloves)"). Otherwise the
+    /// amount the item was given.
+    static func rowAmount(_ item: PantryItem, locale: Locale = .autoupdatingCurrent) -> String? {
+        let recorded = PantryFormat.amount(item, locale: locale)
+        guard let estimate = item.estimate, estimate.unit == (item.unit ?? PantryUnit.defaultCode),
+            let (number, label) = glanceParts(estimate, locale: locale)
+        else { return recorded }
+        return label.isEmpty ? number : "\(number) \(label)"
+    }
+
+    /// The rounded remaining number and its unit label ("" for a bare count), or `nil` when
+    /// nothing is left or there's no unit.
+    private static func glanceParts(_ estimate: PantryEstimate, locale: Locale) -> (String, String)? {
         let value = estimate.remaining.quantityValue
         guard value > 0, !estimate.unit.isEmpty else { return nil }
-        let shown = glanceValue(value, start: estimate.startAmount.quantityValue, percent: estimate.percentRemaining)
+        let shown =
+            PantryPurchaseDraft.discreteUnits.contains(estimate.unit)
+            ? max(1, value.rounded())
+            : glanceValue(value, start: estimate.startAmount.quantityValue, percent: estimate.percentRemaining)
         let number = shown.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
-        let label = RecipeFormat.unitLabel(estimate.unit, sourceUnit: estimate.unit, plural: shown != 1)
-        return label.isEmpty ? nil : "\(number) \(label)"
+        return (number, RecipeFormat.unitLabel(estimate.unit, sourceUnit: estimate.unit, plural: shown != 1))
     }
 
     /// How far a percentage shown beside the amount may be from the amount's own share of the

@@ -39,9 +39,42 @@ final class AppSweepQATests: XCTestCase {
             checkScreen(app, "\(tab) (\(mode))")
             checkNothingMissing(app, tab: tab, mode: mode)
             visitRows(app, tab: tab, mode: mode)
+            if let row = Self.rowsToShow[tab] { snapRow(app, row, tab: tab, mode: mode) }
             if tab == "Household" { checkVersion(app, mode: mode) }
         }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+    }
+
+    /// A row on each of these tabs whose amount is checked in every config (Hark's build 121
+    /// review, item 18): Butter's percentage and amount on Pantry, the Cream Sauce Base's flour on
+    /// Shop. Below the first screen on a phone, so the sweep scrolls to them; every config keeps
+    /// the shot, so all have the same set.
+    static let rowsToShow = ["Pantry": "Butter", "Shop": "All-Purpose Flour"]
+
+    /// Brings `row` into view and keeps "Pantry › scrolled to Butter", in every config: a row
+    /// already in view on the tab (an iPad) is kept as it is, as the tab shot's allowed
+    /// look-alike (`QAShotCompare.allowedPairs`); one only partly in view is scrolled up.
+    @MainActor
+    private func snapRow(_ app: XCUIApplication, _ row: String, tab: String, mode: String) {
+        let text = app.staticTexts[row].firstMatch
+        if !Self.fullyInView(text, in: app) { reveal(text, in: app, maxSwipes: 12) }
+        guard text.exists, Self.fullyInView(text, in: app) else {
+            problems.append("\(tab) (\(mode)): no \(row) row in view to show")
+            return
+        }
+        let short = row.split(separator: " ").last.map(String.init) ?? row
+        snap(app, "\(tab) › scrolled to \(short) (\(mode))")
+    }
+
+    /// Whether `element` sits in the top 70% of the screen, clear of a pinned bottom bar and the
+    /// tab bar, with room under it for its amount lines.
+    @MainActor
+    private static func fullyInView(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        guard element.exists else { return false }
+        let frame = element.frame
+        let screen = app.frame
+        return !frame.isEmpty && frame.minY > screen.minY + screen.height * 0.08
+            && frame.maxY < screen.minY + screen.height * 0.7
     }
 
     /// Build 123 (Hark: "this cannot happen again"): content that should be there and isn't. On
@@ -59,6 +92,9 @@ final class AppSweepQATests: XCTestCase {
             problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)
             problems += MenuQAChecks.checkMealCardsLineUp(app, screen: screen)
             problems += MenuQAChecks.checkLoaded(app, screen: screen)
+            problems += MenuQAChecks.checkMealCountMatchesCards(app, screen: screen)
+            problems += MenuQAChecks.checkSuggestedCardWidths(app, screen: screen)
+            problems += MenuQAChecks.checkNewToYouHasNoMadeMeal(app, screen: screen)
             checkRecipePageLoaded(app, mode: mode)
         case "Shop", "Pantry":
             problems += MenuQAChecks.checkLoaded(app, screen: screen)
