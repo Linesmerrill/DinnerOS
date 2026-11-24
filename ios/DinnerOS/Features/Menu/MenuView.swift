@@ -14,6 +14,7 @@ struct MenuView: View {
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
     @Environment(MealSwapStore.self) private var swaps
+    @Environment(EventReporter.self) private var events
     @Environment(AuthSession.self) private var session
     /// Optional so previews needn't supply one.
     @Environment(PlusStore.self) private var plus: PlusStore?
@@ -446,6 +447,11 @@ struct MenuView: View {
         }
     }
 
+    /// The week's meals marked made, this device's answers included before they reach the server.
+    private var madeRecipeIDs: Set<String> {
+        Set((plans.plan?.entries ?? []).filter { events.outcome(for: $0) == .cooked }.map(\.recipe.id))
+    }
+
     @ViewBuilder
     private var sections: some View {
         switch menu.phase {
@@ -463,7 +469,9 @@ struct MenuView: View {
             .padding(.horizontal, DS.Space.l)
         case .loaded:
             // The server chooses the sections and their order; new ones need no change here.
-            ForEach(menu.menu?.sections ?? []) { section in
+            let made = madeRecipeIDs
+            ForEach((menu.menu?.sections ?? []).map { $0.droppingMade(made) }.filter { !$0.items.isEmpty }) {
+                section in
                 MenuSectionView(section: section, canAdd: canAddMeals && section.kind != .history)
             }
         }

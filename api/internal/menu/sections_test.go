@@ -308,3 +308,47 @@ func TestSidesShowEachNameOnce(t *testing.T) {
 		t.Errorf("sides = %v %q, want r01 then r04 under Sides & Add-Ons", ids, sides.Title)
 	}
 }
+
+// A meal marked made this week is no longer New to You, and one marked
+// "didn't make it" after all is new again (build 121 review round 2, Hark's
+// item 13: Chicken Penne al Limone showed Made and still sat in New to You).
+func TestNewToYouLeavesOutMadeMeals(t *testing.T) {
+	in := input(
+		newRecipe("r01", "Chicken Penne al Limone"),
+		newRecipe("r02", "Beef Stir-Fry Tacos"),
+		newRecipe("r03", "Sesame-Soy Pork Bowls"),
+	)
+	in.Plan = planning.Plan{
+		Week: current, Status: planning.StatusDraft, CreatedAt: time.Now(),
+		Entries: []planning.Entry{
+			{ID: "e1", RecipeID: "r01", Day: planning.Monday},
+			{ID: "e2", RecipeID: "r02", Day: planning.Tuesday},
+			{ID: "e3", RecipeID: "r03", Day: planning.Wednesday},
+		},
+	}
+	cooked := events.Event{
+		Type: events.TypeRecipeCooked, RecipeID: "r01", Week: current.String(),
+		OccurredAt: time.Now().Add(-time.Hour), Payload: events.RecipeCooked{EntryID: "e1"},
+	}
+	in.Cooked = stillCooked([]events.Event{cooked})
+	sec, ok := findSection(newSnapshot(in).sections(TimingCurrent), SectionNewToYou)
+	if !ok {
+		t.Fatal("no new_to_you section")
+	}
+	if slices.Contains(cardNames(sec.Cards), "Chicken Penne al Limone") {
+		t.Errorf("new_to_you = %v, has the meal marked made", cardNames(sec.Cards))
+	}
+	if want := []string{"Beef Stir-Fry Tacos", "Sesame-Soy Pork Bowls"}; !slices.Equal(slices.Sorted(slices.Values(cardNames(sec.Cards))), want) {
+		t.Errorf("new_to_you = %v, want %v", cardNames(sec.Cards), want)
+	}
+
+	skipped := events.Event{
+		Type: events.TypeRecipeSkipped, RecipeID: "r01", Week: current.String(),
+		OccurredAt: time.Now(), Payload: events.RecipeSkipped{EntryID: "e1"},
+	}
+	in.Cooked = stillCooked([]events.Event{cooked, skipped})
+	sec, _ = findSection(newSnapshot(in).sections(TimingCurrent), SectionNewToYou)
+	if !slices.Contains(cardNames(sec.Cards), "Chicken Penne al Limone") {
+		t.Errorf("new_to_you = %v, a meal taken back as not made should be new again", cardNames(sec.Cards))
+	}
+}
