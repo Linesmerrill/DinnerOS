@@ -51,7 +51,7 @@ struct RecipeDetailView: View {
     /// flush under the bar (it has its own).
     @State private var barFade: CGFloat = DS.Size.edgeFade
     /// The fade under the pinned picker: a row tall once rows scroll under it.
-    @State private var pickerFade: CGFloat = DS.Size.edgeFade
+    @State private var pickerFade: CGFloat = RecipeDetailHeader.sectionGap
     /// Where the section's fading rows are, so a page that stops with one part way into the
     /// picker's fade can move to show it whole.
     @State private var rowFrames = DSRowFrames(space: RecipeDetailHeader.contentSpace)
@@ -198,14 +198,15 @@ struct RecipeDetailView: View {
                             }
                             .stickyBelowTop(pinLine)
                             .zIndex(1)
-                        // Clear of the picker's fade, so the section's first row is whole once the
-                        // picker pins.
+                        // Right under the picker: a fade's height of room here left the Duo's
+                        // cover screen with nothing but blank space above the bottom bar (Hark's
+                        // review, build 123 item 4). The picker's fade at rest is that same room,
+                        // so the first row is whole once the picker pins.
                         sectionContent
                             .recipeColumn()
                             // Its rows fade out whole before they reach the pinned picker's edge.
-                            .environment(\.dsBarEdge, pinLine + pickerHeight)
+                            .environment(\.dsBarEdge, rowFadeEdge)
                             .environment(\.dsRowFrames, rowFrames)
-                            .padding(.top, DS.Size.edgeFade - DS.Space.xl)
                             // Once rows scroll up under the pinned picker, its fade grows to a row's
                             // height, so the top row is never cut by a hard edge (Hark's review,
                             // build 122 item 1c). Measured here: the picker's own frame moves with it
@@ -217,6 +218,7 @@ struct RecipeDetailView: View {
                                     sectionTop: top, pinLine: pinLine, pickerHeight: pickerHeight)
                                 if fade != pickerFade { pickerFade = fade }
                             }
+                            .padding(.top, RecipeDetailHeader.sectionGap - DS.Space.xl)
                         if let recipe, !recipe.steps.isEmpty {
                             CookingStepsSection(
                                 steps: recipe.steps, instructions: instructions,
@@ -272,7 +274,7 @@ struct RecipeDetailView: View {
             } else if !rowsSettled,
                 let shift = DSRowEdgeFade.restingShift(
                     rows: rowFrames.rows(scrolled: geometry.contentOffset.y + geometry.contentInsets.top),
-                    barEdge: pinLine + pickerHeight,
+                    barEdge: rowFadeEdge,
                     maxForward: reachable - geometry.contentOffset.y)
             {
                 // At rest no row sits part way into the picker's fade: it moves to show the row
@@ -282,9 +284,9 @@ struct RecipeDetailView: View {
                 withAnimation(.snappy) {
                     scrollPosition.scrollTo(y: geometry.contentOffset.y + geometry.contentInsets.top + shift)
                 }
-            } else if pickerFade != DS.Size.edgeFade {
+            } else if pickerFade != RecipeDetailHeader.sectionGap {
                 // At rest the fade is back to its resting height, clear of the first whole row.
-                withAnimation(.snappy) { pickerFade = DS.Size.edgeFade }
+                withAnimation(.snappy) { pickerFade = RecipeDetailHeader.sectionGap }
             }
         }
         .ignoresSafeArea(edges: .top)
@@ -519,7 +521,8 @@ struct RecipeDetailView: View {
 
     /// About 45% of the screen's height, from the width the screen gives us.
     private var heroHeight: CGFloat {
-        RecipeDetailHeader.heroHeight(width: heroWidth, isWide: isWideScreen, pageHeight: pageHeight)
+        RecipeDetailHeader.heroHeight(
+            width: heroWidth, isWide: isWideScreen, pageHeight: pageHeight, stackedBar: hasSideColumn)
     }
 
     /// An iPad, or a phone on its side: the photo stops at `DS.Size.heroMaxHeight`.
@@ -535,6 +538,11 @@ struct RecipeDetailView: View {
     /// Where the picker pins: under the bar and its one-line title.
     private var pinLine: CGFloat {
         barBottom + compactTitleHeight
+    }
+
+    /// Where the section's rows fade out under the pinned picker.
+    private var rowFadeEdge: CGFloat {
+        RecipeDetailHeader.rowFadeEdge(pinLine: pinLine, pickerHeight: pickerHeight)
     }
 
     /// Where the large title starts to go under the bar: the bar's edge and its fade.
@@ -953,6 +961,9 @@ struct RecipeDetailTabPicker: View {
 
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 32
 
+    /// Room between a tab's name and its pill's edge.
+    static let labelPadding: CGFloat = DS.Space.s
+
     var body: some View {
         HStack(spacing: DS.Space.hairline) {
             ForEach(tabs) { tab in
@@ -965,6 +976,8 @@ struct RecipeDetailTabPicker: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .foregroundStyle(Color.primary)
+                        // Clear of the selected pill's rounded ends (Hark's review, build 123).
+                        .padding(.horizontal, RecipeDetailTabPicker.labelPadding)
                         .frame(maxWidth: .infinity, minHeight: height)
                         .background {
                             if isSelected {
@@ -1239,11 +1252,23 @@ enum RecipeDetailHeader {
         min(max(pickerTop - pinLine, 0), DS.Size.edgeFade)
     }
 
-    /// The fade under the pinned picker, from where the section under it (`sectionTop`, a stack
-    /// spacing below the picker when nothing has scrolled under it) is now: the content's inset
-    /// at rest, a row once rows scroll under (`DSEdgeFade.height(scrolledUnder:)`).
+    /// The room between the picker and the section under it: the section starts right under the
+    /// picker's own padding (Hark's review, build 123 item 4).
+    nonisolated static let sectionGap: CGFloat = DS.Space.s
+
+    /// The fade under the pinned picker, from where the section under it (`sectionTop`,
+    /// `sectionGap` below the picker when nothing has scrolled under it) is now: that gap at
+    /// rest, so it never covers the first row, growing to a row's height
+    /// (`DS.Size.rowEdgeFade`) once rows scroll under.
     nonisolated static func pickerFade(sectionTop: CGFloat, pinLine: CGFloat, pickerHeight: CGFloat) -> CGFloat {
-        DSEdgeFade.height(scrolledUnder: pinLine + pickerHeight + DS.Space.xl - sectionTop)
+        let scrolledUnder = pinLine + pickerHeight + sectionGap - sectionTop
+        return min(sectionGap + max(scrolledUnder, 0), DS.Size.rowEdgeFade)
+    }
+
+    /// The edge the section's rows fade out at (`dsBarEdge`), placed so a row resting `sectionGap`
+    /// under the pinned picker is whole and one gone under the picker's own padding is gone.
+    nonisolated static func rowFadeEdge(pinLine: CGFloat, pickerHeight: CGFloat) -> CGFloat {
+        pinLine + pickerHeight + sectionGap - DS.Size.edgeFade
     }
 
     /// The scroll offsets between "the large title sits whole just under the bar" and "the
@@ -1310,14 +1335,24 @@ enum RecipeDetailHeader {
     ///
     /// On a short screen it also stays within `heroPageShare` of the page's `pageHeight`, so the
     /// recipe's name isn't left under the bottom bar when the page opens (build 122).
-    static func heroHeight(width: CGFloat, isWide: Bool, pageHeight: CGFloat = 0) -> CGFloat {
-        var natural = max(240, min(width * 1.1, 420))
-        if pageHeight > 0 { natural = max(240, min(natural, pageHeight * heroPageShare)) }
+    ///
+    /// Under a two-row bottom bar (`stackedBar`, the Duo's cover screen) it takes less again, so
+    /// the open tab's first lines show above the bar's fade (Hark's review, build 123 item 4).
+    static func heroHeight(width: CGFloat, isWide: Bool, pageHeight: CGFloat = 0, stackedBar: Bool = false)
+        -> CGFloat
+    {
+        let floor = stackedBar ? stackedBarMinHero : 240
+        let share = stackedBar ? stackedBarPageShare : heroPageShare
+        var natural = max(floor, min(width * 1.1, 420))
+        if pageHeight > 0 { natural = max(floor, min(natural, pageHeight * share)) }
         return isWide ? min(natural, DS.Size.heroMaxHeight) : natural
     }
 
     /// The most of the page's height the photo takes on a phone.
     static let heroPageShare: CGFloat = 0.45
+    /// The same under a two-row bottom bar, and the least it gets there.
+    static let stackedBarPageShare: CGFloat = 0.35
+    static let stackedBarMinHero: CGFloat = 160
 
     /// Shows once the page is scrolled close to the end of the header, and hides again only
     /// after scrolling 40 points back, so it can't flicker at the line.

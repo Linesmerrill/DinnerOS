@@ -277,6 +277,19 @@ struct RecipePageLayoutTests {
         #expect(CatalogRecipeHeader.showsBarTitle(titleBottom: 90, barBottom: 100))
     }
 
+    /// The shared recipe page's photo is as wide as the text under it: 4:3 on a phone, cropped
+    /// to `DS.Size.heroMaxHeight` on iPad rather than narrowed (Hark's review, build 123 item 9).
+    @Test func theStarterPhotoSpansTheTextColumn() {
+        #expect(CatalogRecipeHeader.photoHeight(width: 360) == 270)
+        #expect(CatalogRecipeHeader.photoHeight(width: 640) == DS.Size.heroMaxHeight)
+        #expect(CatalogRecipeHeader.photoHeight(width: 0) == 0)
+    }
+
+    /// The recipe page's tab names keep clear of the selected pill's rounded ends.
+    @Test func tabNamesHaveRoomInsideTheirPill() {
+        #expect(RecipeDetailTabPicker.labelPadding >= DS.Space.s)
+    }
+
     @Test func stepGroupsAreNamedForWhatToDo() {
         #expect(CookStepGroupTitle.text(0) == "Have Ready")
         #expect(CookStepGroupTitle.text(2) == "Step 2")

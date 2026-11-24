@@ -52,6 +52,19 @@ struct RecipeHeaderEdgeTests {
         #expect(RecipeDetailHeader.heroHeight(width: 375, isWide: false, pageHeight: 300) == 240)
     }
 
+    /// Under the Duo cover screen's two-row bottom bar the photo takes less of the page, so the
+    /// open tab's first lines show above the bar's fade (Hark's review, build 123 item 4).
+    @Test func thePhotoIsShorterAboveATwoRowBar() {
+        let usual = RecipeDetailHeader.heroHeight(width: 375, isWide: false, pageHeight: 520)
+        let stacked = RecipeDetailHeader.heroHeight(width: 375, isWide: false, pageHeight: 520, stackedBar: true)
+        #expect(usual == 240)
+        #expect(stacked == 520 * RecipeDetailHeader.stackedBarPageShare)
+        #expect(usual - stacked >= 50)
+        #expect(
+            RecipeDetailHeader.heroHeight(width: 375, isWide: false, pageHeight: 200, stackedBar: true)
+                == RecipeDetailHeader.stackedBarMinHero)
+    }
+
     // MARK: The fade under the bar
 
     @Test func theBarFadeShrinksAsThePickerComesUpToPin() {
@@ -72,20 +85,50 @@ struct RecipeHeaderEdgeTests {
         #expect(DS.Size.rowEdgeFade > DS.Size.edgeFade)
     }
 
-    /// The picker's fade: its usual height while the section sits where it lays out under the
-    /// picker (a stack spacing below it), a row once the section has scrolled up under it.
+    /// The picker's fade: the gap to the section while the section sits where it lays out under
+    /// the picker, growing to a row once the section has scrolled up under it.
     @Test func thePickerFadeGrowsOnceRowsScrollUnderIt() {
-        let resting = 100 + 40 + DS.Space.xl
-        #expect(
-            RecipeDetailHeader.pickerFade(sectionTop: resting + 300, pinLine: 100, pickerHeight: 40) == DS.Size.edgeFade
-        )
-        #expect(RecipeDetailHeader.pickerFade(sectionTop: resting, pinLine: 100, pickerHeight: 40) == DS.Size.edgeFade)
-        #expect(
-            RecipeDetailHeader.pickerFade(sectionTop: resting - 10, pinLine: 100, pickerHeight: 40)
-                == DS.Size.edgeFade + 10)
+        let gap = RecipeDetailHeader.sectionGap
+        let resting = 100 + 40 + gap
+        #expect(RecipeDetailHeader.pickerFade(sectionTop: resting + 300, pinLine: 100, pickerHeight: 40) == gap)
+        #expect(RecipeDetailHeader.pickerFade(sectionTop: resting, pinLine: 100, pickerHeight: 40) == gap)
+        #expect(RecipeDetailHeader.pickerFade(sectionTop: resting - 10, pinLine: 100, pickerHeight: 40) == gap + 10)
         #expect(
             RecipeDetailHeader.pickerFade(sectionTop: resting - 400, pinLine: 100, pickerHeight: 40)
                 == DS.Size.rowEdgeFade)
+    }
+
+    // MARK: The section starts right under the picker (build 123 item 4)
+
+    /// A fade's height of room under the picker left the Duo's cover screen blank above the
+    /// bottom bar: the section now starts a small gap under it, inside the picker's own padding.
+    @Test func theSectionStartsRightUnderThePicker() {
+        #expect(RecipeDetailHeader.sectionGap < DS.Size.edgeFade)
+        #expect(RecipeDetailHeader.sectionGap <= DS.Space.s)
+    }
+
+    /// The picker's fade at rest never reaches the first row, and that row is whole: it rests at
+    /// full opacity a gap under the pinned picker and is gone before it slides far under it.
+    @Test func theFirstRowIsWholeUnderThePinnedPicker() {
+        let pinLine: CGFloat = 100
+        let pickerHeight: CGFloat = 52
+        let resting = pinLine + pickerHeight + RecipeDetailHeader.sectionGap
+        let edge = RecipeDetailHeader.rowFadeEdge(pinLine: pinLine, pickerHeight: pickerHeight)
+        let fade = RecipeDetailHeader.pickerFade(sectionTop: resting, pinLine: pinLine, pickerHeight: pickerHeight)
+        #expect(fade <= resting - pinLine - pickerHeight)
+        #expect(DSRowEdgeFade.opacity(top: resting, height: 40, barEdge: edge) == 1)
+        #expect(DSRowEdgeFade.opacity(top: resting - 1, height: 40, barEdge: edge) < 1)
+        // A page at rest with its first row there isn't moved to show it whole; one a few points
+        // under moves back to there.
+        #expect(DSRowEdgeFade.restingShift(rows: [(resting, 40), (resting + 52, 40)], barEdge: edge) == nil)
+        #expect(DSRowEdgeFade.restingShift(rows: [(resting - 4, 40), (resting + 48, 40)], barEdge: edge) == -4)
+        // Already fading when it reaches the picker's edge (where the picker's own fade has grown
+        // over it), and gone a fade's height less the gap under it.
+        #expect(DSRowEdgeFade.opacity(top: pinLine + pickerHeight, height: 40, barEdge: edge) < 1)
+        #expect(
+            DSRowEdgeFade.opacity(
+                top: pinLine + pickerHeight - (DS.Size.edgeFade - RecipeDetailHeader.sectionGap), height: 40,
+                barEdge: edge) == 0)
     }
 
     // MARK: Rows fade out whole at a pinned bar (build 122 round 5)
