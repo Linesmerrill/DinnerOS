@@ -46,6 +46,8 @@ struct RecipeDetailView: View {
     /// The large title's and the tab picker's tops in the page's content, for the scroll's snap
     /// points (`RecipeHeaderSnap`).
     @State private var titleContentTop: CGFloat = 0
+    /// The large title's top on screen now (the scroll view's coordinates), for the bar's fade.
+    @State private var titleVisibleTop: CGFloat = .infinity
     @State private var pickerContentTop: CGFloat = 0
     /// The fade under the bar: full while the picker is far below it, none once the picker pins
     /// flush under the bar (it has its own).
@@ -57,6 +59,9 @@ struct RecipeDetailView: View {
     @State private var rowFrames = DSRowFrames(space: RecipeDetailHeader.contentSpace)
     /// The page has moved once to show a half-faded row whole since it was last touched.
     @State private var rowsSettled = false
+    /// Where the page is scrolled to now, read when the tab changes (a plain box, so scrolling
+    /// never redraws the page for it).
+    @State private var scrollState = RecipeScrollState()
     @State private var pickerHeight: CGFloat = 0
     /// The scroll view's own top safe area: where the bar ends.
     @State private var scrollTop: CGFloat = 0
@@ -154,7 +159,8 @@ struct RecipeDetailView: View {
                             RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
                         } action: { anchor in
                             if titleContentTop != anchor.content { titleContentTop = anchor.content }
-                            let shows = anchor.visible < titleLine
+                            if titleVisibleTop != anchor.visible { titleVisibleTop = anchor.visible }
+                            let shows = anchor.visible < titleLine - 0.5
                             if shows != showsCompactTitle { showsCompactTitle = shows }
                         }
                         .padding(.top, DS.Space.l)
@@ -188,7 +194,8 @@ struct RecipeDetailView: View {
                             .onGeometryChange(for: RecipeDetailHeader.Anchor.self) { proxy in
                                 RecipeDetailHeader.Anchor(proxy, in: RecipeDetailHeader.contentSpace)
                             } action: { anchor in
-                                let fade = RecipeDetailHeader.barFade(pickerTop: anchor.visible, pinLine: pinLine)
+                                let fade = RecipeDetailHeader.barFade(
+                                    pickerTop: anchor.visible, pinLine: pinLine, titleTop: titleVisibleTop)
                                 if fade != barFade { barFade = fade }
                             }
                             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -196,6 +203,7 @@ struct RecipeDetailView: View {
                             } action: { height in
                                 if height != pickerHeight { pickerHeight = height }
                             }
+                            .qaCover(pinnedAt: pinLine, fade: pickerFade)
                             .stickyBelowTop(pinLine)
                             .zIndex(1)
                         // Right under the picker: a fade's height of room here left the Duo's
@@ -270,19 +278,21 @@ struct RecipeDetailView: View {
             if let target = RecipeDetailHeader.settle(
                 offset: geometry.contentOffset.y, zone: snapZone, reachable: reachable)
             {
-                withAnimation(.snappy) { scrollPosition.scrollTo(y: target) }
+                withAnimation(.snappy) { scrollPosition.dsScroll(toY: target) }
             } else if !rowsSettled,
                 let shift = DSRowEdgeFade.restingShift(
                     rows: rowFrames.rows(scrolled: geometry.contentOffset.y + geometry.contentInsets.top),
                     barEdge: rowFadeEdge,
-                    maxForward: reachable - geometry.contentOffset.y)
+                    maxForward: reachable - geometry.contentOffset.y),
+                let shift = RecipeDetailHeader.keepingPinned(
+                    shift, offset: geometry.contentOffset.y, zone: snapZone)
             {
                 // At rest no row sits part way into the picker's fade: it moves to show the row
                 // whole (Hark's review, build 122 round 5: the Allergens line rested at 1.5:1).
                 // Once a scroll, also after the snap above has moved it.
                 rowsSettled = true
                 withAnimation(.snappy) {
-                    scrollPosition.scrollTo(y: geometry.contentOffset.y + geometry.contentInsets.top + shift)
+                    scrollPosition.dsScroll(toY: geometry.contentOffset.y + geometry.contentInsets.top + shift)
                 }
             } else if pickerFade != RecipeDetailHeader.sectionGap {
                 // At rest the fade is back to its resting height, clear of the first whole row.
@@ -345,6 +355,7 @@ struct RecipeDetailView: View {
                         .accessibilityHidden(!showsCompactTitle)
                 }
                 .background(DS.Colors.barBackground)
+                .qaCover(.bar)
                 // The large title and the rows under it fade out at the bar's edge, never cut.
                 .dsEdgeFade(.bottom, height: barFade)
                 .ignoresSafeArea(edges: .top)
@@ -358,10 +369,16 @@ struct RecipeDetailView: View {
         .onScrollGeometryChange(for: RecipeDetailHeader.Scroll.self) { geometry in
             RecipeDetailHeader.Scroll(
                 offset: geometry.contentOffset.y, top: geometry.contentInsets.top,
-                visibleHeight: geometry.containerSize.height - geometry.contentInsets.bottom,
+                // The whole container: on iOS 27 it already leaves out the bottom bar and the tab
+                // bar, and taking the inset off again left a short tab 165 points short of
+                // pinning its picker on a large iPhone, resting with "No ratings yet" half under
+                // the bar (Hark's review, build 121 round 2). Where it doesn't, a short tab only
+                // gets a little more room at its end.
+                visibleHeight: geometry.containerSize.height,
                 bottom: geometry.contentInsets.bottom)
         } action: { _, scroll in
             let offset = scroll.offset
+            scrollState.offset = offset
             if pinTop != scroll.top { pinTop = scroll.top }
             if visibleHeight != scroll.visibleHeight { visibleHeight = scroll.visibleHeight }
             if bottomInset != scroll.bottom { bottomInset = scroll.bottom }
@@ -417,6 +434,15 @@ struct RecipeDetailView: View {
         // Over the bottom bar too, so a tap anywhere outside the menu closes it.
         .dsMenuPopover(isPresented: $showsMore, anchor: moreAnchor, items: moreItems)
         .onChange(of: showsCooking) { if showsCooking { showsMore = false } }
+        // Another tab picked while the picker is pinned starts at its top, right under the
+        // picker: it opened wherever the last tab had been scrolled to, its heading under the
+        // picker and its first row half faded (Hark's review, build 121 round 2: Calories on the
+        // Duo, Serves 2 on Ingredients).
+        .onChange(of: shownTab) {
+            guard let target = RecipeDetailHeader.tabStart(offset: scrollState.offset, zone: snapZone) else { return }
+            rowsSettled = true
+            scrollPosition.dsScroll(toY: target)
+        }
         .recipeDeletion($deleting, isPlanned: { _ in !plannedEntries.isEmpty }) { dismiss() }
         .fullScreenCover(isPresented: $showsCooking) {
             CookingView(start: cookMeal, meals: weekMeals)
@@ -545,9 +571,10 @@ struct RecipeDetailView: View {
         RecipeDetailHeader.rowFadeEdge(pinLine: pinLine, pickerHeight: pickerHeight)
     }
 
-    /// Where the large title starts to go under the bar: the bar's edge and its fade.
+    /// Where the large title starts to go under the bar: the room above it (the photo's gap)
+    /// below the bar's edge. Past that the one-line title shows in the bar.
     private var titleLine: CGFloat {
-        pinLine + DS.Size.edgeFade
+        pinLine + RecipeDetailHeader.titleGap
     }
 
     /// iPhone Duo's cover screen: the bar's buttons and the clock sit in a column beside the
@@ -566,7 +593,7 @@ struct RecipeDetailView: View {
     /// (`RecipeHeaderSnap`).
     private var snapZone: ClosedRange<CGFloat>? {
         RecipeDetailHeader.snapZone(
-            titleTop: titleContentTop, pickerTop: pickerContentTop, pinLine: pinLine, fade: DS.Size.edgeFade)
+            titleTop: titleContentTop, pickerTop: pickerContentTop, pinLine: pinLine, fade: RecipeDetailHeader.titleGap)
     }
 
     /// The least height for the picker and the sections under it (`RecipeDetailHeader.sectionsMinHeight`).
@@ -960,9 +987,30 @@ struct RecipeDetailTabPicker: View {
     var fadeHeight: CGFloat = DS.Size.edgeFade
 
     @ScaledMetric(relativeTo: .subheadline) private var height: CGFloat = 32
+    /// Each tab's name at full size, set in the selected tab's heavier weight (the wider one), so
+    /// the shared scale doesn't change as the selection moves.
+    @State private var labelWidths: [RecipeDetailTab: CGFloat] = [:]
+    /// The width each tab gets: the row shares its width equally.
+    @State private var segmentWidth: CGFloat = 0
 
     /// Room between a tab's name and its pill's edge.
     static let labelPadding: CGFloat = DS.Space.s
+    /// The smallest the names shrink to before they'd be cut.
+    static let minimumLabelScale: CGFloat = 0.6
+
+    /// One scale for every tab's name, so they all shrink together and read as one size: each
+    /// name shrank on its own before, and a short one ("Nutrition") stayed bigger than the rest
+    /// on a small phone (Hark's review, build 121 round 2). The scale that fits the widest name
+    /// in its tab, never above full size.
+    nonisolated static func sharedScale(labelWidths: [CGFloat], segmentWidth: CGFloat) -> CGFloat {
+        let room = segmentWidth - 2 * labelPadding
+        guard room > 0, let widest = labelWidths.max(), widest > room else { return 1 }
+        return max(room / widest, minimumLabelScale)
+    }
+
+    private var labelScale: CGFloat {
+        Self.sharedScale(labelWidths: tabs.compactMap { labelWidths[$0] }, segmentWidth: segmentWidth)
+    }
 
     var body: some View {
         HStack(spacing: DS.Space.hairline) {
@@ -974,11 +1022,32 @@ struct RecipeDetailTabPicker: View {
                     Text(tab.title)
                         .font(DS.Typography.subheadline.weight(isSelected ? .semibold : .regular))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        // Its full width, shrunk by the one scale all the names share.
+                        .fixedSize()
+                        .scaleEffect(labelScale)
                         .foregroundStyle(Color.primary)
                         // Clear of the selected pill's rounded ends (Hark's review, build 123).
                         .padding(.horizontal, RecipeDetailTabPicker.labelPadding)
-                        .frame(maxWidth: .infinity, minHeight: height)
+                        // Every tab the same width, whatever its name's full width.
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: height)
+                        .background {
+                            // The name's full width in the heavier weight, measured unseen.
+                            Text(tab.title)
+                                .font(DS.Typography.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                                .fixedSize()
+                                .hidden()
+                                .onGeometryChange(for: CGFloat.self) { proxy in
+                                    proxy.size.width
+                                } action: { width in
+                                    if labelWidths[tab] != width { labelWidths[tab] = width }
+                                }
+                        }
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.width
+                        } action: { width in
+                            if tab == tabs.first, segmentWidth != width { segmentWidth = width }
+                        }
                         .background {
                             if isSelected {
                                 Capsule().fill(DS.Colors.background)
@@ -999,8 +1068,9 @@ struct RecipeDetailTabPicker: View {
         .padding(.vertical, DS.Space.sm)
         .frame(maxWidth: .infinity)
         .background(DS.Colors.barBackground)
-        // Rows fade out under the pinned picker instead of being cut by a hard line.
-        .dsEdgeFade(.bottom, height: fadeHeight)
+        // Rows fade out under the pinned picker instead of being cut by a hard line. The page
+        // reports the picker and this fade to the UI tests where it pins (`qaCover(pinnedAt:)`).
+        .dsEdgeFade(.bottom, height: fadeHeight, reportsCover: false)
     }
 }
 
@@ -1208,6 +1278,12 @@ private struct ViewedKey: Equatable {
     .environment(\.dynamicTypeSize, .accessibility2)
 }
 
+/// Where the recipe page is scrolled to, kept outside SwiftUI's state so reading it as the page
+/// scrolls redraws nothing.
+@MainActor final class RecipeScrollState {
+    var offset: CGFloat = 0
+}
+
 /// When the recipe page's navigation bar shows over the header photo.
 enum RecipeDetailHeader {
     /// What the page reads from its scroll view: how far it's scrolled, and how far down the bar
@@ -1216,7 +1292,7 @@ enum RecipeDetailHeader {
     struct Scroll: Equatable {
         var offset: CGFloat
         var top: CGFloat
-        /// The scroll view's height less its bottom inset (the bottom bar).
+        /// What the page shows at once, at most: the scroll view's container height.
         var visibleHeight: CGFloat = 0
         var bottom: CGFloat = 0
     }
@@ -1248,8 +1324,38 @@ enum RecipeDetailHeader {
 
     /// The fade under the bar: the room between the bar's edge and the picker, up to
     /// `DS.Size.edgeFade`, so it never draws over the picker as the picker comes up to pin.
-    static func barFade(pickerTop: CGFloat, pinLine: CGFloat) -> CGFloat {
-        min(max(pickerTop - pinLine, 0), DS.Size.edgeFade)
+    ///
+    /// Near the large title (`titleTop`, on screen) it's no taller than the title's distance
+    /// from the bar's edge either way: resting whole just under the bar, the title keeps the
+    /// photo's gap clear above it and the photo is wholly under the bar. A fade the full height
+    /// there showed a strip of the photo through it between the bar and the title on the Duo
+    /// (Hark's review, build 121 round 2). As the title goes under the bar the fade grows again.
+    static func barFade(pickerTop: CGFloat, pinLine: CGFloat, titleTop: CGFloat = .infinity) -> CGFloat {
+        min(max(pickerTop - pinLine, 0), DS.Size.edgeFade, abs(titleTop - pinLine))
+    }
+
+    /// Where a newly picked tab starts: with the picker just pinned (the zone's end) when the
+    /// page was scrolled past that, so the tab's first row shows whole under it. `nil` when the
+    /// picker isn't pinned: the page stays put.
+    nonisolated static func tabStart(offset: CGFloat, zone: ClosedRange<CGFloat>?) -> CGFloat? {
+        guard let zone, offset > zone.upperBound + 0.5 else { return nil }
+        return zone.upperBound
+    }
+
+    /// The room between the photo and the large title (the title's top padding): where the
+    /// title rests just under the bar, so the photo ends right at the bar's edge.
+    nonisolated static let titleGap: CGFloat = DS.Space.l
+
+    /// A resting move (`DSRowEdgeFade.restingShift`) that never takes a page whose picker has
+    /// pinned (`offset` at or past the zone's end) back to where the picker comes loose: the
+    /// page moved back past it and rested with the large title's last line under the bar
+    /// (Hark's review, build 121 round 2). `nil` when nothing is left to move.
+    nonisolated static func keepingPinned(_ shift: CGFloat, offset: CGFloat, zone: ClosedRange<CGFloat>?)
+        -> CGFloat?
+    {
+        guard let zone, offset >= zone.upperBound - 0.5 else { return shift }
+        let kept = max(offset + shift, zone.upperBound) - offset
+        return abs(kept) > 0.5 ? kept : nil
     }
 
     /// The room between the picker and the section under it: the section starts right under the
