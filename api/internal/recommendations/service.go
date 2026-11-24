@@ -569,7 +569,7 @@ func (s *Service) Proposal(ctx context.Context, householdID, week string) (Propo
 	if err != nil {
 		return Proposal{}, err
 	}
-	return s.withoutPastDays(ctx, w, s.withoutRemovedRecipes(ctx, p)), nil
+	return s.current(ctx, w, p), nil
 }
 
 // upcomingPlanDays narrows the days Autopilot may plan (every day when none
@@ -659,6 +659,8 @@ func (s *Service) withoutRemovedRecipes(ctx context.Context, p Proposal) Proposa
 func (s *Service) pending(ctx context.Context, householdID string, w planning.Week, version int64) (Proposal, error) {
 	p, err := s.store.GetProposal(ctx, householdID, w.String())
 	if err == nil {
+		// Not `current`: Accept reports a meal planned since as already
+		// planned, rather than quietly dropping it.
 		p = s.withoutPastDays(ctx, w, s.withoutRemovedRecipes(ctx, p))
 	}
 	switch {
