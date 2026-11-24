@@ -208,11 +208,10 @@ enum CookingQAChecks {
             // that looked the same after one drag once left Lemon Wedges cut off at the bottom
             // (Hark's review, build 121 round 2, item 5).
             if stopped && lastWhole { break }
-            // A third of the screen at a time, held at the end so the list doesn't coast on: each
-            // row then rests clear of the bar on some screen, even on the Duo's short one.
-            let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.75))
-            let to = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.42))
-            from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
+            // As far as every row still rests whole clear of the bar on some screen, held at the
+            // end so the list doesn't coast on: on an iPad twice the third of a screen this once
+            // was, which ran the test past its 10 minutes (build 121 round 2).
+            drag(app, column: column, by: step(bar: bar, screen: screenFrame))
             sleep(1)
         }
         for label in blank.sorted() {
@@ -244,18 +243,34 @@ enum CookingQAChecks {
                 let distance = min(target - endLast, screenFrame.height * 0.45)
                 let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.4))
                 let to = from.withOffset(CGVector(dx: 0, dy: distance))
-                from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
+                from.press(forDuration: 0.05, thenDragTo: to, withVelocity: dragSpeed, thenHoldForDuration: 0.3)
                 sleep(1)
                 middle(capture())
-                for _ in 0..<4 {
-                    let start = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.75))
-                    let end = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.3))
-                    start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+                for _ in 0..<2 {
+                    drag(app, column: column, by: max(distance, screenFrame.height * 0.3))
                     sleep(1)
                 }
             }
         }
         return problems
+    }
+
+    /// How fast the list is dragged: quicker than `.slow`, and held at the end so it doesn't coast.
+    static let dragSpeed = XCUIGestureVelocity(1000)
+
+    /// How far one drag moves the list: the space where a row is checked (under the bar's fade,
+    /// above the bottom's) less a tall row, so each row rests whole in it on some screen.
+    static func step(bar: CGFloat, screen: CGRect) -> CGFloat {
+        let window = screen.maxY - fadeRoom - 60 - (bar + fadeRoom)
+        return min(max(window - 2 * 56, screen.height * 0.25), screen.height * 0.55)
+    }
+
+    /// Drags the list up by `distance` points from low on the screen, held at the end.
+    @MainActor
+    static func drag(_ app: XCUIApplication, column: CGFloat, by distance: CGFloat) {
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.8))
+        let to = from.withOffset(CGVector(dx: 0, dy: -distance))
+        from.press(forDuration: 0.05, thenDragTo: to, withVelocity: dragSpeed, thenHoldForDuration: 0.3)
     }
 
     /// The headings resting in the band under the bar (where the list's first row rests) but not
