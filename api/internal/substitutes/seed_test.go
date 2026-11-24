@@ -143,7 +143,8 @@ func TestEmbeddedSeed(t *testing.T) {
 			switch o.Type {
 			case TypeStoreAlternative:
 				// Packet counts and the recipe's usual units convert to Per.
-				// A packet sized only by weight is measured in oz, not spoons.
+				// A packet sized only by weight is measured in oz, not spoons;
+				// one sized both ways converts either through the packet.
 				kinds := map[ingredients.Kind]bool{}
 				for _, size := range sp.UnitSizes {
 					kinds[unitKind(size.Unit)] = true
@@ -151,7 +152,7 @@ func TestEmbeddedSeed(t *testing.T) {
 				for _, from := range append([]string{"tsp", "tbsp", "oz"}, sp.UnitSizes[0].Per) {
 					if u, _ := ingredients.LookupUnit(from); !u.Discrete() {
 						per, _ := ingredients.LookupUnit(o.Per.Unit)
-						if per.Kind != u.Kind && !(per.Discrete() && kinds[u.Kind]) {
+						if per.Kind != u.Kind && !kinds[u.Kind] {
 							continue
 						}
 					}
@@ -316,6 +317,37 @@ func TestSeedTexMexPasteIsOneTeaspoonOfBasePerPacket(t *testing.T) {
 		return
 	}
 	t.Fatal("no tex-mex-paste in the seed")
+}
+
+// Recipes weigh these sauces ("4 ounce" of Cream Sauce Base) while their
+// store options are measured in spoons, so each packet is sized both ways and
+// an amount in oz scales the option (Hark's review, build 123: the sauce's
+// milk and flour had no amount on Shop).
+func TestSeedSaucesRecipesWeighConvertToSpoons(t *testing.T) {
+	seed, err := LoadSeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"cream-sauce-base": "8", "sweet-thai-chili-sauce": "8", "bulgogi-sauce": "8"}
+	for _, sp := range seed.Specialties {
+		perTbsp, ok := want[sp.ID]
+		if !ok {
+			continue
+		}
+		delete(want, sp.ID)
+		o := sp.Options[0]
+		if o.Type != TypeStoreAlternative || o.Per == nil || o.Per.Unit != "tbsp" {
+			t.Errorf("%s: first option %s isn't a store alternative per tbsp", sp.ID, o.ID)
+			continue
+		}
+		got, ok := grocery.ConvertMeasure(ingredients.NewQuantity(4, 1).Rat(), "oz", "tbsp", toGrocerySizes(t, sp.UnitSizes))
+		if !ok || got.Cmp(quantity(t, perTbsp)) != 0 {
+			t.Errorf("%s: 4 oz = %v tbsp (%v), want %s", sp.ID, got, ok, perTbsp)
+		}
+	}
+	for id := range want {
+		t.Errorf("seed is missing %s", id)
+	}
 }
 
 func quantity(t *testing.T, s string) *big.Rat {

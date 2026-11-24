@@ -477,8 +477,9 @@ func (b *batchAcc) plan() BatchPlan {
 // sizes for discrete units: with "1 count = 2 tsp", 3 count is 2 tbsp and
 // 1 tbsp is 3/2 count. A discrete unit may carry one size per kind ("1 count
 // = 1 oz" and "1 count = 2 tbsp"), so a packet a recipe measures in either
-// weight or volume converts; weight and volume never convert to each other
-// directly. ok is false when no exact conversion exists.
+// weight or volume converts, and so do weight and volume through that packet
+// (1 oz is 2 tbsp there). They never convert to each other directly. ok is
+// false when no exact conversion exists.
 func ConvertMeasure(q *big.Rat, from, to string, sizes []UnitSize) (*big.Rat, bool) {
 	if from == to {
 		return new(big.Rat).Set(q), true
@@ -502,6 +503,28 @@ func ConvertMeasure(q *big.Rat, from, to string, sizes []UnitSize) (*big.Rat, bo
 	for _, size := range sizes {
 		if su, err := ingredients.LookupUnit(size.SizeUnit); fu.Discrete() && size.Unit == from && err == nil && !su.Discrete() {
 			sources = append(sources, measured{new(big.Rat).Mul(q, size.Quantity.Rat()), su})
+		}
+	}
+	// Through the packet: with "1 count = 3/2 oz" and "1 count = 3 tbsp",
+	// 3 oz is 2 packets, so 6 tbsp. A recipe that weighs a sauce then still
+	// converts to an option measured in spoons (Hark's review, build 123:
+	// Cream Sauce Base in oz left its milk and flour without amounts).
+	direct := len(sources)
+	for _, src := range sources[:direct] {
+		for _, in := range sizes {
+			iu, err := ingredients.LookupUnit(in.SizeUnit)
+			if err != nil || iu.Discrete() || in.Quantity.IsZero() || in.Unit == from || !src.unit.CanConvertTo(iu) {
+				continue
+			}
+			packets := scaleUnit(src.amount, src.unit, iu)
+			packets.Quo(packets, in.Quantity.Rat())
+			for _, out := range sizes {
+				ou, err := ingredients.LookupUnit(out.SizeUnit)
+				if err != nil || ou.Discrete() || out.Unit != in.Unit || src.unit.CanConvertTo(ou) {
+					continue
+				}
+				sources = append(sources, measured{new(big.Rat).Mul(packets, out.Quantity.Rat()), ou})
+			}
 		}
 	}
 	for _, src := range sources {

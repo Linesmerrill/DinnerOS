@@ -32,7 +32,7 @@ func TestConvertMeasure(t *testing.T) {
 		{"2", "package", "g", "56.69904625"},
 		{"1", "package", "count", ""}, // oz can't become tsp
 		{"1", "can", "tbsp", ""},      // no size for cans
-		{"1", "tbsp", "oz", ""},       // volume never becomes weight
+		{"1", "tbsp", "oz", ""},       // no packet sized both ways, so volume never becomes weight
 		{"1", "tbsp", "jar", ""},      // unknown unit
 		{"1", "dollop", "tbsp", ""},
 	} {
@@ -45,8 +45,8 @@ func TestConvertMeasure(t *testing.T) {
 		}
 	}
 
-	// A packet sized in both weight and volume converts from either, but
-	// weight still never becomes volume without the packet in between.
+	// A packet sized in both weight and volume converts from either, and
+	// weight becomes volume through it: 1 oz is one packet, so 2 tbsp.
 	sizes = []UnitSize{{Unit: "count", Quantity: *pq("1"), SizeUnit: "oz"}, {Unit: "count", Quantity: *pq("2"), SizeUnit: "tbsp"}}
 	for _, tt := range []struct {
 		q, from, to string
@@ -57,7 +57,9 @@ func TestConvertMeasure(t *testing.T) {
 		{"56.69904625", "g", "count", "2"},
 		{"3", "count", "tbsp", "6"},
 		{"3", "count", "oz", "3"},
-		{"1", "oz", "tbsp", ""},
+		{"1", "oz", "tbsp", "2"},
+		{"3", "tsp", "oz", "1/2"},
+		{"28.349523125", "g", "tsp", "6"},
 		{"1", "oz", "package", ""},
 	} {
 		got, ok := ConvertMeasure(pq(tt.q).Rat(), tt.from, tt.to, sizes)
@@ -224,6 +226,44 @@ func TestApplySpecialtiesStoreAlternativeWithoutAmounts(t *testing.T) {
 	for _, name := range []string{"Tomato Paste", "Chili Powder"} {
 		if it := items[name]; !it.Unquantified || len(it.Amounts) != 0 || len(it.Via) != 1 || len(it.Via[0].Recipes) != 2 {
 			t.Errorf("%s = %+v, want listed without an amount for both recipes", name, it)
+		}
+	}
+}
+
+// A recipe that weighs its sauce ("4 ounce" of Cream Sauce Base) scales an
+// option measured in spoons when the packet is sized both ways, so the
+// sauce's milk and flour get amounts on Shop (Hark's review, build 123).
+func TestApplySpecialtiesStoreAlternativeWeighedSauce(t *testing.T) {
+	const keySauce = "ing-cream-sauce"
+	sauce := &Specialty{
+		ID: "cream-sauce-base", Key: "cream sauce base", Name: "Cream Sauce Base",
+		UnitSizes: []UnitSize{
+			{Unit: "count", Quantity: *pq("3"), SizeUnit: "tbsp"},
+			{Unit: "count", Quantity: *pq("3/2"), SizeUnit: "oz"},
+		},
+		Choice: &Choice{
+			Type: ChoiceStoreAlternative, OptionID: "cream-sauce-base.store", OptionName: "Butter, flour, and milk",
+			Per: Measure{Quantity: *pq("1"), Unit: "tbsp"},
+			Components: []Component{
+				{IngredientKey: "ing-butter", Name: "Butter", Category: "dairy-eggs", Quantity: pq("1"), Unit: "tsp"},
+				{IngredientKey: "ing-flour", Name: "All-Purpose Flour", Category: "baking", Quantity: pq("1"), Unit: "tsp"},
+				{IngredientKey: "ing-milk", Name: "Milk", Category: "dairy-eggs", Quantity: pq("2"), Unit: "tsp"},
+			},
+		},
+	}
+	selections := []RecipeSelection{{RecipeID: "a", RecipeName: "Chicken Penne", RecipeServings: 2, TargetServings: 2, Lines: []Line{
+		sline(keySauce, "Cream Sauce Base", "4", "oz"),
+	}}}
+	out, _, err := ApplySpecialties(selections, Specialties{keySauce: sauce})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := itemsByName(t, out, nil)
+	// 4 oz is 8/3 packets, so 8 tbsp of sauce.
+	for name, want := range map[string]string{"Butter": "8 tsp", "All-Purpose Flour": "8 tsp", "Milk": "16 tsp"} {
+		it := items[name]
+		if it.Unquantified || len(it.Amounts) == 0 || it.Amounts[0].Quantity.String()+" "+it.Amounts[0].Unit.Code != want {
+			t.Errorf("%s = %v (unquantified %v), want %s", name, amountStrings(it), it.Unquantified, want)
 		}
 	}
 }

@@ -208,7 +208,9 @@
       "note": "Sold bottled with the Asian condiments. Nothing in a basic pantry tastes close, so this one is worth buying rather than improvising.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
-        { "per": "package", "quantity": "2", "unit": "tbsp" }
+        { "per": "count", "quantity": "1", "unit": "oz" },
+        { "per": "package", "quantity": "2", "unit": "tbsp" },
+        { "per": "package", "quantity": "1", "unit": "oz" }
       ],
       "defaultOptionId": "sweet-thai-chili-sauce.store",
       "options": [
@@ -333,7 +335,9 @@
       "note": "Deliberately not stored: butter, then flour, then milk, made in the pan in about two minutes while the rest of the dish cooks. There is no batch option on purpose — this one does not earn a container in the fridge.",
       "unitSizes": [
         { "per": "count", "quantity": "3", "unit": "tbsp" },
-        { "per": "package", "quantity": "3", "unit": "tbsp" }
+        { "per": "count", "quantity": "3/2", "unit": "oz" },
+        { "per": "package", "quantity": "3", "unit": "tbsp" },
+        { "per": "package", "quantity": "3/2", "unit": "oz" }
       ],
       "defaultOptionId": "cream-sauce-base.store",
       "options": [
@@ -627,7 +631,9 @@
       "category": "condiments",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
-        { "per": "package", "quantity": "2", "unit": "tbsp" }
+        { "per": "count", "quantity": "1", "unit": "oz" },
+        { "per": "package", "quantity": "2", "unit": "tbsp" },
+        { "per": "package", "quantity": "1", "unit": "oz" }
       ],
       "defaultOptionId": "bulgogi-sauce.store",
       "options": [
