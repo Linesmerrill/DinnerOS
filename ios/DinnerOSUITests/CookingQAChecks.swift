@@ -273,8 +273,10 @@ enum CookingQAChecks {
         return problems
     }
 
-    /// How fast the list is dragged: quicker than `.slow`, and held at the end so it doesn't coast.
-    static let dragSpeed = XCUIGestureVelocity(1000)
+    /// How fast the list is dragged: `.slow`, held at the end so it doesn't coast. A faster drag
+    /// (1000 px/s) carried the list on past the drag on the phones and skipped rows (build 121
+    /// round 2); the longer drags keep the check quick on an iPad.
+    static let dragSpeed = XCUIGestureVelocity.slow
 
     /// The most a list moves by itself as it settles after a drag (`DSRowEdgeFade.restingShift`):
     /// back to show a heading whole, a fade and a heading's height.
