@@ -146,7 +146,10 @@ enum FadeQAChecks {
                 (covers(app) ?? []).filter { $0.frame.midY < screen.midY }.map(\.frame.maxY).max()
                 ?? screen.minY + screen.height * 0.15
             let distance = element.frame.minY - (top + 8)
-            guard abs(distance) > 12 else { return }
+            // Close enough: a short second drag left a row above the card in the bar's fade, and
+            // the list moved on to the next row, carrying the card up under the iPad's week bar
+            // (the full matrix, build 121 round 2).
+            guard abs(distance) > 40 else { return }
             let y = min(max(element.frame.minY, top + 40), screen.maxY - 120)
             let start = app.coordinate(withNormalizedOffset: .zero)
                 .withOffset(CGVector(dx: screen.width * 0.5, dy: distance > 0 ? y : max(y + distance, top + 40)))
