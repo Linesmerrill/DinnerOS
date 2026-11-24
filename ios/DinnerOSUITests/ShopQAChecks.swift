@@ -19,7 +19,8 @@ enum ShopQAChecks {
             let named = app.descendants(matching: .any)
                 .matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, name + ","))
                 .allElementsBoundByIndex.map(\.frame)
-            let text = named
+            let text =
+                named
                 .filter { $0.maxX <= frame.minX + 1 && $0.minY <= frame.maxY }
                 .max { $0.minY < $1.minY }
             guard let text else {

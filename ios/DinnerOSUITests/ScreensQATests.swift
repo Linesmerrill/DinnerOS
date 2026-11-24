@@ -220,8 +220,19 @@ final class ScreensQATests: XCTestCase {
                     problems.append("Recipe page › \(kind): the More menu didn’t open")
                 }
                 waitStill(app)
-                shot(app, "Recipe page › \(kind) › More menu")
+                let opened = capture(app)
+                keep(opened, "Recipe page › \(kind) › More menu (\(mode))")
+                checkToolbar(app, "Recipe page › \(kind) › More menu")
                 dismissMenu(app)
+                // The page as it opened, scrolled to its end: what sat under the bottom bar's fade
+                // (Add Nutrition above Start Cooking on the Duo) rests whole above it, in a shot
+                // of its own (Hark's review, build 121 round 2).
+                if kind == "typed by hand" {
+                    FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+                    problems += FadeQAChecks.checkRest(
+                        app, screen: "Recipe page › \(kind) › More menu › end", edges: .bottom)
+                    keepEndIfNew(capture(app), "Recipe page › \(kind) › More menu › end (\(mode))", before: opened)
+                }
             }
             // The page as it opens (its first tab), so the scrolled shot isn't the Nutrition tab
             // again: on a short page both scroll to the same bottom (build 122).

@@ -55,14 +55,50 @@ final class ShopPrepQATests: XCTestCase {
             card.label.contains("Ground Beef, 6 ounces extra. Too little to freeze"),
             "The note isn’t under Ground Beef: \(card.label)")
         XCTAssertTrue(
-            app.staticTexts["23 oz left after this week"].exists || card.label.contains("23 ounces left after this week"))
+            app.staticTexts["23 oz left after this week"].exists
+                || card.label.contains("23 ounces left after this week"))
         sleep(1)
-        snap(app, "Shop › Freeze card (\(mode))")
-        // The end of the list: its last rows rest whole above the Walmart note, not ghosted in
-        // its fade (Hark's review, build 121 round 2: Add Prices).
+        let opened = capture(app)
+        keep(opened, "Shop › Freeze card (\(mode))")
+        // What sits under the Walmart note's fade as Shop opens is seen whole in shots of its
+        // own: Did You Order These?, then This Week's Cost down to Add Prices, each card brought
+        // up under the week bar (Hark's review, build 121 round 2). Two cards don't fit above the
+        // note together on an SE, so one shot each, on every phone.
         print("QA-INFO: \(FadeQAChecks.checkRest(app, screen: "Shop, as it opens", edges: .bottom))")
+        var fades: [String] = []
+        let cards: [(shot: String, top: XCUIElement, rows: [(String, XCUIElement)])] = [
+            (
+                "order", app.staticTexts["Did You Order These?"].firstMatch,
+                [
+                    ("Did You Order These?", app.staticTexts["Did You Order These?"].firstMatch),
+                    ("Review Order", app.buttons["Review Order"].firstMatch),
+                ]
+            ),
+            (
+                "this week’s cost", app.staticTexts["This Week’s Cost"].firstMatch,
+                [
+                    ("This Week’s Cost", app.staticTexts["This Week’s Cost"].firstMatch),
+                    ("Add Prices", app.buttons["Add Prices"].firstMatch),
+                ]
+            ),
+        ]
+        for card in cards {
+            let screen = "Shop › Freeze card › \(card.shot)"
+            guard card.top.exists else {
+                fades.append("\(screen): it isn’t on the Shop screen")
+                continue
+            }
+            FadeQAChecks.bringUnderTopBars(card.top, in: app)
+            let shot = capture(app)
+            for (what, row) in card.rows {
+                fades += FadeQAChecks.checkClear(row, what: what, in: app, screen: screen, image: shot.image)
+            }
+            keep(shot, "\(screen) (\(mode))")
+        }
+        // The end of the list: its last rows rest whole above the Walmart note, not ghosted in
+        // its fade (Add Prices on a large iPhone).
         FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
-        let fades = FadeQAChecks.checkRest(app, screen: "Shop, scrolled to the end", edges: .bottom)
+        fades += FadeQAChecks.checkRest(app, screen: "Shop, scrolled to the end", edges: .bottom)
         XCTAssertTrue(fades.isEmpty, fades.joined(separator: "\n"))
         app.terminate()
     }

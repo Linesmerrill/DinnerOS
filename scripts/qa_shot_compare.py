@@ -60,6 +60,10 @@ ALLOWED_PAIRS = {
     # moves the list, or not at all (Hark's build 121 review, item 18). A phone's pair differs.
     "Pantry with Butter in view": frozenset({"pantry", "pantry-scrolled-to-butter"}),
     "Shop with the flour in view": frozenset({"shop", "shop-scrolled-to-flour"}),
+    # Account fits on a large iPhone's and an iPad's screen, so its end is the screen as it opens
+    # (Hark's build 121 round 2 review, item 2: every config has the end shot).
+    "Account that fits on the screen": frozenset(
+        {"face-id-back-from-the-background", "face-id-back-from-the-background-end"}),
 }
 # Pixels per point by device.
 SCALES = {"large": 3, "small": 2, "duo": 3, "ipadL": 2, "ipadP": 2}

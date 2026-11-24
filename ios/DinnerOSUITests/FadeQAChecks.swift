@@ -136,6 +136,27 @@ enum FadeQAChecks {
         sleep(1)
     }
 
+    /// Drags the screen's list so `element` comes to rest just under the bars at the top (and
+    /// their fades), the room under it shown whole.
+    @MainActor
+    static func bringUnderTopBars(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<2 {
+            let screen = app.frame
+            let top =
+                (covers(app) ?? []).filter { $0.frame.midY < screen.midY }.map(\.frame.maxY).max()
+                ?? screen.minY + screen.height * 0.15
+            let distance = element.frame.minY - (top + 8)
+            guard abs(distance) > 12 else { return }
+            let y = min(max(element.frame.minY, top + 40), screen.maxY - 120)
+            let start = app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: screen.width * 0.5, dy: distance > 0 ? y : max(y + distance, top + 40)))
+            let end = start.withOffset(CGVector(dx: 0, dy: -distance))
+            // Slow, and held at the end, so the list stops where the drag does.
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+            sleep(2)
+        }
+    }
+
     /// Which covers a check looks at: the ones over the top of the screen (a pinned header, the
     /// tab picker), the ones along the bottom (a bottom bar, the tab bar), or both.
     enum Edges {

@@ -53,7 +53,14 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # The steps brought down to Step 3 beside "Start Cooking › Steps" at rest, and the middle
             # of the typed recipe's cooking list, where its top and end leave rows between them
             # (Hark's review, build 121 round 2, items 1 and 6: Basil Pesto on the Duo).
-            "Start Cooking › Steps scrolled", "Cooking › typed by hand › middle of ingredients")
+            "Start Cooking › Steps scrolled", "Cooking › typed by hand › middle of ingredients",
+            # What sits under a bottom fade as a screen opens, seen whole in a shot of its own
+            # (Hark's build 121 round 2 review, item 2): the end of Account (where Account fits on
+            # the screen, the same screen as it opens: an allowed look-alike), and the freeze card
+            # screen's two cards brought up under the week bar. The typed recipe's Add Nutrition
+            # shows whole in its Nutrition shot, so its More menu has no end shot.
+            "Face ID › Back from the background › end", "Shop › Freeze card › order",
+            "Shop › Freeze card › this week’s cost")
 def missing_screens(config, screens):
     """The required screens `config` ("small-dark") lacks, given the screen names it has. Every
     config must have the same set (Hark's build 123 review, item 3)."""

@@ -87,6 +87,26 @@ class CoverageTest(unittest.TestCase):
         self.assertIn('"Pantry with Butter in view": ["pantry", "pantry-scrolled-to-butter"]', helpers)
         self.assertIn('"Shop with the flour in view": ["shop", "shop-scrolled-to-flour"]', helpers)
 
+    def test_every_config_needs_the_end_shots(self):
+        # The end of Account and the freeze card's two cards, in every config: no exceptions,
+        # even where Account fits on the screen (Hark's build 121 round 2 review, item 2).
+        ends = ["Face ID › Back from the background › end", "Shop › Freeze card › order",
+                "Shop › Freeze card › this week’s cost"]
+        for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
+            have = set(qa.REQUIRED) - set(ends)
+            self.assertEqual(qa.missing_screens(config, have), ends)
+
+    def test_account_that_fits_may_match_its_end(self):
+        import qa_shot_compare
+        self.assertEqual(
+            qa_shot_compare.allowed_name("large-light/face-id-back-from-the-background.png",
+                                         "large-light/face-id-back-from-the-background-end.png"),
+            "Account that fits on the screen")
+        self.assertEqual(qa.slug("Face ID › Back from the background › end"), "face-id-back-from-the-background-end")
+        helpers = open(os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests", "QAHelpers.swift")).read()
+        self.assertIn('"Account that fits on the screen": [', helpers)
+        self.assertIn('"face-id-back-from-the-background", "face-id-back-from-the-background-end",', helpers)
+
 
 if __name__ == "__main__":
     unittest.main()
