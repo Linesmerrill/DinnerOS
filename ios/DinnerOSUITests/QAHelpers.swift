@@ -194,6 +194,8 @@ enum QAShotCompare {
     static let allowedPairs: [String: Set<String>] = [
         "Menu search, one card each": ["menu-search-typed-imported", "menu-search-typed-typed-by-hand"],
         "Household with and without Plus": ["household-new-household", "household"],
+        "Pantry with Butter in view": ["pantry", "pantry-scrolled-to-butter"],
+        "Shop with the flour in view": ["shop", "shop-scrolled-to-flour"],
     ]
 
     /// The published file name for a checklist name, as scripts/qa-screenshots.py makes it:
