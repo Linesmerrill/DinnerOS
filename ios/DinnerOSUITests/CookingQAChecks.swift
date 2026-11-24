@@ -234,7 +234,9 @@ enum CookingQAChecks {
             // Halfway from where the last row started to where it ends.
             let target = (startLast + endLast) / 2
             let near = max((startLast - endLast) / 4, 24)
-            if let best = onTheWay.min(by: { abs($0.last - target) < abs($1.last - target) }),
+            // Never the top or the end screen: those are shots of their own.
+            let between = onTheWay.dropFirst().filter { $0.last > endLast + 1 }
+            if let best = between.min(by: { abs($0.last - target) < abs($1.last - target) }),
                 abs(best.last - target) <= near
             {
                 middle(best.shot)
@@ -243,7 +245,7 @@ enum CookingQAChecks {
                 let distance = min(target - endLast, screenFrame.height * 0.45)
                 let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0.4))
                 let to = from.withOffset(CGVector(dx: 0, dy: distance))
-                from.press(forDuration: 0.05, thenDragTo: to, withVelocity: dragSpeed, thenHoldForDuration: 0.3)
+                from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
                 sleep(1)
                 middle(capture())
                 for _ in 0..<2 {
