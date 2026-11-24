@@ -17,6 +17,11 @@ nonisolated enum QAMarkers {
 
     /// A recipe or ingredient photo showing its no-photo art.
     static let photoPlaceholder = "photo.placeholder"
+    /// The recipe's photo at the top of the cooking screen, where it sits, so a test can check its
+    /// pixels: a photo drawn invisible left a blank band there on TestFlight 120.
+    static let cookPhoto = "cook.photo"
+    /// An ingredient row on the cooking screen's list (an identifier on the row itself).
+    static let cookIngredient = "cook.ingredient"
 }
 
 extension View {

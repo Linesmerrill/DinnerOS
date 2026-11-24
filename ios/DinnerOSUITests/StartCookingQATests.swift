@@ -69,11 +69,23 @@ final class StartCookingQATests: XCTestCase {
             ingredients.tap()
             sleep(1)
         } else {
-            // An iPad: the steps column beside the ingredients, scrolled to the later steps, so
-            // every config has the steps (build 122 round 4, Hark's item 15b: the iPads had
-            // none; the top of this screen is ScreensQATests' "Cooking › imported").
-            scrollCooking(app, column: 0.75)
+            // An iPad: the steps column opens at its top, with Step 1 whole under the bar (Hark's
+            // build 123 review, item 1).
+            let first = stepCard(1, in: app)
+            XCTAssertTrue(first.waitForExistence(timeout: 10), "The steps column has no Step 1")
+            let bar = CookingQAChecks.barBottom(app)
+            XCTAssertTrue(
+                first.isHittable && first.frame.minY >= bar,
+                "Step 1 isn’t whole under the bar when the cooking screen opens: it’s at \(first.frame), the bar ends at \(bar)")
+            // Then the later steps, so every config has them (build 122 round 4, Hark's item 15b;
+            // the top of this screen is ScreensQATests' "Cooking › imported"): brought up to rest
+            // with Step 3's start just under the bar, never a step cut off by the fade.
+            bringToTop(stepCard(3, in: app), in: app, column: 0.75)
             XCTAssertTrue(openedCooking(recipe, in: app), "Scrolling the steps left \(recipe)’s cooking screen")
+            let third = stepCard(3, in: app)
+            XCTAssertTrue(
+                third.exists && third.frame.minY >= CookingQAChecks.barBottom(app),
+                "Step 3 rests under the bar at \(third.frame)")
             snap(app, "Start Cooking › Steps")
             scrollBackCooking(app, column: 0.75)
         }
@@ -97,6 +109,71 @@ final class StartCookingQATests: XCTestCase {
         }
         done.tap()
         XCTAssertTrue(start.waitForExistence(timeout: 10), "Done didn’t go back to the recipe")
+    }
+
+    /// Merrill's dinner on Nov 23 (TestFlight 120, iPad in landscape): Chicken Penne al Limone's
+    /// cooking screen showed a blank band where the photo goes, and rows went missing from the
+    /// ingredient list as it scrolled. Both were drawn fully transparent by the fade under the top
+    /// bar, so only the pixels tell. Here the photo must show with Ingredients right under it, and
+    /// every one of the recipe's 13 ingredients must be on a row that's drawn.
+    @MainActor
+    func testCookingShowsThePhotoAndEveryIngredient() throws {
+        let recipe = QARecipeFixture.lemonPenne
+        let own = try ownHousehold("cookphoto", recipe: "") { own in
+            _ = try await own.importRecipe(recipe)
+        }
+        let app = launchSignedIn(as: own)
+        open(recipe.name, in: app)
+        let start = app.buttons["Start Cooking"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 15), "\(recipe.name) didn’t open")
+        start.tap()
+        let welcome = app.staticTexts["Welcome to Cooking with DinnerOS"]
+        if welcome.waitForExistence(timeout: 4) {
+            app.buttons["Skip"].firstMatch.tap()
+            _ = waitGone(welcome, timeout: 5)
+        }
+        XCTAssertTrue(openedCooking(recipe.name, in: app), "Start Cooking didn’t open \(recipe.name)")
+        let mode = ProcessInfo.processInfo.environment["QA_MODE"] ?? "light"
+        let screen = "Cooking › \(recipe.name) (\(mode))"
+
+        var problems = CookingQAChecks.checkPhoto(app, recipe: recipe.name, screen: screen) { capture(app) }
+        snap(app, "Cooking › a recipe with a photo")
+        // The ingredients are the left column on an iPad and the whole page on a phone.
+        let pad = UIDevice.current.userInterfaceIdiom == .pad
+        problems += CookingQAChecks.checkEveryIngredient(
+            app, expected: recipe.ingredients.map(\.name), screen: screen, column: pad ? 0.2 : 0.5
+        ) { capture(app) }
+        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+        app.terminate()
+    }
+
+    /// A step on the cooking screen's steps column: one element, labelled "Step 3, …".
+    @MainActor
+    private func stepCard(_ index: Int, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Step \(index),")).firstMatch
+    }
+
+    /// Drags slowly, and holds at the end so nothing coasts, until `element`'s top rests a fade's
+    /// height under the bar.
+    @MainActor
+    private func bringToTop(_ element: XCUIElement, in app: XCUIApplication, column: CGFloat) {
+        for _ in 0..<6 {
+            guard element.exists else {
+                scrollCooking(app, column: column)
+                continue
+            }
+            let target = CookingQAChecks.barBottom(app) + 40
+            let distance = element.frame.minY - target
+            guard abs(distance) > 12 else { return }
+            let step = max(min(distance, app.frame.height * 0.5), -app.frame.height * 0.5)
+            let y = app.frame.height * 0.75
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0))
+                .withOffset(CGVector(dx: 0, dy: y))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0))
+                .withOffset(CGVector(dx: 0, dy: y - step))
+            from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.3)
+            sleep(1)
+        }
     }
 
     /// Scrolls the cooking screen up by about half a screen, dragging at `column` across it: the

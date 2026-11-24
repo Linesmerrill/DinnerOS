@@ -426,11 +426,16 @@ private struct CookHeader: View {
                 CookTitle(name: dish.recipe.name)
             }
             HStack(alignment: .center, spacing: DS.Space.ml) {
-                RecipePhoto(
-                    url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: photoSize, cornerRadius: DS.Radius.large,
-                    title: dish.recipe.name
-                )
-                .frame(width: photoSize, height: photoSize)
+                // Only a recipe with a photo keeps room for one: with none, the Serves line moves
+                // up under the name instead of sitting beside a blank square (Merrill, Nov 23).
+                if let url = dish.recipe.imageURL {
+                    RecipePhoto(
+                        url: url, aspectRatio: 1, pointWidth: photoSize, cornerRadius: DS.Radius.large,
+                        title: dish.recipe.name
+                    )
+                    .frame(width: photoSize, height: photoSize)
+                    .qaMarker(QAMarkers.cookPhoto, label: dish.recipe.name, isShown: true)
+                }
                 VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     if let servings = dish.servings {
                         Text(MenuFormat.servings(servings))
@@ -608,6 +613,7 @@ struct CookIngredientList: View {
         .disabled(item.isLeftOut)
         .modifier(CookFlagMenu(ingredientKey: item.ingredientKey, name: item.name))
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier(QAMarkers.cookIngredient)
         .accessibilityLabel(
             Text(
                 [item.amountText, item.name, item.prep, item.isLeftOut ? nil : save?.short].compactMap { $0 }
@@ -668,6 +674,7 @@ struct CookIngredientList: View {
         .disabled(ingredient.isLeftOut)
         .modifier(CookFlagMenu(ingredientKey: ingredient.ingredientKey, name: ingredient.name))
         .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier(QAMarkers.cookIngredient)
         .accessibilityLabel(
             Text([ingredient.amountText, ingredient.name].compactMap { $0 }.joined(separator: " "))
         )

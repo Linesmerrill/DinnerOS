@@ -38,22 +38,18 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # Both recipe pages scroll everywhere, the upright iPad included (the same review).
             "Recipe page › typed by hand › scrolled", "Recipe page › imported › scrolled",
             # Your Meals with no empty band under the cards (build 123, Merrill's Nov 22 Menu).
-            "Menu › Your Meals at rest")
-# Required screens a config may lack, each with its reason. The hand-typed recipe's page fits on
-# the upright iPad's screen, so there's nothing to scroll and a "scrolled" shot would be a copy of
-# the top (Hark's review, build 122 round 3 item 13c; the publisher refuses copies). Allowed only
-# here: on any other config the shot is required.
-COVERAGE_EXCEPTIONS = {
-    (f"ipadP-{mode}", "Recipe page › typed by hand › scrolled"): "Hand-typed recipe page fits on the upright iPad"
-    for mode in ("light", "dark")
-}
-# MenuCardsQATests runs on three configs (scripts/qa-matrix.sh); every config's sweep checks Your
-# Meals the same way and shoots its Menu.
-COVERAGE_EXCEPTIONS.update({
-    (f"{device}-{mode}", "Menu › Your Meals at rest"): "Your Meals checked by this config's sweep, shown in its Menu shot"
-    for device in ("large", "small", "duo", "ipadL", "ipadP") for mode in ("light", "dark")
-    if f"{device}-{mode}" not in ("large-dark", "ipadL-light", "duo-dark")
-})
+            "Menu › Your Meals at rest",
+            # The cooking screen with a recipe's photo and its whole ingredient list (Merrill's
+            # Nov 23 iPad report: a blank band for the photo and rows missing on TestFlight 120).
+            "Cooking › a recipe with a photo",
+            # The end of the cooking list for both recipes, and Your Meals with a meal made, in
+            # every config (Hark's build 123 review, items 3 and 10).
+            "Cooking › imported › end of ingredients", "Cooking › typed by hand › end of ingredients",
+            "Menu › Your Meals with a meal made")
+# Required screens a config may lack, each with its reason. None since Hark's build 123 review
+# (item 3): every config has the same set. The typed recipe has a description, so its page scrolls
+# on the upright iPad too, and MenuCardsQATests runs in every config.
+COVERAGE_EXCEPTIONS: dict = {}
 DEVICES = {
     "large": ("iPhone 17 Pro Max", "portrait"),
     "small": ("iPhone SE", "portrait"),

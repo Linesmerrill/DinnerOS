@@ -205,10 +205,9 @@ runs_on() {
     # Nov 22's three screens, in every config since Hark's build 122 round 4 review (item 1): back
     # from the background, a sauce with every item had, the freeze card.
     BiometricSignInQATests/testComingBackFromTheBackgroundNeverAsksForFaceID | ShopComponentQATests | ShopPrepQATests) return 0 ;;
-    # Your Meals on a week like Merrill's (build 123), on a large iPhone, a landscape iPad and the
-    # Duo. Every config's sweep checks the same things on the test household (stars, add-ons, no
-    # blank band, nothing left loading) and shoots its Menu, so this one needn't run ten times.
-    MenuCardsQATests) case $config in large-dark | ipadL-light | duo-dark) return 0 ;; *) return 1 ;; esac ;;
+    # Your Meals on a week like Merrill's (build 123), in every config and mode, so every config
+    # has the same screenshots (Hark's build 123 review, item 3).
+    MenuCardsQATests) return 0 ;;
     esac
     local placed
     case $test in

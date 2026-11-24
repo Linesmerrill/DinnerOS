@@ -257,6 +257,14 @@ final class ScreensQATests: XCTestCase {
                 waitStill(app)
                 shot(app, "Cooking › \(kind)")
                 checkStepsShowAtRest(app, "Cooking › \(kind)")
+                // The end of the ingredient list, so every ingredient can be seen in some shot
+                // (Hark's build 123 review, item 10), with every row on the way drawn where it rests.
+                let top = capture(app)
+                let pad = UIDevice.current.userInterfaceIdiom == .pad
+                problems += CookingQAChecks.checkEveryIngredient(
+                    app, expected: [], screen: "Cooking › \(kind)", column: pad ? 0.2 : 0.5
+                ) { capture(app) }
+                keepIfScrolled(capture(app), "Cooking › \(kind) › end of ingredients (\(mode))", before: top)
             } else {
                 snap(app, "Cooking › \(kind): not the cooking screen (\(mode))", unique: false)
                 problems.append("Cooking › \(kind): Start Cooking didn’t open \(recipe)’s cooking screen")

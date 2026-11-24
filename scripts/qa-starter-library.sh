@@ -99,7 +99,7 @@ if [ "${2:-}" = tidy ]; then
     token=$(curl -sf -X POST "$BASE/api/v1/auth/dev" -H 'Content-Type: application/json' \
         -d '{"subject":"dev-simulator"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
     BASE=$BASE TOKEN=$token python3 - <<'TIDY'
-import datetime, json, os, urllib.request
+import datetime, json, os, subprocess, urllib.request
 
 base, token = os.environ["BASE"] + "/api/v1", os.environ["TOKEN"]
 
@@ -130,11 +130,22 @@ def all_recipes():
         if not cursor:
             return out
 
+TYPED_DESCRIPTION = (
+    "Our quick weeknight pasta. Store-bought pesto is fine, and a spoon of the pasta water makes it "
+    "silky instead of oily. Use whatever greens are in the fridge: baby spinach, arugula or kale all "
+    "work. Halve the tomatoes so they soak up the sauce. Good warm or cold the next day for lunch, so "
+    "it's worth making the full box. Add grilled chicken or white beans to make it more filling."
+)
+
 # The screenshots' typed-by-hand recipe (QA_MANUAL_NAME in the matrix): a real dinner with a real
 # photo, made here when it's missing. It replaced "Sip Fudge", two lines and no photo (build 122
 # review items 3 and 16), wherever that was planned.
 TYPED = {
     "name": "Pesto Bow Tie Pasta",
+    # A few lines about the dish, as a person typing it in might add: the page then scrolls on the
+    # upright iPad too, so every config has its "typed by hand › scrolled" shot (Hark's build 123
+    # review, item 3).
+    "description": TYPED_DESCRIPTION,
     "imageUrl": "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?w=1080",
     "servings": 2, "prepMinutes": 5, "totalMinutes": 20, "cuisines": ["italian"], "cuisinesChosen": True,
     "tags": [], "warnings": [], "fromUrl": False,
@@ -153,6 +164,16 @@ TYPED = {
         "Fold in the tomatoes, spinach and a squeeze of lemon. Drizzle with the oil and top with the parmesan.",
     ],
 }
+for typed_id_existing in [r["id"] for r in all_recipes() if r["name"] == TYPED["name"]]:
+    full = call("GET", f"/households/{hid}/recipes/{typed_id_existing}")
+    if not (full.get("description") or (full.get("recipe") or {}).get("description")):
+        # Made before it had a description, and the API can't edit one: set it in the local
+        # database the QA APIs use (local Mongo only).
+        db = os.environ.get("QA_MONGO_DB", "dinneros_multistore")
+        script = ("db.getSiblingDB(%s).recipes.updateOne({_id: ObjectId(%s)}, {$set: {description: %s}})"
+                  % (json.dumps(db), json.dumps(typed_id_existing), json.dumps(TYPED_DESCRIPTION)))
+        subprocess.run(["mongosh", "--quiet", "mongodb://localhost:27017", "--eval", script], check=True,
+                       stdout=subprocess.DEVNULL)
 retired = set(filter(None, os.environ.get("QA_RETIRED_RECIPES", "Sip Fudge").split("|")))
 keep = set(filter(None, os.environ.get("QA_KEEP_RECIPES", TYPED["name"]).split("|")))
 recipes = all_recipes()

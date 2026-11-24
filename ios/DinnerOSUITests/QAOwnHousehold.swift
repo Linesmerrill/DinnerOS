@@ -204,6 +204,47 @@ struct QAOwnHousehold {
         return ids
     }
 
+    /// A meal-kit recipe with its whole ingredient list and steps, as an import brings it, for a
+    /// test that checks the cooking screen lists every ingredient. Returns its id.
+    func importRecipe(_ recipe: QARecipeFixture) async throws -> String {
+        let file: [String: Any] = [
+            "version": 1, "source": "hellofresh", "generatedAt": ISO8601DateFormatter().string(from: .now),
+            "review": [[String: Any]](),
+            "recipes": [
+                [
+                    "source": "hellofresh", "sourceRecipeId": "\(subject)-full", "sourceUrl": "",
+                    "name": recipe.name, "imageUrl": recipe.imageURL, "isAddon": false,
+                    "servings": [2, 4], "totalMinutes": 35, "cuisines": ["italian"], "tags": [String](),
+                    "orderWeeks": [String](),
+                    "ingredients": recipe.ingredients.enumerated().map { index, item -> [String: Any] in
+                        var amounts: [[String: Any]] = []
+                        if let quantity = item.quantity {
+                            amounts = [2, 4].map { servings in
+                                let scaled = quantity * Double(servings) / 2
+                                // The importer's units ("oz") for the meal kit's ("ounce").
+                                let units = ["unit": "count", "ounce": "oz", "tablespoon": "tbsp", "teaspoon": "tsp"]
+                                return [
+                                    "servings": servings, "quantity": scaled, "unit": units[item.unit] ?? item.unit,
+                                    "sourceUnit": item.unit, "rawText": "\(scaled) \(item.unit)",
+                                ]
+                            }
+                        }
+                        return [
+                            "sourceIngredientId": "\(subject)-\(index)", "name": item.name,
+                            "pantryStaple": item.quantity == nil, "amounts": amounts,
+                        ]
+                    },
+                    "steps": recipe.steps.enumerated().map { ["index": $0.offset + 1, "text": $0.element] },
+                ]
+            ],
+        ]
+        _ = try await Self.call("POST", "households/\(householdID)/recipes/import", token: token, body: file)
+        let listed = try await Self.call("GET", "households/\(householdID)/recipes", token: token)
+        let items = listed["items"] as? [[String: Any]] ?? []
+        let id = items.first { $0["name"] as? String == recipe.name }?["id"] as? String
+        return try XCTUnwrap(id, "\(recipe.name) wasn’t imported")
+    }
+
     /// Says a planned meal was made, as "I Made It" does: the plan then carries the answer, and the
     /// Menu asks how it was.
     func markMade(entryID: String, recipeID: String, date: String, weeksAhead: Int) async throws {
@@ -316,4 +357,58 @@ extension XCTestCase {
         closeNewsBanner(app)
         return app
     }
+}
+
+/// A whole recipe for `QAOwnHousehold.importRecipe`: each ingredient with its amount for 2 (none
+/// for a pantry staple), and the steps.
+struct QARecipeFixture {
+    struct Ingredient {
+        let name: String
+        let quantity: Double?
+        let unit: String
+    }
+
+    let name: String
+    let imageURL: String
+    let ingredients: [Ingredient]
+    let steps: [String]
+
+    /// Merrill's dinner on Nov 23 (TestFlight 120): a pasta with a photo, 13 ingredients, salt
+    /// and pepper with no amount, and butter that a late step adds "to the pan with the sauce".
+    /// The steps are written for the test, in the meal kit's style.
+    static let lemonPenne = QARecipeFixture(
+        name: "Chicken Penne al Limone",
+        imageURL: "https://img.hellofresh.com/f_auto,fl_lossy,q_auto,w_1200/hellofresh_s3/image/"
+            + "63853599929fb724f40ed140-e3d4003e.jpg",
+        ingredients: [
+            .init(name: "Garlic", quantity: 1, unit: "clove"),
+            .init(name: "Lemon", quantity: 1, unit: "unit"),
+            .init(name: "Penne Pasta", quantity: 6, unit: "ounce"),
+            .init(name: "Cream Sauce Base", quantity: 4, unit: "ounce"),
+            .init(name: "Zucchini", quantity: 1, unit: "unit"),
+            .init(name: "Parsley", quantity: 0.25, unit: "ounce"),
+            .init(name: "Chicken Breast Strips", quantity: 10, unit: "ounce"),
+            .init(name: "Parmesan Cheese", quantity: 3, unit: "tablespoon"),
+            .init(name: "Olive Oil", quantity: 1, unit: "teaspoon"),
+            .init(name: "Butter", quantity: 2, unit: "tablespoon"),
+            .init(name: "Salt", quantity: nil, unit: ""),
+            .init(name: "Pepper", quantity: nil, unit: ""),
+            .init(name: "Cooking Oil", quantity: 2, unit: "teaspoon"),
+        ],
+        steps: [
+            "Bring a large pot of salted water to a boil. Thinly slice 1 clove garlic. Quarter 1 zucchini "
+                + "lengthwise, then cut into pieces. Zest and quarter 1 lemon. Chop ¼ oz parsley.",
+            "Warm a drizzle of olive oil in a large pan over medium heat. Add garlic and cook until golden, "
+                + "1 minute. Move garlic to a plate.",
+            "Add 6 oz penne to the boiling water and cook until al dente, 9 to 11 minutes. Keep 1 cup pasta "
+                + "cooking water, then drain. Meanwhile, heat a drizzle of oil in the same pan. Add zucchini "
+                + "and cook until golden, 5 minutes. Season with salt and pepper.",
+            "Pat 10 oz chicken dry and season with salt and pepper. Heat a drizzle of oil in the pan. Add "
+                + "chicken and cook until cooked through, 4 to 6 minutes.",
+            "Stir in 4 oz cream sauce base, ¼ cup pasta cooking water, and a squeeze of lemon. Cook until "
+                + "thickened, 2 minutes.",
+            "Add drained penne, garlic, zucchini, 1 ½ Tbsp Parmesan, half the parsley, and 2 Tbsp butter "
+                + "to the pan with the sauce. Toss and season with salt and pepper. Top with the rest of "
+                + "the Parmesan and parsley.",
+        ])
 }
