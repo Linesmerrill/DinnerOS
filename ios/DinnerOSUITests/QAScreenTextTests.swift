@@ -21,6 +21,55 @@ final class QAScreenTextTests: XCTestCase {
         }
     }
 
+    /// Build 123 review, item 2: three cards, "Didn't make it?" on the first only, the others
+    /// shorter. Then the fix: one height, the row on every card at its left edge.
+    func testMealCardsLineUp() {
+        typealias Card = MenuQAChecks.LinedUpCard
+        let before = [
+            Card(
+                name: "Pasta", frame: CGRect(x: 20, y: 300, width: 380, height: 520),
+                outcome: CGRect(x: 280, y: 700, width: 120, height: 20)),
+            Card(name: "Garlic Bread", frame: CGRect(x: 412, y: 300, width: 380, height: 400), outcome: nil),
+        ]
+        let found = MenuQAChecks.lineUpProblems(before, screen: "Menu")
+        XCTAssertEqual(found.count, 3, "\(found)")
+        XCTAssertTrue(found.contains { $0.contains("400 points tall") })
+        XCTAssertTrue(found.contains { $0.contains("no “Didn’t make it?”") })
+        XCTAssertTrue(found.contains { $0.contains("points in from the card’s left edge") })
+
+        let after = [
+            Card(
+                name: "Pasta", frame: CGRect(x: 20, y: 300, width: 380, height: 520),
+                outcome: CGRect(x: 20, y: 700, width: 120, height: 20)),
+            Card(
+                name: "Garlic Bread", frame: CGRect(x: 412, y: 300, width: 380, height: 521),
+                outcome: CGRect(x: 412, y: 700.5, width: 120, height: 20)),
+        ]
+        XCTAssertEqual(MenuQAChecks.lineUpProblems(after, screen: "Menu"), [])
+        // Nobody offers it yet: only the heights are checked.
+        let ahead = after.map { Card(name: $0.name, frame: $0.frame, outcome: nil) }
+        XCTAssertEqual(MenuQAChecks.lineUpProblems(ahead, screen: "Menu"), [])
+        // Offered on both, but one sits lower.
+        var lower = after
+        lower[1].outcome = CGRect(x: 412, y: 740, width: 120, height: 20)
+        XCTAssertEqual(MenuQAChecks.lineUpProblems(lower, screen: "Menu").count, 1)
+    }
+
+    /// Build 123 review, item 7: the search result's add button 200 points in from the edge of an
+    /// iPad in portrait; at the 20-point margin it passes.
+    func testSearchAddButtonAtTheMargin() {
+        let screen = CGRect(x: 0, y: 0, width: 834, height: 1194)
+        XCTAssertEqual(
+            MenuQAChecks.searchAddProblems(
+                button: CGRect(x: 590, y: 360, width: 44, height: 44), screen: screen, name: "s"
+            ).count,
+            1)
+        XCTAssertEqual(
+            MenuQAChecks.searchAddProblems(
+                button: CGRect(x: 770, y: 360, width: 44, height: 44), screen: screen, name: "s"),
+            [])
+    }
+
     func testOffendingListsEachTextOnce() {
         XCTAssertEqual(
             QAScreenText.offending(["Beef Tacos", "QA Beef Tacos", "QA Beef Tacos", "Test Kitchen"]),

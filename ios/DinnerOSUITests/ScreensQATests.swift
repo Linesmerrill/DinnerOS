@@ -143,6 +143,8 @@ final class ScreensQATests: XCTestCase {
             _ = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe)).firstMatch
                 .waitForExistence(timeout: 10)
             snap(app, "Menu › search typed, \(kind) (\(mode))")
+            problems += MenuQAChecks.checkSearchAddAtMargin(
+                app, recipe: recipe, screen: "Menu › search typed, \(kind) (\(mode))")
             // Put the keyboard away with Done, then tap the result card that's on screen: the same
             // name can also sit in a carousel further up.
             let done = app.toolbars.buttons["Done"].firstMatch
@@ -474,7 +476,8 @@ final class ScreensQATests: XCTestCase {
             }
             let range = QAShotCompare.brightnessRange(image, in: frame)
             if range < check.contrast {
-                problems.append("\(name): \(check.what) is faded out (brightness range \(range), want \(check.contrast)+)")
+                problems.append(
+                    "\(name): \(check.what) is faded out (brightness range \(range), want \(check.contrast)+)")
             }
         }
     }

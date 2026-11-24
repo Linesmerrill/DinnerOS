@@ -193,9 +193,10 @@ struct YourMealsSection: View {
     private var carouselRows: MealCardRows {
         MealCardRows.of(
             entries.map { entry in
-                MealCardRows.Meal(
+                let card = menu.card(forRecipeID: entry.recipe.id)
+                return MealCardRows.Meal(
                     outcome: events.outcome(for: entry), nightHasPassed: MealNight.hasPassed(date: entry.date),
-                    canRate: menu.card(forRecipeID: entry.recipe.id) != nil)
+                    canRate: card != nil, isRated: (1...5).contains(card?.recipe.myRating?.score ?? 0))
             })
     }
 
@@ -353,22 +354,22 @@ struct MealCard: View {
             }
             // What happened comes before how it was: one is a fact about the night, the other an
             // opinion about the food. A meal counts as made unless someone says it wasn't
-            // (decision 662), so the row only offers that, once the night is over.
-            MealOutcomeRow(entry: entry, holdsSpace: rows.holdsOutcome)
+            // (decision 662), so the row only offers that, once a night in the week is over.
+            MealOutcomeRow(entry: entry, weekOffers: rows.holdsOutcome)
             switch MealRating.row(
                 outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date),
                 canRate: feedbackRecipe != nil, weekAsks: rows.holdsRating)
             {
             case .shown:
                 if let feedbackRecipe {
-                    MealRatingRow(recipe: feedbackRecipe)
+                    MealRatingRow(recipe: feedbackRecipe, holdsFollowUp: rows.holdsFollowUp)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier(Self.ratingRowID)
                 }
             case .heldSpace:
                 // Not asked yet, but a neighbour asks: the row's height is kept so the cards
-                // line up (`MealCardRows`).
-                MealRatingRow.Space()
+                // line up (`MealCardRows`). Stars stay on past and made meals only.
+                MealRatingRow.Space(holdsFollowUp: rows.holdsFollowUp)
             case .none:
                 EmptyView()
             }
@@ -688,36 +689,46 @@ nonisolated enum MealRating {
 /// to Change?" a little more, between the servings control and Shared Recipes (Merrill, build
 /// 122, Nov 22). Now a row's space is kept only when some card in the week shows that row.
 ///
+/// Build 123 still left an empty band of about 120 points under the servings control on the
+/// second and third cards when only the first had "Didn't make it?" and the stars (Hark's
+/// review, item 2). Now when one card offers "Didn't make it?", every card does, in the same
+/// place, so the only room held is the stars' (and a rated neighbour's follow-up line).
+///
 /// Worked out from the plan and the answers, never from measured sizes, so nothing about the
 /// layout feeds back into it: the carousel's height is settled in one pass, the iPad in
 /// landscape has nothing to re-measure while it scrolls (QA, build 121), and every card in a
-/// week is still one height.
+/// week is one height.
 nonisolated struct MealCardRows: Equatable {
-    /// Some card shows "Didn't make it?" or "I Made It".
+    /// Some card shows "Didn't make it?" or "I Made It", so every card offers one.
     var holdsOutcome: Bool
     /// Some card shows the stars.
     var holdsRating: Bool
+    /// Some card shows the stars already rated, with the follow-up button under them.
+    var holdsFollowUp = false
 
     /// Nothing held: cards stacked one under another (accessibility sizes) needn't line up.
     static let none = MealCardRows(holdsOutcome: false, holdsRating: false)
 
-    /// One meal of the week: its answer, whether its night is over, and whether it can be rated
-    /// (its menu card is known, which carries the member's own rating).
+    /// One meal of the week: its answer, whether its night is over, whether it can be rated (its
+    /// menu card is known, which carries the member's own rating), and whether it is.
     struct Meal {
         var outcome: MealOutcome?
         var nightHasPassed: Bool
         var canRate: Bool
+        var isRated = false
     }
 
     static func of(_ meals: [Meal]) -> MealCardRows {
-        MealCardRows(
+        func asks(_ meal: Meal) -> Bool {
+            MealRating.row(
+                outcome: meal.outcome, nightHasPassed: meal.nightHasPassed, canRate: meal.canRate, weekAsks: false)
+                == .shown
+        }
+        return MealCardRows(
             holdsOutcome: meals.contains {
                 MealOutcomeRow.shows(outcome: $0.outcome, nightHasPassed: $0.nightHasPassed)
             },
-            holdsRating: meals.contains {
-                MealRating.row(
-                    outcome: $0.outcome, nightHasPassed: $0.nightHasPassed, canRate: $0.canRate, weekAsks: false)
-                    == .shown
-            })
+            holdsRating: meals.contains(where: asks),
+            holdsFollowUp: meals.contains { asks($0) && $0.isRated })
     }
 }

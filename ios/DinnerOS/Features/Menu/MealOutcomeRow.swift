@@ -1,21 +1,39 @@
 import SwiftUI
 
-/// "Didn't make it?" on a planned meal whose night is over, and "I Made It" on one marked
-/// not made.
+/// "Didn't make it?" on a planned meal, and "I Made It" on one marked not made.
 ///
 /// A meal counts as made unless someone says otherwise: the server marks every unanswered meal
 /// of a week made when the week ends, and next week's list already counts on it (decision 662).
 /// So there's nothing to ask on the night, only a quiet way to say it didn't happen, which also
-/// gives back what the meal took from the pantry. Future nights show nothing, in the same space.
+/// gives back what the meal took from the pantry.
+///
+/// It sits in one place on every card, under the servings control and lined up on the left
+/// (build 123 review, Hark's item 2). A meal whose night is over offers it, and so does every
+/// other meal of a week where one does: build 123 showed it under the first card only, and its
+/// neighbours carried an empty band in its place.
 struct MealOutcomeRow: View {
     let entry: PlanEntry
-    /// For a night still ahead: keep the row's height, so the card lines up with a neighbour
-    /// that shows it (`MealCardRows`), or take none.
-    var holdsSpace = true
+    /// Some card in the same row offers "Didn't make it?" (`MealCardRows`), so this one does too.
+    var weekOffers = false
 
-    /// Whether the row has something to show: an answer, or a night that's over.
+    /// Whether the meal itself has something to show: an answer, or a night that's over.
     nonisolated static func shows(outcome: MealOutcome?, nightHasPassed: Bool) -> Bool {
         outcome != nil || nightHasPassed
+    }
+
+    /// What the row holds.
+    enum Content: Equatable {
+        /// "I Made It", for a meal marked not made.
+        case madeIt
+        /// "Didn't make it?" with its reasons.
+        case didntMakeIt
+        /// Nothing: no meal in the week has anything to answer yet.
+        case nothing
+    }
+
+    nonisolated static func content(outcome: MealOutcome?, nightHasPassed: Bool, weekOffers: Bool) -> Content {
+        if case .skipped = outcome { return .madeIt }
+        return shows(outcome: outcome, nightHasPassed: nightHasPassed) || weekOffers ? .didntMakeIt : .nothing
     }
 
     @Environment(PlanStore.self) private var plans
@@ -35,28 +53,25 @@ struct MealOutcomeRow: View {
         Group {
             if let undoable {
                 undoRow(undoable)
-            } else if case .skipped = outcome {
-                HStack {
-                    Spacer(minLength: 0)
+            } else {
+                switch Self.content(
+                    outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date), weekOffers: weekOffers)
+                {
+                case .madeIt:
                     Button("I Made It", systemImage: "checkmark") {
                         answer(.cooked) { events.recipeCooked(entry, week: plans.week) }
                     }
-                }
-            } else if Self.shows(outcome: outcome, nightHasPassed: MealNight.hasPassed(date: entry.date)) {
-                HStack {
-                    Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                case .didntMakeIt:
                     DidntMakeItMenu(entry: entry) { reason in
                         answer(.skipped(reason)) { events.recipeSkipped(entry, week: plans.week, reason: reason) }
                     } label: {
                         Text("Didn’t make it?")
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                case .nothing:
+                    EmptyView()
                 }
-            } else if holdsSpace {
-                // Holds the row's height, so a card for a night still ahead lines up with a
-                // neighbour that shows the row.
-                Text("Didn’t make it?")
-                    .hidden()
-                    .accessibilityHidden(true)
             }
         }
         .font(.subheadline)

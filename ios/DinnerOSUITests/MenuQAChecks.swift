@@ -93,6 +93,107 @@ enum MenuQAChecks {
         return ["\(screen): \(Int(gap)) points of blank space under the meal cards (allowed \(Int(limit)))"]
     }
 
+    /// (6) The meal cards in a row are one height, and "Didn't make it?" (or "I Made It") is on
+    /// every card or none, at the card's left edge and the same height on each (build 123
+    /// review, Hark's item 2: it sat under the first card only, with an empty band beside it).
+    ///
+    /// Measured on one snapshot of the screen, like the blank-band check.
+    @MainActor
+    static func checkMealCardsLineUp(_ app: XCUIApplication, screen: String) -> [String] {
+        guard let root = try? app.snapshot() else { return ["\(screen): couldn’t read the screen"] }
+        var cards: [any XCUIElementSnapshot] = []
+        func walk(_ element: any XCUIElementSnapshot) {
+            if element.identifier.hasPrefix(cardPrefix) {
+                if !element.frame.isEmpty { cards.append(element) }
+                return
+            }
+            element.children.forEach(walk)
+        }
+        walk(root)
+        return lineUpProblems(
+            cards.map { card in
+                LinedUpCard(
+                    name: cardName(card.label.isEmpty ? card.identifier : card.label), frame: card.frame,
+                    outcome: outcomeControl(in: card)?.frame)
+            }, screen: screen)
+    }
+
+    /// A meal card as the line-up check sees it: its frame, and its "Didn't make it?" control's.
+    struct LinedUpCard {
+        var name: String
+        var frame: CGRect
+        var outcome: CGRect?
+    }
+
+    /// How far cards may differ, in points: rounding, not a missing row.
+    static let lineUpTolerance: CGFloat = 2
+
+    /// The line-up rules on measured cards, apart from XCTest so they're tested on their own.
+    static func lineUpProblems(_ cards: [LinedUpCard], screen: String) -> [String] {
+        guard let first = cards.first else { return [] }
+        var problems: [String] = []
+        for card in cards.dropFirst() where abs(card.frame.height - first.frame.height) > lineUpTolerance {
+            problems.append(
+                "\(screen): “\(card.name)” is \(Int(card.frame.height)) points tall, “\(first.name)” \(Int(first.frame.height))"
+            )
+        }
+        let offering = cards.filter { $0.outcome != nil }
+        guard let reference = offering.first, let referenceRow = reference.outcome else { return problems }
+        for card in cards where card.outcome == nil {
+            problems.append("\(screen): “\(card.name)” has no “Didn’t make it?” but “\(reference.name)” does")
+        }
+        let referenceTop = referenceRow.minY - reference.frame.minY
+        for card in offering {
+            guard let row = card.outcome else { continue }
+            if row.minX - card.frame.minX > lineUpTolerance {
+                problems.append(
+                    "\(screen): “Didn’t make it?” on “\(card.name)” starts \(Int(row.minX - card.frame.minX)) points in from the card’s left edge"
+                )
+            }
+            if abs(row.minY - card.frame.minY - referenceTop) > lineUpTolerance {
+                problems.append("\(screen): “Didn’t make it?” on “\(card.name)” isn’t level with “\(reference.name)”")
+            }
+        }
+        return problems
+    }
+
+    /// The card's "Didn't make it?" menu ("Didn’t make Tacos") or its "I Made It" button.
+    static func outcomeControl(in card: any XCUIElementSnapshot) -> (any XCUIElementSnapshot)? {
+        for child in card.children {
+            if child.label.hasPrefix("Didn’t make ") || child.label == "I Made It" { return child }
+            if let found = outcomeControl(in: child) { return found }
+        }
+        return nil
+    }
+
+    /// (7) Typing a search, each result's round add button sits at the right margin (build 123
+    /// review, Hark's item 7: it floated three-quarters across an iPad in portrait).
+    @MainActor
+    static func checkSearchAddAtMargin(_ app: XCUIApplication, recipe: String, screen: String) -> [String] {
+        // The result's own button, on its row: a carousel higher up can hold the same recipe.
+        let frame = app.frame
+        let rows = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe)).allElementsBoundByIndex
+            .map(\.frame).filter { !$0.isEmpty && frame.intersects($0) }
+        let adds = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ OR label == %@", "Add \(recipe) to your week", "Remove \(recipe) from your week")
+        ).allElementsBoundByIndex.map(\.frame)
+        guard !rows.isEmpty else { return [] }
+        guard
+            let add = adds.first(where: { add in rows.contains { abs($0.midY - add.midY) < $0.height / 2 + 1 } })
+        else { return ["\(screen): no add button beside “\(recipe)”"] }
+        return searchAddProblems(button: add, screen: frame, name: screen)
+    }
+
+    /// The add button's 44-point target ends at the 20-point margin; a little slack for rounding.
+    static let searchAddMaxInset: CGFloat = 32
+
+    static func searchAddProblems(button: CGRect, screen: CGRect, name: String) -> [String] {
+        let inset = screen.maxX - button.maxX
+        guard inset > searchAddMaxInset else { return [] }
+        return ["\(name): the add button is \(Int(inset)) points in from the right edge, not at the margin"]
+    }
+
     /// The lowest edge of what a card shows: its photo and title, its servings control, its
     /// "Didn't make it?" and its stars. Space held for a row that isn't shown is in the tree too,
     /// as an element with no name, value or identifier (build 122's band was two of them), so

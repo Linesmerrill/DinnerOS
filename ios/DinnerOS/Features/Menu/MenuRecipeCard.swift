@@ -99,8 +99,10 @@ struct MenuRecipeCard: View {
                 .contextMenu { dayMenuItems }
             }
         }
-        // A readable line on an iPad, from the leading edge like the chips above it.
-        .frame(maxWidth: DS.Size.readableWidth, alignment: .leading)
+        // The full row, so Add sits at the right margin like the search field's clear button
+        // above it. Capped at a readable width it floated three-quarters across an iPad (build
+        // 123 review, Hark's item 7).
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
 

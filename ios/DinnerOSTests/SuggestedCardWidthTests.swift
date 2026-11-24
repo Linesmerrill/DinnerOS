@@ -25,8 +25,26 @@ struct SuggestedCardWidthTests {
         #expect(rowWidth(834, count: 7) > 834)
     }
 
-    @Test func cardsNeverGrowToFill() {
-        #expect(SuggestedMealsRow.cardWidth(in: 1210, count: 1) == SuggestedMealsRow.cardWidth(in: 1210, count: 7))
+    /// Build 123 review, Hark's item 6: two suggestions on an iPad in portrait took two-thirds
+    /// of the row, their reasons cut short and the right third empty. A short week fills the
+    /// row margin to margin.
+    @Test(arguments: [(834.0, 2), (834.0, 3), (1210.0, 2), (1210.0, 3), (1210.0, 4), (1032.0, 2)])
+    func aShortWeekFillsTheRow(width: CGFloat, count: Int) {
+        #expect(abs(rowWidth(width, count: count) - width) < 0.5)
+    }
+
+    /// One suggestion alone stays card-sized rather than a banner across an iPad.
+    @Test func oneCardStaysCardSized() {
+        #expect(SuggestedMealsRow.cardWidth(in: 1210, count: 1) == SuggestedMealsRow.maxCardWidth)
+        #expect(SuggestedMealsRow.cardWidth(in: 834, count: 1) == SuggestedMealsRow.maxCardWidth)
+    }
+
+    /// A wide card's photo widens instead of growing taller than a planned meal's photo.
+    @Test func aWideCardsPhotoKeepsItsHeight() {
+        #expect(abs(SuggestedMealsRow.photoAspectRatio(cardWidth: 280) - 4.0 / 3.0) < 0.0001)
+        #expect(abs(SuggestedMealsRow.photoAspectRatio(cardWidth: 0) - 4.0 / 3.0) < 0.0001)
+        let wide: CGFloat = 579
+        #expect(wide / SuggestedMealsRow.photoAspectRatio(cardWidth: wide) <= SuggestedMealsRow.maxPhotoHeight + 0.5)
     }
 
     @Test func aPhoneShowsOneCardAndAPeek() {

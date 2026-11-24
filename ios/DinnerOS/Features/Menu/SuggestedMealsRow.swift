@@ -96,16 +96,30 @@ struct SuggestedMealsRow: View {
     }
 
     /// A card's width in a row `width` wide. A phone shows one card and a peek of the next. A
-    /// wider screen shows several at a readable size, narrowed so a short week's cards all fit
-    /// inside the margins: on an iPad in portrait the third ran off the edge (build 122 review 4).
+    /// wider screen shows a short week's cards across the whole row, margin to margin: on an
+    /// iPad in portrait the third ran off the edge (build 122 review 4), and then two cards took
+    /// two-thirds of the row with their reasons cut short (build 123 review, Hark's item 6). Too
+    /// many to fit at a readable size, and they scroll at the usual width instead.
     static func cardWidth(in width: CGFloat, count: Int) -> CGFloat {
         guard width >= 600 else { return width * 0.62 }
         let usual = min(width * 0.5, max(280, (width - 48) / 4))
         guard count > 0 else { return usual }
         let cards = CGFloat(count)
         let fitting = (width - 2 * DS.Space.l - (cards - 1) * DS.Space.m) / cards
-        return fitting >= DS.Size.carouselCardMinWidth ? min(usual, fitting) : usual
+        guard fitting >= DS.Size.carouselCardMinWidth else { return usual }
+        return min(fitting, maxCardWidth)
     }
+
+    /// The widest a suggestion gets: one alone on an iPad stays card-sized.
+    static let maxCardWidth: CGFloat = 600
+
+    /// The photo's shape on a card `width` wide: 4:3, widening on a broad card so the photo is
+    /// never much taller than on a planned meal's card above it.
+    static func photoAspectRatio(cardWidth width: CGFloat) -> CGFloat {
+        max(4.0 / 3.0, width / maxPhotoHeight)
+    }
+
+    static let maxPhotoHeight: CGFloat = 300
 
     private func card(_ slot: AutopilotSlot) -> some View {
         let skipped = autopilot.excludedSlotIDs.contains(slot.id)
@@ -218,6 +232,9 @@ struct SuggestedMealCard: View {
     let isSkipped: Bool
     let isShuffling: Bool
 
+    /// The card's width once laid out, for the photo's shape.
+    @State private var width: CGFloat?
+
     private var summary: RecipeSummary {
         RecipeSummary.placeholder(
             id: slot.recipe.id, name: slot.recipe.name, imageURLString: slot.recipe.imageURLString)
@@ -227,8 +244,9 @@ struct SuggestedMealCard: View {
         NavigationLink(value: summary) {
             VStack(alignment: .leading, spacing: DS.Space.s) {
                 RecipePhoto(
-                    url: slot.recipe.imageURL, aspectRatio: 4.0 / 3.0, pointWidth: 280, cornerRadius: DS.Radius.large,
-                    title: slot.recipe.name
+                    url: slot.recipe.imageURL,
+                    aspectRatio: SuggestedMealsRow.photoAspectRatio(cardWidth: width ?? 0), pointWidth: 280,
+                    cornerRadius: DS.Radius.large, title: slot.recipe.name
                 )
                 .overlay {
                     if isShuffling {
@@ -255,6 +273,11 @@ struct SuggestedMealCard: View {
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .padding(DS.Space.s)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                width = $0
+            }
             .background(
                 RoundedRectangle(cornerRadius: DS.Radius.xLarge, style: .continuous)
                     .fill(DS.Colors.background)

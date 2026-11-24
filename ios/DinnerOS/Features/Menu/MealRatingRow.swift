@@ -13,6 +13,9 @@ import SwiftUI
 struct MealRatingRow: View {
     /// The card's recipe, which carries the member's own rating and the household average.
     let recipe: RecipeSummary
+    /// Another card in the row is rated and shows its follow-up button (`MealCardRows`), so an
+    /// unrated row keeps that line too.
+    var holdsFollowUp = false
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(MenuStore.self) private var menu
@@ -48,6 +51,9 @@ struct MealRatingRow: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.tint)
                 .padding(.top, DS.Space.hairline)
+            } else if holdsFollowUp {
+                // A rated neighbour shows its follow-up button: keep its line so the cards match.
+                Self.followUpSpace
             }
             if failed {
                 Text("Couldn’t save that rating. Tap a star to try again.")
@@ -115,20 +121,35 @@ struct MealRatingRow: View {
 }
 
 extension MealRatingRow {
-    /// The row's height with nothing in it: an unrated row's "How was it?" and stars, hidden, for
-    /// a card that doesn't ask yet beside one that does. Always the unrated row, so a recipe
-    /// rated some earlier week doesn't hold room for a follow-up button it isn't showing.
+    /// The row's height with nothing in it: "How was it?" and the stars, hidden, for a card that
+    /// doesn't ask yet beside one that does, and the follow-up button's line when a neighbour
+    /// shows one.
     struct Space: View {
+        var holdsFollowUp = false
+
         var body: some View {
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text("How was it?")
                     .font(.subheadline)
                 StarRatingControl(score: .constant(0))
+                if holdsFollowUp {
+                    MealRatingRow.followUpSpace
+                }
             }
             .hidden()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
+    }
+
+    /// The follow-up button's line, hidden: the longest of its titles, in its font and padding.
+    static var followUpSpace: some View {
+        Text("Edit What Could Be Better")
+            .font(.footnote.weight(.semibold))
+            .lineLimit(1)
+            .padding(.top, DS.Space.hairline)
+            .hidden()
+            .accessibilityHidden(true)
     }
 }
 

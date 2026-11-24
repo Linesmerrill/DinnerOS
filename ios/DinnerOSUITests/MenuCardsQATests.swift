@@ -61,6 +61,7 @@ final class MenuCardsQATests: XCTestCase {
         problems += MenuQAChecks.checkAddOnCards(app, screen: screen)
         problems += MenuQAChecks.checkMealCardRatingRows(app, screen: screen)
         problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: screen)
+        problems += MenuQAChecks.checkMealCardsLineUp(app, screen: screen)
         problems += MenuQAChecks.checkLoaded(app, screen: screen)
         snap(app, "Menu › Your Meals at rest (\(mode))")
 
@@ -86,6 +87,7 @@ final class MenuCardsQATests: XCTestCase {
             sleep(9)
             problems += MenuQAChecks.checkMealCardRatingRows(app, screen: "\(screen), one made")
             problems += MenuQAChecks.checkNoBlankBandUnderMeals(app, screen: "\(screen), one made")
+            problems += MenuQAChecks.checkMealCardsLineUp(app, screen: "\(screen), one made")
             snap(app, "Menu › Your Meals with a meal made (\(mode))")
         } else {
             problems.append("\(screen): no “I Made It” on the card’s long-press menu")
