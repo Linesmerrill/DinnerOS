@@ -148,10 +148,25 @@ struct IngredientPhoto: View {
     }
 
     /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the glyph.
-    /// The glyph is the design system's one neutral fallback, never a particular food.
     private var fallbackGlyph: some View {
-        Image(systemName: DS.Colors.thumbnailGlyphSymbol)
-            .font(.system(size: size * 0.4))
+        IngredientFallbackGlyph(size: size)
+    }
+}
+
+/// The one glyph every ingredient thumbnail shows without a photo (a recipe's ingredients, its
+/// choices, the prep plan): the design system's neutral fork and knife in one gray at one
+/// weight, never a particular food (Hark's build 121 review, item 17: the prep plan drew a
+/// carrot or a basket by aisle while the recipe page drew the fork and knife).
+struct IngredientFallbackGlyph: View {
+    let size: CGFloat
+
+    static let symbol = DS.Colors.thumbnailGlyphSymbol
+    /// The glyph's share of the plate it sits on.
+    static let scale: CGFloat = 0.4
+
+    var body: some View {
+        Image(systemName: Self.symbol)
+            .font(.system(size: size * Self.scale, weight: .regular))
             .foregroundStyle(DS.Colors.thumbnailGlyph)
     }
 }
