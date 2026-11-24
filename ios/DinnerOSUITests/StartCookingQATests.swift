@@ -164,6 +164,21 @@ final class StartCookingQATests: XCTestCase {
         snap(app, "Cooking › a recipe with a photo")
         // The ingredients are the left column on an iPad and the whole page on a phone.
         let pad = UIDevice.current.userInterfaceIdiom == .pad
+        // On an SE, 240 points down left "Ingredients" right at the picker's edge, drawn faded out
+        // over "Have Ready" (build 121 round 2): the list must settle with no heading blank. Then
+        // back to the top for the whole-list check.
+        if !pad && app.frame.height < 700 {
+            CookingQAChecks.drag(app, column: 0.5, by: 240)
+            sleep(2)
+            problems += CookingQAChecks.checkHeadingsShow(
+                app, screen: "\(screen), 240 points down", column: 0.5, image: capture(app).image)
+            for _ in 0..<3 {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+                    .press(
+                        forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
+            }
+            sleep(1)
+        }
         problems += CookingQAChecks.checkEveryIngredient(
             app, expected: recipe.ingredients.map(\.name), screen: screen, column: pad ? 0.2 : 0.5,
             fadedHeading: { self.keep($0, "Cooking › a recipe with a photo: a heading faded out", unique: false) }

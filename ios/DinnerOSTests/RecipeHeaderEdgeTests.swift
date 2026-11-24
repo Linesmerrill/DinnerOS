@@ -309,6 +309,24 @@ struct RecipeHeaderEdgeTests {
         #expect(DSRowEdgeFade.opacity(top: heading - shift, height: 53, barEdge: edge) == 1)
     }
 
+    /// The SE's typed recipe 240 points down (build 121 round 2): "Ingredients" (32 tall) sits
+    /// right over "Step 1" (50 tall) over 8 oz Bow Tie Pasta. Bringing the row back brought Step 1
+    /// back whole, and that left Ingredients at the bar's edge, drawn faded out. Ingredients comes
+    /// back whole too.
+    @Test func twoHeadingsTogetherBothComeBackWhole() throws {
+        let edge: CGFloat = 0
+        let rows: [(top: CGFloat, height: CGFloat)] = [
+            (-83, 32), (-51, 50), (-1, 42), (41, 0), (45, 50), (95, 42),
+        ]
+        let headings: [CGFloat] = [-83, -51, 45]
+        let shift = try #require(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, headings: headings))
+        #expect(shift == -83 - DS.Size.edgeFade)
+        // Every heading on screen then rests whole.
+        for top in headings where top - shift + 32 > edge {
+            #expect(DSRowEdgeFade.opacity(top: top - shift, height: 32, barEdge: edge) == 1)
+        }
+    }
+
     /// A row moving on past a plain row brings no heading back: the shorter move stays.
     @Test func aPlainRowAboveDoesntPullTheListBack() {
         let edge: CGFloat = 200

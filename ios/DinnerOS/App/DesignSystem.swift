@@ -660,11 +660,15 @@ nonisolated enum DSRowEdgeFade {
         // Where the list then rests, a heading partly below the bar's edge would be drawn faded
         // out over its first row ("Step 4" over 1 cup Grape Tomatoes at the end of an SE's list):
         // the list comes back to show that heading whole instead.
-        let hidden = rows.filter { row in
-            headings.contains { abs($0 - row.top) < 0.5 } && row.top - shift < rest - 0.5
-                && row.top - shift + row.height > barEdge + 0.5
-        }
-        if let heading = hidden.min(by: { $0.top < $1.top }) {
+        // Again for the heading over that one, when two sit together: bringing "Step 1" back
+        // whole left "Ingredients" right over it at the bar's edge, drawn faded out (an SE's
+        // cooking screen, build 121 round 2). Each pass brings a higher heading to rest.
+        let headingRows = rows.filter { row in headings.contains { abs($0 - row.top) < 0.5 } }
+        for _ in 0..<headingRows.count {
+            let hidden = headingRows.filter { row in
+                row.top - shift < rest - 0.5 && row.top - shift + row.height > barEdge + 0.5
+            }
+            guard let heading = hidden.min(by: { $0.top < $1.top }) else { break }
             shift = heading.top - rest
         }
         return shift
