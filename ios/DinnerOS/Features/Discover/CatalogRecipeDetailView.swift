@@ -22,6 +22,8 @@ struct CatalogRecipeDetailView: View {
     /// The large title's bottom edge in the scroll view, and where the bar ends.
     @State private var titleBottom: CGFloat = .infinity
     @State private var scrollTop: CGFloat = 0
+    /// The text column's width, which the photo matches.
+    @State private var columnWidth: CGFloat = 0
 
     private var showsBarTitle: Bool {
         CatalogRecipeHeader.showsBarTitle(titleBottom: titleBottom, barBottom: scrollTop)
@@ -125,10 +127,18 @@ struct CatalogRecipeDetailView: View {
 
     @ViewBuilder
     private func header(_ recipe: CatalogRecipe) -> some View {
-        RecipeImage(url: recipe.imageURL, title: recipe.name)
-            .clipShape(.rect(cornerRadius: DS.Radius.medium))
-            .frame(maxHeight: DS.Size.heroMaxHeight)
+        // As wide as the text under it, cropped to `DS.Size.heroMaxHeight` on a wide screen: a
+        // 4:3 photo held to that height left it narrower than the text on iPad (Hark's review,
+        // build 123 item 9).
+        RecipeImage(url: recipe.imageURL, title: recipe.name, aspectRatio: nil)
             .frame(maxWidth: .infinity)
+            .frame(height: CatalogRecipeHeader.photoHeight(width: columnWidth))
+            .clipShape(.rect(cornerRadius: DS.Radius.medium))
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                if width > 0, width != columnWidth { columnWidth = width }
+            }
         if recipe.imageURL != nil, let credit = recipe.imageCredit {
             PhotoCreditLine(credit: credit)
         }
@@ -260,5 +270,10 @@ enum CatalogRecipeHeader {
     /// Only once the large title has scrolled fully under the bar.
     static func showsBarTitle(titleBottom: CGFloat, barBottom: CGFloat) -> Bool {
         titleBottom <= barBottom
+    }
+
+    /// The photo's height for a column `width` wide: 4:3, no taller than `DS.Size.heroMaxHeight`.
+    static func photoHeight(width: CGFloat) -> CGFloat {
+        min(max(width, 0) * 3 / 4, DS.Size.heroMaxHeight)
     }
 }
