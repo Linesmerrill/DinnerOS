@@ -26,6 +26,13 @@ nonisolated enum QAMarkers {
     /// The whole of a Your Meals card, held space included: a card's own accessibility frame
     /// covers only what VoiceOver reads, so the line-up check measures this instead.
     static let mealCardFrame = "menu.mealCardFrame"
+
+    /// By Day's day headings ("byDay.day.sun") and the heading over meals without a day, so a
+    /// test can check every day of the week shows, in order, below the week strip.
+    static let byDayHeaderPrefix = "byDay.day."
+    static let byDayUnscheduledHeader = "byDay.unscheduled"
+    /// The week strip under the Menu's toolbar.
+    static let weekStrip = "menu.weekStrip"
 }
 
 extension View {
