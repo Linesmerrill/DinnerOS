@@ -352,6 +352,13 @@ extension XCTestCase {
         }
         // Shown once after a fresh install to a household with Plus on the house.
         if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
+        // Still on the sign-in screen with no Menu (ipadP-dark, build 121 round 2: the tap left the
+        // screen as it was, with no message): tap once more, and say so in the log.
+        if !app.buttons["Week Menu"].waitForExistence(timeout: 15), devSignIn.exists, devSignIn.isHittable {
+            print("QA-NOTE: still on the sign-in screen 15 s after Developer sign-in; tapping it again")
+            devSignIn.tap()
+            if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
+        }
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn’t open after sign-in")
         closeNewsBanner(app)
         return app

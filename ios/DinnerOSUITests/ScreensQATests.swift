@@ -109,211 +109,221 @@ final class ScreensQATests: XCTestCase {
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
     }
 
-    // MARK: The main test household
+    // MARK: Recipe pages and cooking
 
+    /// The typed-by-hand recipe's page and cooking screen, a test of its own so neither this nor
+    /// the deeper screens runs near the 10-minute limit on an iPad (build 121 round 2).
     @MainActor
-    func testDeeperScreens() throws {
-        var app = launchSignedIn()
-        let env = ProcessInfo.processInfo.environment
+    func testTypedRecipePageAndCooking() throws {
+        recipePageAndCooking("typed by hand", key: "QA_MANUAL_NAME")
+        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+    }
 
-        // Recipe pages: typed by hand, imported from a meal kit. Found the way a person would,
-        // by searching All Meals (XCTest's own link opening signed the app out).
-        for (kind, key) in [("typed by hand", "QA_MANUAL_NAME"), ("imported", "QA_IMPORTED_NAME")] {
-            guard let recipe = env[key] else {
-                problems.append("Recipe page › \(kind): no name given")
-                continue
-            }
-            // A fresh Menu each time, so the search starts from the top.
-            if kind != "typed by hand" { app = launchSignedIn() }
-            let field = app.textFields["Search meals"].firstMatch
-            if !field.exists {
-                let search = app.buttons["Search meals"].firstMatch
-                // All Meals is the Menu's last section and the list is lazy: on a large iPhone
-                // with a full week it can take more than 12 swipes to reach (build 121).
+    /// The imported recipe's page and cooking screen.
+    @MainActor
+    func testImportedRecipePageAndCooking() throws {
+        recipePageAndCooking("imported", key: "QA_IMPORTED_NAME")
+        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+    }
+
+    /// Recipe pages: typed by hand, imported from a meal kit. Found the way a person would,
+    /// by searching All Meals (XCTest's own link opening signed the app out).
+    @MainActor
+    private func recipePageAndCooking(_ kind: String, key: String) {
+        let app = launchSignedIn()
+        let env = ProcessInfo.processInfo.environment
+        guard let recipe = env[key] else {
+            problems.append("Recipe page › \(kind): no name given")
+            return
+        }
+        let field = app.textFields["Search meals"].firstMatch
+        if !field.exists {
+            let search = app.buttons["Search meals"].firstMatch
+            // All Meals is the Menu's last section and the list is lazy: on a large iPhone
+            // with a full week it can take more than 12 swipes to reach (build 121).
+            reveal(search, in: app, maxSwipes: 24)
+            // Missed it (the lazy list skipped past, or a carousel took the swipe): from the
+            // top once more.
+            if !search.exists {
+                scrollToTop(app)
+                scrollToTop(app)
                 reveal(search, in: app, maxSwipes: 24)
-                // Missed it (the lazy list skipped past, or a carousel took the swipe): from the
-                // top once more.
-                if !search.exists {
-                    scrollToTop(app)
-                    scrollToTop(app)
-                    reveal(search, in: app, maxSwipes: 24)
-                }
-                search.tap()
             }
-            XCTAssertTrue(field.waitForExistence(timeout: 5))
-            field.tap()
-            let typed = (field.value as? String) ?? ""
-            if !typed.isEmpty, typed != "Search meals" {
-                field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count))
+            search.tap()
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        let typed = (field.value as? String) ?? ""
+        if !typed.isEmpty, typed != "Search meals" {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count))
+        }
+        field.typeText(recipe)
+        // The results, loaded: no gray loading card in the screenshot.
+        _ = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe)).firstMatch
+            .waitForExistence(timeout: 10)
+        snap(app, "Menu › search typed, \(kind) (\(mode))")
+        problems += MenuQAChecks.checkSearchAddAtMargin(
+            app, recipe: recipe, screen: "Menu › search typed, \(kind) (\(mode))")
+        // Put the keyboard away with Done, then tap the result card that's on screen: the same
+        // name can also sit in a carousel further up.
+        let done = app.toolbars.buttons["Done"].firstMatch
+        if done.waitForExistence(timeout: 2) { done.tap() }
+        _ = waitGone(app.keyboards.firstMatch, timeout: 3)
+        snap(app, "Menu › search after Done, \(kind) (\(mode))")
+        // The week strip keeps the week you're on (it once ran back to weeks from 2025).
+        // Expanded, this week's pill; collapsed, the one-line "This Week · Nov 15–21".
+        let thisWeek = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'This Week'")).firstMatch
+        if !(thisWeek.exists && app.frame.intersects(thisWeek.frame) && !thisWeek.frame.isEmpty) {
+            problems.append("Menu › search: the week strip lost this week")
+        }
+        let cards = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
+        var card: XCUIElement?
+        for attempt in 0..<12 where card == nil {
+            card = cards.allElementsBoundByIndex.first { $0.isHittable }
+            if card == nil {
+                // The result can sit below the fold under the bars: bring it up once.
+                if attempt == 5, cards.firstMatch.exists { reveal(cards.firstMatch, in: app, maxSwipes: 6) }
+                sleep(1)
             }
-            field.typeText(recipe)
-            // The results, loaded: no gray loading card in the screenshot.
-            _ = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe)).firstMatch
-                .waitForExistence(timeout: 10)
-            snap(app, "Menu › search typed, \(kind) (\(mode))")
-            problems += MenuQAChecks.checkSearchAddAtMargin(
-                app, recipe: recipe, screen: "Menu › search typed, \(kind) (\(mode))")
-            // Put the keyboard away with Done, then tap the result card that's on screen: the same
-            // name can also sit in a carousel further up.
-            let done = app.toolbars.buttons["Done"].firstMatch
-            if done.waitForExistence(timeout: 2) { done.tap() }
-            _ = waitGone(app.keyboards.firstMatch, timeout: 3)
-            snap(app, "Menu › search after Done, \(kind) (\(mode))")
-            // The week strip keeps the week you're on (it once ran back to weeks from 2025).
-            // Expanded, this week's pill; collapsed, the one-line "This Week · Nov 15–21".
-            let thisWeek = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label BEGINSWITH 'This Week'")).firstMatch
-            if !(thisWeek.exists && app.frame.intersects(thisWeek.frame) && !thisWeek.frame.isEmpty) {
-                problems.append("Menu › search: the week strip lost this week")
-            }
-            let cards = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
-            var card: XCUIElement?
-            for attempt in 0..<12 where card == nil {
-                card = cards.allElementsBoundByIndex.first { $0.isHittable }
-                if card == nil {
-                    // The result can sit below the fold under the bars: bring it up once.
-                    if attempt == 5, cards.firstMatch.exists { reveal(cards.firstMatch, in: app, maxSwipes: 6) }
-                    sleep(1)
-                }
-            }
-            guard let card else {
-                snap(app, "Recipe page › \(kind): search result missing (\(mode))", unique: false)
-                problems.append("Recipe page › \(kind): \(recipe) isn’t in All Meals")
-                continue
-            }
-            card.tap()
-            XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn’t open")
-            waitForPushToSettle(app)
-            shot(app, "Recipe page › \(kind)")
-            // Each tab, picked by its accessibility identifier and checked selected (build 121: a
-            // tap by label landed on Customize, Description or a rating tag), then scrolled so its
-            // content is on screen. A copy of a screen already kept fails in `keep`.
-            for (tab, id) in [("Ingredients", "recipeTab.ingredients"), ("Nutrition", "recipeTab.nutrition")] {
-                let byID = app.descendants(matching: .any)[id].firstMatch
-                let picker = byID.exists ? byID : app.buttons[tab].firstMatch
-                guard picker.exists else { continue }
-                reveal(picker, in: app)
+        }
+        guard let card else {
+            snap(app, "Recipe page › \(kind): search result missing (\(mode))", unique: false)
+            problems.append("Recipe page › \(kind): \(recipe) isn’t in All Meals")
+            return
+        }
+        card.tap()
+        XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15), "\(kind) didn’t open")
+        waitForPushToSettle(app)
+        shot(app, "Recipe page › \(kind)")
+        // Each tab, picked by its accessibility identifier and checked selected (build 121: a
+        // tap by label landed on Customize, Description or a rating tag), then scrolled so its
+        // content is on screen. A copy of a screen already kept fails in `keep`.
+        for (tab, id) in [("Ingredients", "recipeTab.ingredients"), ("Nutrition", "recipeTab.nutrition")] {
+            let byID = app.descendants(matching: .any)[id].firstMatch
+            let picker = byID.exists ? byID : app.buttons[tab].firstMatch
+            guard picker.exists else { continue }
+            reveal(picker, in: app)
+            picker.tap()
+            sleep(1)
+            if !(picker.isSelected || (picker.value as? String)?.contains("elected") == true) {
                 picker.tap()
                 sleep(1)
-                if !(picker.isSelected || (picker.value as? String)?.contains("elected") == true) {
-                    picker.tap()
-                    sleep(1)
-                }
-                XCTAssertTrue(
-                    picker.isSelected || (picker.value as? String)?.contains("elected") == true,
-                    "Recipe page › \(kind): the \(tab) tab isn’t selected")
-                pinPicker(picker, in: app)
-                shot(app, "Recipe page › \(kind) › \(tab)")
-                // The tab's first rows start whole under the pinned picker, with nothing resting
-                // half under it or the bar above it (Hark's review, build 121 round 2).
-                problems += FadeQAChecks.checkRest(app, screen: "Recipe page › \(kind) › \(tab)", edges: .top)
-                scrollToTop(app)
             }
-            let more = app.buttons["More"].firstMatch
-            if more.exists {
-                more.tap()
-                // The menu is open: one of its items is on screen.
-                let item = app.buttons.matching(
-                    NSPredicate(format: "label IN %@", ["Delete Recipe", "Edit Recipe", "Share", "Report a Problem"])
-                ).firstMatch
-                if !item.waitForExistence(timeout: 4) {
-                    problems.append("Recipe page › \(kind): the More menu didn’t open")
-                }
-                waitStill(app)
-                let opened = capture(app)
-                keep(opened, "Recipe page › \(kind) › More menu (\(mode))")
-                checkToolbar(app, "Recipe page › \(kind) › More menu")
-                dismissMenu(app)
-                // The page as it opened, scrolled to its end: what sat under the bottom bar's fade
-                // (Add Nutrition above Start Cooking on the Duo) rests whole above it, in a shot
-                // of its own (Hark's review, build 121 round 2).
-                if kind == "typed by hand" {
-                    FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
-                    problems += FadeQAChecks.checkRest(
-                        app, screen: "Recipe page › \(kind) › More menu › end", edges: .bottom)
-                    keepEndIfNew(capture(app), "Recipe page › \(kind) › More menu › end (\(mode))", before: opened)
-                }
-            }
-            // The page as it opens (its first tab), so the scrolled shot isn't the Nutrition tab
-            // again: on a short page both scroll to the same bottom (build 122).
-            let firstTab = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "identifier IN %@", ["recipeTab.description", "recipeTab.customize"]))
-                .firstMatch
-            if firstTab.exists {
-                reveal(firstTab, in: app)
-                // Checked selected, as the tabs above: a tap that missed left the Nutrition tab
-                // up, and its scrolled shot was the Nutrition shot again (build 122, large-dark).
-                for _ in 0..<3 where !Self.isSelected(firstTab) {
-                    firstTab.tap()
-                    sleep(1)
-                }
-                if !Self.isSelected(firstTab) {
-                    problems.append("Recipe page › \(kind): its first tab isn’t selected")
-                }
-            }
+            XCTAssertTrue(
+                picker.isSelected || (picker.value as? String)?.contains("elected") == true,
+                "Recipe page › \(kind): the \(tab) tab isn’t selected")
+            pinPicker(picker, in: app)
+            shot(app, "Recipe page › \(kind) › \(tab)")
+            // The tab's first rows start whole under the pinned picker, with nothing resting
+            // half under it or the bar above it (Hark's review, build 121 round 2).
+            problems += FadeQAChecks.checkRest(app, screen: "Recipe page › \(kind) › \(tab)", edges: .top)
             scrollToTop(app)
-            let top = capture(app)
-            scrollContent(app)
-            var scrolled = capture(app)
-            if scrolled.isSameScreen(as: top) {
-                scrollContent(app)
-                scrolled = capture(app)
+        }
+        let more = app.buttons["More"].firstMatch
+        if more.exists {
+            more.tap()
+            // The menu is open: one of its items is on screen.
+            let item = app.buttons.matching(
+                NSPredicate(format: "label IN %@", ["Delete Recipe", "Edit Recipe", "Share", "Report a Problem"])
+            ).firstMatch
+            if !item.waitForExistence(timeout: 4) {
+                problems.append("Recipe page › \(kind): the More menu didn’t open")
             }
-            // A page that fits on the screen (a short recipe on an iPad) has nothing to scroll: no
-            // shot, rather than a copy of the top (Hark's review, build 122 item 13c).
-            if keepIfScrolled(scrolled, "Recipe page › \(kind) › scrolled (\(mode))", before: top) {
-                checkToolbar(app, "Recipe page › \(kind) › scrolled")
-                // At the end of the page the last rows rest whole, clear of the bottom bar's
-                // fade (Hark's review, build 121 round 2: Add Nutrition under it on the Duo).
+            waitStill(app)
+            let opened = capture(app)
+            keep(opened, "Recipe page › \(kind) › More menu (\(mode))")
+            checkToolbar(app, "Recipe page › \(kind) › More menu")
+            dismissMenu(app)
+            // The page as it opened, scrolled to its end: what sat under the bottom bar's fade
+            // (Add Nutrition above Start Cooking on the Duo) rests whole above it, in a shot
+            // of its own (Hark's review, build 121 round 2).
+            if kind == "typed by hand" {
                 FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
                 problems += FadeQAChecks.checkRest(
-                    app, screen: "Recipe page › \(kind), scrolled to the end", edges: .bottom)
+                    app, screen: "Recipe page › \(kind) › More menu › end", edges: .bottom)
+                keepEndIfNew(capture(app), "Recipe page › \(kind) › More menu › end (\(mode))", before: opened)
             }
-            // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
-            // to the top in case it ever scrolls away again.
-            let startCooking = app.buttons["Start Cooking"].firstMatch
-            for _ in 0..<3 where !startCooking.exists { pullDown(app) }
-            startCooking.tap()
-            // The walkthrough shows the first time cooking opens: a screen of its own, then Skip,
-            // so the cooking shot is this recipe's cooking screen (Hark's review, build 122 13b).
-            if app.staticTexts["Welcome to Cooking with DinnerOS"].waitForExistence(timeout: 4) {
-                waitStill(app)
-                shot(app, "Cooking › Welcome")
-                app.buttons["Skip"].firstMatch.tap()
-                _ = waitGone(app.staticTexts["Welcome to Cooking with DinnerOS"], timeout: 5)
-            }
-            if openedCooking(recipe, in: app) {
-                waitStill(app)
-                shot(app, "Cooking › \(kind)")
-                checkStepsShowAtRest(app, "Cooking › \(kind)")
-                // The end of the ingredient list, so every ingredient can be seen in some shot
-                // (Hark's build 123 review, item 10), with every row on the way drawn where it rests,
-                // and the typed recipe's middle in every config, where the top and end can leave rows
-                // between them (Basil Pesto on the Duo, Hark's build 121 round 2 review, item 6).
-                let top = capture(app)
-                let pad = UIDevice.current.userInterfaceIdiom == .pad
-                let typed = kind == "typed by hand"
-                problems += CookingQAChecks.checkEveryIngredient(
-                    app, expected: typed ? Self.typedIngredients : [],
-                    screen: "Cooking › \(kind)", column: pad ? 0.2 : 0.5,
-                    middle: typed ? { self.keep($0, "Cooking › \(kind) › middle of ingredients (\(self.mode))") } : nil,
-                    fadedHeading: {
-                        self.keep($0, "Cooking › \(kind): a heading faded out (\(self.mode))", unique: false)
-                    }
-                ) { capture(app, settle: false) }
-                keepIfScrolled(capture(app), "Cooking › \(kind) › end of ingredients (\(mode))", before: top)
-            } else {
-                snap(app, "Cooking › \(kind): not the cooking screen (\(mode))", unique: false)
-                problems.append("Cooking › \(kind): Start Cooking didn’t open \(recipe)’s cooking screen")
-            }
-            if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) { app.buttons["Done"].firstMatch.tap() }
-            sleep(1)
-            back(app)
         }
+        // The page as it opens (its first tab), so the scrolled shot isn't the Nutrition tab
+        // again: on a short page both scroll to the same bottom (build 122).
+        let firstTab = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier IN %@", ["recipeTab.description", "recipeTab.customize"]))
+            .firstMatch
+        if firstTab.exists {
+            reveal(firstTab, in: app)
+            // Checked selected, as the tabs above: a tap that missed left the Nutrition tab
+            // up, and its scrolled shot was the Nutrition shot again (build 122, large-dark).
+            for _ in 0..<3 where !Self.isSelected(firstTab) {
+                firstTab.tap()
+                sleep(1)
+            }
+            if !Self.isSelected(firstTab) {
+                problems.append("Recipe page › \(kind): its first tab isn’t selected")
+            }
+        }
+        scrollToTop(app)
+        let top = capture(app)
+        scrollContent(app)
+        var scrolled = capture(app)
+        if scrolled.isSameScreen(as: top) {
+            scrollContent(app)
+            scrolled = capture(app)
+        }
+        // A page that fits on the screen (a short recipe on an iPad) has nothing to scroll: no
+        // shot, rather than a copy of the top (Hark's review, build 122 item 13c).
+        if keepIfScrolled(scrolled, "Recipe page › \(kind) › scrolled (\(mode))", before: top) {
+            checkToolbar(app, "Recipe page › \(kind) › scrolled")
+            // At the end of the page the last rows rest whole, clear of the bottom bar's
+            // fade (Hark's review, build 121 round 2: Add Nutrition under it on the Duo).
+            FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+            problems += FadeQAChecks.checkRest(
+                app, screen: "Recipe page › \(kind), scrolled to the end", edges: .bottom)
+        }
+        // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
+        // to the top in case it ever scrolls away again.
+        let startCooking = app.buttons["Start Cooking"].firstMatch
+        for _ in 0..<3 where !startCooking.exists { pullDown(app) }
+        startCooking.tap()
+        // The walkthrough shows the first time cooking opens: a screen of its own, then Skip,
+        // so the cooking shot is this recipe's cooking screen (Hark's review, build 122 13b).
+        if app.staticTexts["Welcome to Cooking with DinnerOS"].waitForExistence(timeout: 4) {
+            waitStill(app)
+            shot(app, "Cooking › Welcome")
+            app.buttons["Skip"].firstMatch.tap()
+            _ = waitGone(app.staticTexts["Welcome to Cooking with DinnerOS"], timeout: 5)
+        }
+        if openedCooking(recipe, in: app) {
+            waitStill(app)
+            shot(app, "Cooking › \(kind)")
+            checkStepsShowAtRest(app, "Cooking › \(kind)")
+            // The end of the ingredient list, so every ingredient can be seen in some shot
+            // (Hark's build 123 review, item 10), with every row on the way drawn where it rests,
+            // and the typed recipe's middle in every config, where the top and end can leave rows
+            // between them (Basil Pesto on the Duo, Hark's build 121 round 2 review, item 6).
+            let top = capture(app)
+            let pad = UIDevice.current.userInterfaceIdiom == .pad
+            let typed = kind == "typed by hand"
+            problems += CookingQAChecks.checkEveryIngredient(
+                app, expected: typed ? Self.typedIngredients : [],
+                screen: "Cooking › \(kind)", column: pad ? 0.2 : 0.5,
+                middle: typed ? { self.keep($0, "Cooking › \(kind) › middle of ingredients (\(self.mode))") } : nil,
+                fadedHeading: {
+                    self.keep($0, "Cooking › \(kind): a heading faded out (\(self.mode))", unique: false)
+                }
+            ) { capture(app, settle: false) }
+            keepIfScrolled(capture(app), "Cooking › \(kind) › end of ingredients (\(mode))", before: top)
+        } else {
+            snap(app, "Cooking › \(kind): not the cooking screen (\(mode))", unique: false)
+            problems.append("Cooking › \(kind): Start Cooking didn’t open \(recipe)’s cooking screen")
+        }
+        if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) { app.buttons["Done"].firstMatch.tap() }
+        sleep(1)
+        back(app)
 
         // Back from a recipe found by search, the search keyboard comes back over the tab bar.
-        // Done above it must put it away.
-        if app.keyboards.firstMatch.exists {
+        // Done above it must put it away. After the imported recipe, as when both were one test.
+        if kind == "imported", app.keyboards.firstMatch.exists {
             snap(app, "Menu › search keyboard (\(mode))")
             let done = app.toolbars.buttons["Done"].firstMatch
             if done.exists { done.tap() }
@@ -321,10 +331,15 @@ final class ScreensQATests: XCTestCase {
                 problems.append("Menu › search: no way to put the keyboard away")
             }
         }
+    }
 
-        // Menu: notifications, the ⋯ menu, setup again. A fresh launch, so no search text is left
-        // over from the recipe search above.
-        app = launchSignedIn()
+    // MARK: The main test household
+
+    /// The Menu's notifications, ⋯ menu and setup, Shop, Pantry and Household's sheets. The
+    /// recipe pages and cooking screens are the two tests above.
+    @MainActor
+    func testDeeperScreens() throws {
+        var app = launchSignedIn()
         app.buttons["Menu"].firstMatch.tap()
         sleep(1)
         menuByDay(app)

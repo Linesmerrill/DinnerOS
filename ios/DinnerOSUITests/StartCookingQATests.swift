@@ -179,19 +179,25 @@ final class StartCookingQATests: XCTestCase {
             .firstMatch
     }
 
-    /// Drags slowly, and holds at the end so nothing coasts, until `element`'s top rests a fade's
-    /// height under the bar.
+    /// Drags slowly, and holds at the end so nothing coasts, until `element`'s top rests a little
+    /// under the bar. No drag is shorter than `minDrag`: a shorter one is taken as a tap, and a
+    /// tap on a step marks it as the one you're on, which scrolled Step 3 up under the bar on the
+    /// upright iPad (build 121 round 2). A short correction goes past and comes back instead.
     @MainActor
     private func bringToTop(_ element: XCUIElement, in app: XCUIApplication, column: CGFloat) {
-        for _ in 0..<8 {
+        let minDrag: CGFloat = 50
+        for _ in 0..<10 {
             guard element.exists else {
                 scrollCooking(app, column: column)
                 continue
             }
-            let target = CookingQAChecks.barBottom(app) + 40
-            let distance = element.frame.minY - target
-            guard abs(distance) > 12 else { return }
-            let step = max(min(distance, app.frame.height * 0.4), -app.frame.height * 0.4)
+            let bar = CookingQAChecks.barBottom(app)
+            let top = element.frame.minY
+            // Close enough: whole under the bar, its start near the top.
+            if top >= bar + 8 && top <= bar + 90 { return }
+            let distance = top - (bar + 40)
+            var step = max(min(distance, app.frame.height * 0.4), -app.frame.height * 0.4)
+            if abs(step) < minDrag { step += step > 0 ? minDrag : -minDrag }
             // Up from low on the screen, or back down from high on it.
             let y = step > 0 ? app.frame.height * 0.75 : app.frame.height * 0.3
             let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0))
