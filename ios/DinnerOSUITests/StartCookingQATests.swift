@@ -139,6 +139,9 @@ final class StartCookingQATests: XCTestCase {
     /// every one of the recipe's 13 ingredients must be on a row that's drawn.
     @MainActor
     func testCookingShowsThePhotoAndEveryIngredient() throws {
+        // Carries on past a failed check, so the sign-out at the end always runs: left signed in to
+        // this test's own household, the next test couldn't find its recipe (build 121 round 2).
+        continueAfterFailure = true
         let recipe = QARecipeFixture.lemonPenne
         let own = try ownHousehold("cookphoto", recipe: "") { own in
             _ = try await own.importRecipe(recipe)
@@ -165,10 +168,10 @@ final class StartCookingQATests: XCTestCase {
             app, expected: recipe.ingredients.map(\.name), screen: screen, column: pad ? 0.2 : 0.5,
             fadedHeading: { self.keep($0, "Cooking › a recipe with a photo: a heading faded out", unique: false) }
         ) { capture(app) }
-        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
-        // Signed out, so the next test signs in to the shared test household, not this one.
+        // Signed out first, so the next test signs in to the shared test household, not this one.
         if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
         signOut(app)
+        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
         app.terminate()
     }
 

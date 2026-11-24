@@ -504,16 +504,24 @@ final class BiometricSignInQATests: XCTestCase {
         }
         if value != on {
             app.switches["account.biometricSignIn"].firstMatch.switches.firstMatch.tap()
+            // A tap as Account was still settling in left the toggle as it was (small-dark, build
+            // 121 round 2): once more if it hasn't moved.
+            if !waitForToggle(app, on, timeout: 8) {
+                print("QA-NOTE: the Face ID toggle didn’t move on the first tap; tapping it again")
+                app.switches["account.biometricSignIn"].firstMatch.switches.firstMatch.tap()
+            }
         }
         XCTAssertTrue(waitForToggle(app, on), "The Face ID toggle didn’t turn \(on ? "on" : "off")")
     }
 
     @MainActor
-    private func waitForToggle(_ app: XCUIApplication, _ on: Bool, opening: Bool = false) -> Bool {
+    private func waitForToggle(
+        _ app: XCUIApplication, _ on: Bool, opening: Bool = false, timeout: TimeInterval = 10
+    ) -> Bool {
         if opening { openAccount(app) }
         let toggle = app.switches["account.biometricSignIn"].firstMatch
         let done = expectation(for: NSPredicate(format: "value == %@", on ? "1" : "0"), evaluatedWith: toggle)
-        return XCTWaiter.wait(for: [done], timeout: 10) == .completed
+        return XCTWaiter.wait(for: [done], timeout: timeout) == .completed
     }
 
     /// The first use asks "Do you want to allow DinnerOS to use Face ID?".

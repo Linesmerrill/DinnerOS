@@ -138,6 +138,11 @@ enum CookingQAChecks {
         var seen = Set<String>()
         var blank = Set<String>()
         var faded = Set<String>()
+        // Every row the list has, on any screen: each must rest whole in the checked space on
+        // some screen, or the check fails (build 121 round 2: drags too long for the Duo's short
+        // screen skipped Basil Pesto, and the check passed it by).
+        var everyRow = Set<String>()
+        var tooTall = Set<String>()
         var previous: QAShotImage?
         // Where the list's last row starts out, and where it is on each screen: how far down the
         // list a screen is.
@@ -151,7 +156,9 @@ enum CookingQAChecks {
             let shot = capture()
             guard let image = shot.image else { break }
             let bar = barBottom(app)
-            let top = bar + fadeRoom
+            // A list's first row rests right at the end of the fade under the bar: a point or two
+            // of rounding there still counts as clear of it.
+            let top = bar + fadeRoom - 2
             let bottom = screenFrame.maxY - fadeRoom - 60
             // One snapshot of the screen, walked here: asking each row for its frame took
             // minutes on a long list.
@@ -167,6 +174,10 @@ enum CookingQAChecks {
                 } else if element.elementType == .staticText, isHeading(element.label) {
                     headings.append((element.label, frame))
                 }
+            }
+            for row in rows {
+                everyRow.insert(row.label)
+                if row.frame.height > bottom - top { tooTall.insert(row.label) }
             }
             for row in rows where row.frame.minY >= top && row.frame.maxY <= bottom {
                 // A row clear of the bar is drawn at rest, every time: on TestFlight 120 the rows
@@ -208,11 +219,18 @@ enum CookingQAChecks {
             // that looked the same after one drag once left Lemon Wedges cut off at the bottom
             // (Hark's review, build 121 round 2, item 5).
             if stopped && lastWhole { break }
-            // As far as every row still rests whole clear of the bar on some screen, held at the
-            // end so the list doesn't coast on: on an iPad twice the third of a screen this once
-            // was, which ran the test past its 10 minutes (build 121 round 2).
-            drag(app, column: column, by: step(bar: bar, screen: screenFrame))
+            // The next row not yet checked comes up to just under the top of the checked space, held
+            // at the end so the list doesn't coast on: no row is skipped, on the Duo's short screen
+            // too, and a long iPad list takes few drags (build 121 round 2).
+            let next = rows.filter { $0.frame.minY > top && !seen.contains($0.label) && !blank.contains($0.label) }
+                .min { $0.frame.minY < $1.frame.minY }
+            let distance = next.map { $0.frame.minY - (top + 12) } ?? step(bar: bar, screen: screenFrame)
+            // Never so short it's taken as a tap, nor longer than the checked space.
+            drag(app, column: column, by: min(max(distance, 60), bottom - top))
             sleep(1)
+        }
+        for label in everyRow.subtracting(seen).subtracting(blank).subtracting(tooTall).sorted() {
+            problems.append("\(screen): the row “\(label)” never rested whole clear of the bar on any screen")
         }
         for label in blank.sorted() {
             problems.append("\(screen): the row “\(label)” is on the list but isn’t drawn")
