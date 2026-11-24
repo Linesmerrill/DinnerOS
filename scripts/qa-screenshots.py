@@ -46,6 +46,22 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # every config (Hark's build 123 review, items 3 and 10).
             "Cooking › imported › end of ingredients", "Cooking › typed by hand › end of ingredients",
             "Menu › Your Meals with a meal made")
+# Screens a device's configs must have besides REQUIRED. On a phone, Pantry's Butter and Shop's
+# Cream Sauce Base flour sit below the tab's first screen, so the sweep scrolls to each and keeps
+# it, and their percent and amount can be checked on every config (Hark's build 121 review,
+# item 18). An iPad shows both in the tab's own shot.
+REQUIRED_ON = {
+    "small": ("Pantry › scrolled to Butter", "Shop › scrolled to Flour"),
+    "duo": ("Pantry › scrolled to Butter", "Shop › scrolled to Flour"),
+}
+
+
+def missing_screens(config, screens):
+    """The required screens `config` ("small-dark") lacks, given the screen names it has."""
+    required = REQUIRED + REQUIRED_ON.get(config.split("-")[0], ())
+    return [r for r in required if r not in screens and (config, r) not in COVERAGE_EXCEPTIONS]
+
+
 # Required screens a config may lack, each with its reason. None since Hark's build 123 review
 # (item 3): every config has the same set. The typed recipe has a description, so its page scrolls
 # on the upright iPad too, and MenuCardsQATests runs in every config.
@@ -205,7 +221,7 @@ def main():
     for m in manifest:
         screens[m["config"]].add(re.sub(r" \((light|dark)\)$", "", m["screen"]))
     for c in configs:
-        missing = [r for r in REQUIRED if r not in screens[c] and (c, r) not in COVERAGE_EXCEPTIONS]
+        missing = missing_screens(c, screens[c])
         if missing:
             problems.append(f"{c} is missing: {', '.join(missing)}")
     if problems:

@@ -35,13 +35,34 @@ final class AppSweepQATests: XCTestCase {
                 problems.append("\(tab): tapping the tab didn’t open it")
                 continue
             }
-            snap(app, "\(tab) (\(mode))")
+            let tabShot = capture(app)
+            keep(tabShot, "\(tab) (\(mode))")
             checkScreen(app, "\(tab) (\(mode))")
             checkNothingMissing(app, tab: tab, mode: mode)
             visitRows(app, tab: tab, mode: mode)
+            if let row = Self.rowsToShow[tab] { snapRow(app, row, tab: tab, mode: mode, tabShot: tabShot) }
             if tab == "Household" { checkVersion(app, mode: mode) }
         }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+    }
+
+    /// A row on each of these tabs whose amount is checked in every config (Hark's build 121
+    /// review, item 18): Butter's percentage and amount on Pantry, the Cream Sauce Base's flour on
+    /// Shop. Below the first screen on a phone, so the sweep scrolls to them.
+    static let rowsToShow = ["Pantry": "Butter", "Shop": "All-Purpose Flour"]
+
+    /// Scrolls `row` into the upper half of the tab and keeps "Pantry › scrolled to Butter". Left
+    /// out when the tab didn't move (an iPad shows the row in the tab's own shot already).
+    @MainActor
+    private func snapRow(_ app: XCUIApplication, _ row: String, tab: String, mode: String, tabShot: QAShot) {
+        let text = app.staticTexts[row].firstMatch
+        reveal(text, in: app, maxSwipes: 12)
+        guard text.exists else {
+            problems.append("\(tab) (\(mode)): no \(row) row to show")
+            return
+        }
+        let short = row.split(separator: " ").last.map(String.init) ?? row
+        keepIfScrolled(capture(app), "\(tab) › scrolled to \(short) (\(mode))", before: tabShot)
     }
 
     /// Build 123 (Hark: "this cannot happen again"): content that should be there and isn't. On
