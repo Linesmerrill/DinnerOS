@@ -287,9 +287,12 @@ final class ScreensQATests: XCTestCase {
         startCooking.tap()
         // The walkthrough shows the first time cooking opens: a screen of its own, then Skip,
         // so the cooking shot is this recipe's cooking screen (Hark's review, build 122 13b).
+        // Kept once, from the imported recipe's test: it runs first on a simulator, and on the
+        // phones the typed recipe's test can see the walkthrough again on a fresh simulator,
+        // which made a second, identical shot.
         if app.staticTexts["Welcome to Cooking with DinnerOS"].waitForExistence(timeout: 4) {
             waitStill(app)
-            shot(app, "Cooking › Welcome")
+            if kind == "imported" { shot(app, "Cooking › Welcome") }
             app.buttons["Skip"].firstMatch.tap()
             _ = waitGone(app.staticTexts["Welcome to Cooking with DinnerOS"], timeout: 5)
         }
