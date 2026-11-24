@@ -343,7 +343,15 @@ func byRule(ctx context.Context, rule string, pool []Result, sig *signals, now t
 	}
 	switch rule {
 	case RuleBest:
-		return slices.Clone(pool), nil
+		// The headline row leads with recipes that have a photo and a
+		// time: a card with a blank picture and no time isn't a favorite
+		// to show off (build 123, Hark's review). The rest keep their rank
+		// behind them.
+		out := slices.Clone(pool)
+		slices.SortStableFunc(out, func(a, b Result) int {
+			return cmp.Compare(boolInt(!showsWell(a)), boolInt(!showsWell(b)))
+		})
+		return out, nil
 	case RuleQuick:
 		return keep(func(r Result) bool { return withinMinutes(r.Content, quickMinutes) }), nil
 	case RuleCrowd:

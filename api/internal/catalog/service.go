@@ -434,6 +434,11 @@ func hasCuisine(c recipes.Recipe, cuisine string) bool {
 
 // withinMinutes reports whether the recipe's total time is known and at most
 // limit. An unknown time is not "quick": it is left out.
+// showsWell reports a recipe whose card has a photo and a time to show.
+func showsWell(r Result) bool {
+	return strings.TrimSpace(r.Content.ImageURL) != "" && recipes.CookMinutes(r.Content.PrepMinutes, r.Content.TotalMinutes) > 0
+}
+
 func withinMinutes(c recipes.Recipe, limit int) bool {
 	m := recipes.CookMinutes(c.PrepMinutes, c.TotalMinutes)
 	return m > 0 && m <= limit
