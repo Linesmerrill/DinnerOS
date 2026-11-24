@@ -152,7 +152,8 @@ final class StartCookingQATests: XCTestCase {
         // The ingredients are the left column on an iPad and the whole page on a phone.
         let pad = UIDevice.current.userInterfaceIdiom == .pad
         problems += CookingQAChecks.checkEveryIngredient(
-            app, expected: recipe.ingredients.map(\.name), screen: screen, column: pad ? 0.2 : 0.5
+            app, expected: recipe.ingredients.map(\.name), screen: screen, column: pad ? 0.2 : 0.5,
+            fadedHeading: { self.keep($0, "Cooking › a recipe with a photo: a heading faded out", unique: false) }
         ) { capture(app) }
         XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
         // Signed out, so the next test signs in to the shared test household, not this one.

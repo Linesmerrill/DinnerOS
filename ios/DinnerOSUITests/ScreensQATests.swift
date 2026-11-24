@@ -278,6 +278,9 @@ final class ScreensQATests: XCTestCase {
                     middle: {
                         _ = self.keepIfScrolled(
                             $0, "Cooking › \(kind) › middle of ingredients (\(self.mode))", before: top)
+                    },
+                    fadedHeading: {
+                        self.keep($0, "Cooking › \(kind): a heading faded out (\(self.mode))", unique: false)
                     }
                 ) { capture(app, settle: false) }
                 keepIfScrolled(capture(app), "Cooking › \(kind) › end of ingredients (\(mode))", before: top)

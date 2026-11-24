@@ -131,7 +131,7 @@ enum CookingQAChecks {
     @MainActor
     static func checkEveryIngredient(
         _ app: XCUIApplication, expected: [String], screen: String, column: CGFloat,
-        middle: ((QAShot) -> Void)? = nil, capture: () -> QAShot
+        middle: ((QAShot) -> Void)? = nil, fadedHeading: ((QAShot) -> Void)? = nil, capture: () -> QAShot
     ) -> [String] {
         var problems: [String] = []
         var seen = Set<String>()
@@ -143,12 +143,14 @@ enum CookingQAChecks {
         var startLast: CGFloat?
         var bestMiddle: (shot: QAShot, distance: CGFloat)?
         var lastWhole = false
+        // Asked once: each ask is a query of the app, and a long list has hundreds of elements.
+        let screenFrame = app.frame
         for _ in 0..<24 {
             let shot = capture()
             guard let image = shot.image else { break }
             let bar = barBottom(app)
             let top = bar + fadeRoom
-            let bottom = app.frame.maxY - fadeRoom - 60
+            let bottom = screenFrame.maxY - fadeRoom - 60
             // One snapshot of the screen, walked here: asking each row for its frame took
             // minutes on a long list.
             var rows: [(label: String, frame: CGRect)] = []
@@ -157,7 +159,7 @@ enum CookingQAChecks {
             while let element = stack.popLast() {
                 stack.append(contentsOf: element.children)
                 let frame = element.frame
-                guard !frame.isEmpty, inColumn(frame, app: app, column: column) else { continue }
+                guard !frame.isEmpty, inColumn(frame, width: screenFrame.width, column: column) else { continue }
                 if element.identifier == QAMarkers.cookIngredient {
                     rows.append((element.label, frame))
                 } else if element.elementType == .staticText, isHeading(element.label) {
@@ -173,16 +175,31 @@ enum CookingQAChecks {
                     blank.insert(row.label)
                 }
             }
+            // The rows at the end of the list, once it's there, rest lower: drawn there, they're seen.
+            for row in rows
+            where row.frame.minY >= top && row.frame.maxY > bottom && row.frame.maxY <= screenFrame.maxY - endRoom
+                && isDrawn(row.frame, in: image)
+            {
+                seen.insert(row.label)
+            }
             // A heading in the band under the bar is drawn: a heading faded out there left a blank
             // band over its rows with no step named (Hark's review, build 121 round 2, item 4).
-            faded.formUnion(fadedHeadings(headings, bar: bar, in: image, screen: app.frame))
+            let fadedHere = fadedHeadings(headings, bar: bar, in: image, screen: screenFrame)
+            if !fadedHere.isEmpty {
+                faded.formUnion(fadedHere)
+                fadedHeading?(shot)
+                let near = (headings + rows).filter { $0.frame.minY < top + 60 && $0.frame.maxY > bar - 60 }
+                    .sorted { $0.frame.minY < $1.frame.minY }
+                    .map { "\($0.label.prefix(24)) \(Int($0.frame.minY))-\(Int($0.frame.maxY))" }
+                print("QA-NOTE: \(screen): \(fadedHere) faded under the bar at \(Int(bar)): \(near)")
+            }
             let last = rows.map(\.frame).max { $0.maxY < $1.maxY }
             if let last {
                 if startLast == nil { startLast = last.maxY }
-                lastWhole = last.maxY <= app.frame.maxY - endRoom && isDrawn(last, in: image)
+                lastWhole = last.maxY <= screenFrame.maxY - endRoom && isDrawn(last, in: image)
                 // Halfway from where the last row started to where it ends, at the screen's bottom.
                 if let startLast, middle != nil {
-                    let distance = abs(last.maxY - (startLast + app.frame.maxY) / 2)
+                    let distance = abs(last.maxY - (startLast + screenFrame.maxY) / 2)
                     if distance < (bestMiddle?.distance ?? .infinity) { bestMiddle = (shot, distance) }
                 }
             }
@@ -217,7 +234,7 @@ enum CookingQAChecks {
         }
         // Only a list longer than its top and end screens together: otherwise the middle is in
         // one of them.
-        if let middle, let bestMiddle, let startLast, startLast - app.frame.maxY > app.frame.maxY - barBottom(app) {
+        if let middle, let bestMiddle, let startLast, startLast - screenFrame.maxY > screenFrame.maxY - barBottom(app) {
             middle(bestMiddle.shot)
         }
         return problems
@@ -240,19 +257,26 @@ enum CookingQAChecks {
         -> [String]
     {
         guard let image else { return [] }
-        let headings = app.staticTexts.allElementsBoundByIndex
-            .filter { isHeading($0.label) && inColumn($0.frame, app: app, column: column) }
-            .map { ($0.label, $0.frame) }
-        return fadedHeadings(headings, bar: barBottom(app), in: image, screen: app.frame).map {
+        let screenFrame = app.frame
+        var headings: [(label: String, frame: CGRect)] = []
+        var stack = (try? app.snapshot()).map { [$0] } ?? []
+        while let element = stack.popLast() {
+            stack.append(contentsOf: element.children)
+            if element.elementType == .staticText, isHeading(element.label),
+                inColumn(element.frame, width: screenFrame.width, column: column)
+            {
+                headings.append((element.label, element.frame))
+            }
+        }
+        return fadedHeadings(headings, bar: barBottom(app), in: image, screen: screenFrame).map {
             "\(screen): the heading “\($0)” rests faded out under the bar, a blank band over its rows"
         }
     }
 
     /// Whether `frame` is in the part of the screen a drag at `column` scrolls: the left pane on an
     /// iPad (column under half), the whole width on a phone.
-    @MainActor
-    static func inColumn(_ frame: CGRect, app: XCUIApplication, column: CGFloat) -> Bool {
-        column >= 0.5 || frame.maxX <= app.frame.width * 0.5
+    static func inColumn(_ frame: CGRect, width: CGFloat, column: CGFloat) -> Bool {
+        column >= 0.5 || frame.maxX <= width * 0.5
     }
 
     /// Room kept under the list's last row at its end: the home indicator, with a little to spare.

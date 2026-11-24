@@ -236,6 +236,29 @@ struct RecipeHeaderEdgeTests {
         }
     }
 
+    /// The end of an SE's typed list (build 121 round 2, item 4): 1 cup Grape Tomatoes rested
+    /// a few points into the fade with "Step 4" above it, mostly under the bar. Bringing the row
+    /// back whole left the heading's foot in the band under the bar, drawn faded out: the list
+    /// comes back far enough to show the heading whole instead.
+    @Test func aHeadingOverTheRowComingBackComesBackToo() throws {
+        let edge: CGFloat = 155
+        let heading: CGFloat = edge - 53
+        let rows: [(top: CGFloat, height: CGFloat)] = [(heading, 53), (edge, 44), (edge + 44, 44)]
+        // Without knowing the heading, the row comes back alone.
+        #expect(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, maxForward: 0) == -DS.Size.edgeFade)
+        let shift = try #require(
+            DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, maxForward: 0, headings: [heading]))
+        #expect(shift == heading - edge - DS.Size.edgeFade)
+        #expect(DSRowEdgeFade.opacity(top: heading - shift, height: 53, barEdge: edge) == 1)
+    }
+
+    /// A row moving on past a plain row brings no heading back: the shorter move stays.
+    @Test func aPlainRowAboveDoesntPullTheListBack() {
+        let edge: CGFloat = 200
+        let rows: [(top: CGFloat, height: CGFloat)] = [(edge - 30, 44), (edge + 14, 44), (edge + 58, 44)]
+        #expect(DSRowEdgeFade.restingShift(rows: rows, barEdge: edge, headings: [edge + 58]) == 14 - DS.Size.edgeFade)
+    }
+
     /// The row frames say which rows are headings, as the list sits on screen.
     @Test @MainActor func rowFramesKnowTheirHeadings() {
         let frames = DSRowFrames()

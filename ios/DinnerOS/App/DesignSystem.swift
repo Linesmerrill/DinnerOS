@@ -637,11 +637,22 @@ nonisolated enum DSRowEdgeFade {
         let next = rows.filter { $0.top >= first.top + first.height - 0.5 }.map(\.top).min()
         let isHeading = headings.contains { abs($0 - first.top) < 0.5 }
         // Mostly under the bar already: the next row comes up instead, when that's the shorter move.
+        var shift = back
         if !isHeading, let next, first.top + first.height / 2 < barEdge, next - rest < -back, next - rest <= maxForward
         {
-            return next - rest
+            shift = next - rest
         }
-        return back
+        // Where the list then rests, a heading partly below the bar's edge would be drawn faded
+        // out over its first row ("Step 4" over 1 cup Grape Tomatoes at the end of an SE's list):
+        // the list comes back to show that heading whole instead.
+        let hidden = rows.filter { row in
+            headings.contains { abs($0 - row.top) < 0.5 } && row.top - shift < rest - 0.5
+                && row.top - shift + row.height > barEdge + 0.5
+        }
+        if let heading = hidden.min(by: { $0.top < $1.top }) {
+            shift = heading.top - rest
+        }
+        return shift
     }
 }
 
