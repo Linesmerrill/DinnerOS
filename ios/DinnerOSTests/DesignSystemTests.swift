@@ -88,7 +88,10 @@ struct DesignSystemTests {
     /// needs 3:1 on the screen and on a card, in light and dark.
     @Test func emptyRatingStarsAreClearInLightAndDark() {
         for dark in [false, true] {
-            for background in [DS.Colors.background, DS.Colors.surface, DS.Colors.groupedSurface, DS.Colors.groupedBackground] {
+            let backgrounds = [
+                DS.Colors.background, DS.Colors.surface, DS.Colors.groupedSurface, DS.Colors.groupedBackground,
+            ]
+            for background in backgrounds {
                 #expect(contrast(DS.Colors.emptyStar, background, dark: dark) >= 3)
             }
         }
