@@ -48,4 +48,30 @@ struct RecipeDetailTabTests {
     @Test func everyTabHasItsOwnIdentifier() {
         #expect(Set(RecipeDetailTab.allCases.map(\.id)).count == RecipeDetailTab.allCases.count)
     }
+
+    // MARK: One size for every tab's name (Hark's review, build 121 round 2)
+
+    /// A small phone: "Customize" and "Description" need shrinking and "Nutrition" doesn't on
+    /// its own. Every name gets the one scale the widest needs, so none is drawn bigger.
+    @Test func everyNameShrinksByTheScaleTheWidestNeeds() {
+        // Tabs 80 points wide leave 64 for a name.
+        let scale = RecipeDetailTabPicker.sharedScale(labelWidths: [76, 80, 72, 62], segmentWidth: 80)
+
+        #expect(abs(scale - 0.8) < 0.0001, "scale \(scale)")
+    }
+
+    @Test func namesThatAllFitStayFullSize() {
+        #expect(RecipeDetailTabPicker.sharedScale(labelWidths: [60, 70, 64], segmentWidth: 100) == 1)
+    }
+
+    @Test func theScaleNeverGoesBelowTheSmallest() {
+        let scale = RecipeDetailTabPicker.sharedScale(labelWidths: [300], segmentWidth: 60)
+
+        #expect(scale == RecipeDetailTabPicker.minimumLabelScale)
+    }
+
+    @Test func nothingMeasuredYetLeavesTheNamesFullSize() {
+        #expect(RecipeDetailTabPicker.sharedScale(labelWidths: [], segmentWidth: 80) == 1)
+        #expect(RecipeDetailTabPicker.sharedScale(labelWidths: [90], segmentWidth: 0) == 1)
+    }
 }

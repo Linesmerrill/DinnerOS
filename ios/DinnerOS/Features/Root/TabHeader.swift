@@ -127,12 +127,14 @@ struct TabBarScrim: ViewModifier {
                     VStack(spacing: 0) {
                         gradient(TabBarScrimLayout.fadeStops)
                             .frame(height: DS.Size.tabBarScrimFade)
+                            .qaCover(.fade)
                         // Zero high on the safe area's edge; its background reaches down over
                         // the bar's whole inset, however tall that is.
                         Color.clear
                             .frame(height: 0)
                             .background {
                                 gradient(TabBarScrimLayout.barStops)
+                                    .qaCover(.bar)
                                     .ignoresSafeArea(.container, edges: .bottom)
                             }
                     }
