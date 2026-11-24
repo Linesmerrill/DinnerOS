@@ -252,4 +252,46 @@ struct TabBarScrimLayoutTests {
         #expect(bar.last?.location == 1)
         #expect(bar.last?.opacity == 1)
     }
+
+    /// The scrim fades into the screen's own background: on a grouped screen (Shop, Pantry,
+    /// Household) a white scrim showed as a white block over the gray in light mode (Hark's
+    /// review, build 123).
+    @MainActor
+    @Test func onAGroupedScreenItFadesIntoTheGray() {
+        let gray = bottomPixel(
+            DS.Colors.groupedBackground.ignoresSafeArea().tabBarEdge(DS.Colors.groupedBackground))
+        let screenGray = bottomPixel(DS.Colors.groupedBackground.ignoresSafeArea())
+        #expect(gray == screenGray, "scrim \(gray), screen \(screenGray)")
+
+        let white = bottomPixel(DS.Colors.groupedBackground.ignoresSafeArea().tabBarEdge())
+        #expect(white != screenGray, "the default scrim is the bar's white, for a plain screen")
+    }
+
+    /// The RGB of the bottom-middle pixel of `view` drawn in light mode.
+    @MainActor
+    private func bottomPixel(_ view: some View) -> [UInt8] {
+        let size = CGSize(width: 200, height: 300)
+        let controller = UIHostingController(rootView: AnyView(view))
+        controller.overrideUserInterfaceStyle = .light
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        window.overrideUserInterfaceStyle = .light
+        window.rootViewController = controller
+        window.isHidden = false
+        controller.view.frame = CGRect(origin: .zero, size: size)
+        window.layoutIfNeeded()
+        controller.view.layoutIfNeeded()
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            window.layer.render(in: context.cgContext)
+        }
+        guard let cgImage = image.cgImage else { return [] }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        // The pixel two points above the bottom edge, in the middle.
+        context?.draw(cgImage, in: CGRect(x: -100, y: -2, width: size.width, height: size.height))
+        return Array(pixel.prefix(3))
+    }
 }

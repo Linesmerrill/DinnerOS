@@ -62,7 +62,7 @@ struct PantryView: View {
 
     var body: some View {
         content
-            .tabBarEdge()
+            .tabBarEdge(DS.Colors.groupedBackground)
             .tabHeader(String(localized: "Pantry"))
             .dsMenuPopover(isPresented: $showsMore, anchor: moreAnchor, items: moreItems)
             // Bell, +, more (`TabHeader`): the bell's modifier outside the tab's own toolbar.

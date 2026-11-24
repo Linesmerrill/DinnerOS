@@ -132,7 +132,7 @@ struct MainTabView: View {
                     .newsBannerInset()
                     .tabBarBacking(.top)
             }
-            .tabBarBacking(.bottom)
+            .tabBarBacking(.bottom, color: DS.Colors.groupedBackground)
             .id(households.current?.household.id)
         case .pantry:
             NavigationStack(path: $tabs.pantryPath) {
@@ -140,7 +140,7 @@ struct MainTabView: View {
                     .newsBannerInset()
                     .tabBarBacking(.top)
             }
-            .tabBarBacking(.bottom)
+            .tabBarBacking(.bottom, color: DS.Colors.groupedBackground)
         case .household:
             NavigationStack(path: $tabs.householdPath) {
                 HouseholdView()

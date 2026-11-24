@@ -43,7 +43,7 @@ struct ShopView: View {
 
     var body: some View {
         content
-            .tabBarEdge(color: DS.Colors.groupedBackground)
+            .tabBarEdge(DS.Colors.groupedBackground)
             .tabHeader(String(localized: "Shop"))
             .safeAreaInset(edge: .top, spacing: 0) {
                 if isReady {
