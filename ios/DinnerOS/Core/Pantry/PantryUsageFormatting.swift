@@ -44,14 +44,30 @@ nonisolated enum PantryUsageFormat {
     static func remainingGlance(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String? {
         let value = estimate.remaining.quantityValue
         guard value > 0, !estimate.unit.isEmpty else { return nil }
-        // Under 2, to the nearest quarter: ¾ lb is 12 oz, and rounding it to "1 lb" claimed
-        // a third more than was there. Above that, to the nearest half.
-        let step = value < 2 ? 4.0 : 2.0
-        let rounded = (value * step).rounded() / step
-        let shown = rounded > 0 ? rounded : value
+        let shown = glanceValue(value, start: estimate.startAmount.quantityValue, percent: estimate.percentRemaining)
         let number = shown.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
         let label = RecipeFormat.unitLabel(estimate.unit, sourceUnit: estimate.unit, plural: shown != 1)
         return label.isEmpty ? nil : "\(number) \(label)"
+    }
+
+    /// How far a percentage shown beside the amount may be from the amount's own share of the
+    /// start, in points: "~85% left (0.75 lb)" of 1 lb read as a mistake (Hark's review,
+    /// build 123), "~88% left (7 cloves)" of 8 doesn't.
+    static let glanceAgreement = 2.5
+
+    /// `value` rounded for a glance: under 2, to the nearest quarter (¾ lb is 12 oz, and "1 lb"
+    /// claimed a third more than was there); above that, to the nearest half. When that would
+    /// disagree with `percent` of `start`, finer steps (tenths, then twentieths, then
+    /// hundredths) until it doesn't: 0.85 lb stays 0.85 lb, not 0.75 lb.
+    static func glanceValue(_ value: Double, start: Double, percent: Int) -> Double {
+        let coarse = value < 2 ? 4.0 : 2.0
+        for step in [coarse, 10, 20, 100] {
+            let rounded = (value * step).rounded() / step
+            guard rounded > 0 else { continue }
+            guard start > 0 else { return rounded }
+            if abs(rounded / start * 100 - Double(percent)) <= glanceAgreement { return rounded }
+        }
+        return value
     }
 
     /// "5 tbsp of 16 tbsp".

@@ -34,8 +34,31 @@ struct PantryUsageFormattingTests {
         let pork = PantryFixtures.estimate(percentRemaining: 75, unit: "lb", start: 1, remaining: 0.75)
         #expect(PantryUsageFormat.remainingShort(pork, locale: locale) == "~75% left (0.75 lb)")
 
+        let rice = PantryFixtures.estimate(percentRemaining: 50, unit: "lb", start: 5, remaining: 2.49)
+        #expect(PantryUsageFormat.remainingShort(rice, locale: locale) == "~50% left (2.5 lb)")
+
+        let garlic = PantryFixtures.estimate(percentRemaining: 88, unit: "clove", start: 8, remaining: 7)
+        #expect(PantryUsageFormat.remainingShort(garlic, locale: locale) == "~88% left (7 cloves)")
+    }
+
+    /// The amount never contradicts the percentage beside it: 85% of 1 lb of butter rounded
+    /// to the quarter read "~85% left (0.75 lb)", which is 75% (Hark's review, build 123).
+    /// When the coarse step is too far off, a finer one is used.
+    @Test func theAmountAgreesWithThePercentage() {
+        let butter = PantryFixtures.estimate(percentRemaining: 85, unit: "lb", start: 1, remaining: 0.85)
+        #expect(PantryUsageFormat.remainingShort(butter, locale: locale) == "~85% left (0.85 lb)")
+
         let rice = PantryFixtures.estimate(percentRemaining: 55, unit: "lb", start: 5, remaining: 2.74)
-        #expect(PantryUsageFormat.remainingShort(rice, locale: locale) == "~55% left (2.5 lb)")
+        #expect(PantryUsageFormat.remainingShort(rice, locale: locale) == "~55% left (2.7 lb)")
+
+        // Every percentage of a pound agrees with its amount within the allowed points.
+        for percent in 1...100 {
+            let value = Double(percent) / 100
+            let shown = PantryUsageFormat.glanceValue(value, start: 1, percent: percent)
+            #expect(
+                abs(shown * 100 - Double(percent)) <= PantryUsageFormat.glanceAgreement,
+                "\(percent)% shows \(shown) lb")
+        }
     }
 
     @Test func levelFollowsTheThreshold() {
