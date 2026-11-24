@@ -279,8 +279,10 @@ enum CookingQAChecks {
         column >= 0.5 || frame.maxX <= width * 0.5
     }
 
-    /// Room kept under the list's last row at its end: the home indicator, with a little to spare.
-    static let endRoom: CGFloat = 24
+    /// Room under the list's last row at its end for it to count as whole on the screen. The list
+    /// keeps its own room above the home indicator; a list that comes back at its end to show a
+    /// heading whole can leave less than its full end room (an SE's typed list: 23 points).
+    static let endRoom: CGFloat = 8
 
     /// A heading on the cooking screen's ingredient list: Ingredients, Have Ready or a step's.
     static func isHeading(_ label: String) -> Bool {
