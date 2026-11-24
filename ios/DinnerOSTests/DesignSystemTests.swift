@@ -84,6 +84,16 @@ struct DesignSystemTests {
         #expect(contrast(DS.Colors.onAccent, accent, dark: true) >= 4.5)
     }
 
+    /// Hark's build 121 review: an empty rating star was hard to see in dark mode. As an icon it
+    /// needs 3:1 on the screen and on a card, in light and dark.
+    @Test func emptyRatingStarsAreClearInLightAndDark() {
+        for dark in [false, true] {
+            for background in [DS.Colors.background, DS.Colors.surface, DS.Colors.groupedSurface, DS.Colors.groupedBackground] {
+                #expect(contrast(DS.Colors.emptyStar, background, dark: dark) >= 3)
+            }
+        }
+    }
+
     @Test func theSignInButtonsShareOneHeight() {
         let faceID = Button {
         } label: {

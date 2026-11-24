@@ -55,6 +55,9 @@ nonisolated enum DS {
         /// opaque gray, 4.5:1 or better on a card in light and dark, where the system's tertiary
         /// gray was about 1.8:1 (build 122 review 4).
         static let quietText = Color("DisabledText")
+        /// An empty star in a rating: the same opaque gray, so an unrated star stays clear on a
+        /// card in dark mode, where the system's secondary gray all but vanished (build 123).
+        static let emptyStar = Color("DisabledText")
         /// A card's outline, for a card on a sheet where its fill alone is too faint to see.
         static let cardStroke = Color(.separator)
         /// The background under a pinned footer or bottom bar: the same as the sheet or screen.

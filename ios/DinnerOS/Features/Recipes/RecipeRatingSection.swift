@@ -172,7 +172,7 @@ struct StarRatingControl: View {
                 } label: {
                     Image(systemName: value <= score ? "star.fill" : "star")
                         .font(.title2)
-                        .foregroundStyle(value <= score ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                        .foregroundStyle(value <= score ? AnyShapeStyle(.orange) : AnyShapeStyle(DS.Colors.emptyStar))
                         .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
                         .contentShape(.rect)
                 }
