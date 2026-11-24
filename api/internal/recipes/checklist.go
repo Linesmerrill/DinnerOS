@@ -43,6 +43,8 @@ type CookIngredient struct {
 	// Components are what a home-made blend is mixed from ("1 tsp Chili
 	// Powder").
 	Components []string
+	// LeftOver is what the steps don't use of it ("¾ tsp"), or empty.
+	LeftOver string
 }
 
 // CookPart is one step's share of an ingredient: "2 Tbsp" in step 1.
@@ -89,20 +91,16 @@ func checklistIngredients(r Recipe, in Instructions) []CookIngredient {
 			ID: fmt.Sprintf("%d-%s", st.Index, r.Ingredients[st.Index].IngredientID), Index: st.Index,
 			Name: st.Name, LeftOut: st.LeftOut != nil, IngredientKey: st.IngredientKey,
 		}
-		if st.SwapName != "" {
-			ci.Name = st.SwapName
+		name, amount, single := cookedAs(st)
+		ci.Name = name
+		if amount != nil {
+			ci.AmountText = amount.Text()
 		}
-		if st.Amount != nil {
-			ci.AmountText = st.Amount.Text()
+		if st.LeftOver != nil && !ci.LeftOut && !single {
+			ci.LeftOver = st.LeftOver.Text()
 		}
-		if st.Component != nil && !ci.LeftOut {
-			if one := st.Component.Single; one != nil {
-				// Bought as one store ingredient: the list names it, with
-				// its amount, and there's nothing to mix.
-				ci.Name, ci.AmountText = one.Name, one.Amount.Text()
-			} else {
-				ci.Components = st.Component.Parts
-			}
+		if st.Component != nil && !ci.LeftOut && !single {
+			ci.Components = st.Component.Parts
 		}
 		var parts []CookPart
 		for _, step := range in.Steps {
@@ -121,6 +119,20 @@ func checklistIngredients(r Recipe, in Instructions) []CookIngredient {
 		out = append(out, ci)
 	}
 	return out
+}
+
+// cookedAs is the name and amount an ingredient is cooked by: the protein a
+// meal swaps in, or the one store ingredient a specialty is bought as ("1 tsp
+// Chicken Bouillon Base" for Chicken Stock Concentrate), the name its steps
+// use. single is set for that store ingredient: there's nothing to mix. The
+// recipe page and the cooking list both name it this way, so they agree
+// (build 123, Hark's review item 10).
+func cookedAs(st IngredientState) (name string, amount *Measure, single bool) {
+	name, amount = cmp.Or(st.SwapName, st.Name), st.Amount
+	if c := st.Component; c != nil && c.Single != nil && st.LeftOut == nil {
+		return c.Single.Name, c.Single.Amount, true
+	}
+	return name, amount, false
 }
 
 func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGroup {
@@ -411,6 +423,13 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			row.Prep, row.Parts = a.Prep, a.Parts
 			row.AmountText = cmp.Or(row.AmountText, a.AmountText)
 		}
+		// A meal kit's 1 tsp turmeric of which step 1 uses ¼ tsp: Have
+		// Ready says where it goes and what's left, so the rest doesn't
+		// vanish between the recipe page and the steps (build 123, Hark's
+		// review item 10).
+		if ci.LeftOver != "" && row.Prep == "" && len(row.Parts) == 0 {
+			row.Prep = leftOverNote(groups, ci)
+		}
 		ready = append(ready, row)
 	}
 	if len(ready) > 0 {
@@ -420,6 +439,33 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 }
 
 var oneQuantity = ingredients.NewQuantity(1, 1)
+
+// leftOverNote is where an ingredient the steps don't use all of goes, and
+// what's left: "¼ tsp for step 1, ¾ tsp left over".
+func leftOverNote(groups []CookStepGroup, ci CookIngredient) string {
+	var amounts []string
+	var stepNums []int
+	for _, g := range groups {
+		for _, it := range g.Items {
+			if it.IngredientIndex != ci.Index || it.AmountText == "" {
+				continue
+			}
+			amounts = append(amounts, it.AmountText)
+			if !slices.Contains(stepNums, g.Index) {
+				stepNums = append(stepNums, g.Index)
+			}
+		}
+	}
+	switch {
+	case len(stepNums) == 0:
+		return ci.LeftOver + " left over"
+	case len(stepNums) == 1 && len(amounts) == 1:
+		return fmt.Sprintf("%s for step %d, %s left over", amounts[0], stepNums[0], ci.LeftOver)
+	case len(stepNums) == 1:
+		return fmt.Sprintf("for step %d, %s left over", stepNums[0], ci.LeftOver)
+	}
+	return fmt.Sprintf("for steps %s, %s left over", joinSteps(stepNums), ci.LeftOver)
+}
 
 // joinSteps is "1, 2 and 5".
 func joinSteps(steps []int) string {

@@ -358,6 +358,11 @@ type IngredientState struct {
 	// Component is set when the ingredient is a specialty ingredient the
 	// household makes from store ingredients: a component of the meal.
 	Component *Component
+	// LeftOver is what the steps don't use, when every step that uses it
+	// says how much and together they use less than the whole amount: a
+	// meal kit's 1 tsp turmeric packet with "Stir in ¼ tsp turmeric". Nil
+	// otherwise.
+	LeftOver *Measure
 }
 
 // Component is a specialty ingredient (a sauce, crema, paste, or blend) as the
@@ -699,11 +704,34 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		st.Timers = stepTimers(text, names)
 		out.Steps = append(out.Steps, st)
 	}
+	for i, m := range mentions {
+		if i < len(out.Ingredients) && !amounts.usedUnknown[i] {
+			out.Ingredients[i].LeftOver = leftOver(m, amounts.used[i])
+		}
+	}
 	out.Checklist = buildChecklist(r, out)
 	out.SafeTemps = safeTemps(out.Ingredients)
 	sort.SliceStable(out.Substitutions, func(i, j int) bool { return out.Substitutions[i].Name < out.Substitutions[j].Name })
 	sort.SliceStable(out.Unchosen, func(i, j int) bool { return out.Unchosen[i].Name < out.Unchosen[j].Name })
 	return out
+}
+
+// leftOver is what's left of m once the steps used used of it, when that's
+// worth saving: a crumb left by rounding a step's amount isn't (under a tenth
+// of the whole).
+func leftOver(m mention, used *big.Rat) *Measure {
+	if used == nil || used.Sign() <= 0 {
+		return nil
+	}
+	left := leftOf(m, used)
+	if left == nil {
+		return nil
+	}
+	rest := new(big.Rat).Sub(m.amount.Quantity.Rat(), used)
+	if rest.Cmp(new(big.Rat).Mul(m.amount.Quantity.Rat(), big.NewRat(1, 10))) < 0 {
+		return nil
+	}
+	return left
 }
 
 // cookAmountAt is the line's amount for servings as the cooking screens show

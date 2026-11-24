@@ -271,10 +271,17 @@ var relativeWords = []string{
 // follows "remaining" or "the rest of": nil when nothing earlier measured any
 // of it, when it's all used, or when the amount isn't one anyone measures.
 func remainder(before string, m mention, used *big.Rat) *Measure {
-	if used == nil || used.Sign() < 0 || m.amount == nil || m.leftOut || m.swapped || (!measuredUnits[m.amount.Unit] && !countedUnit(m.amount.Unit)) {
+	if !endsWithWord(before, "remaining") && !endsWithWord(before, "rest of the") && !endsWithWord(before, "rest of") {
 		return nil
 	}
-	if !endsWithWord(before, "remaining") && !endsWithWord(before, "rest of the") && !endsWithWord(before, "rest of") {
+	return leftOf(m, used)
+}
+
+// leftOf is what's left of m's total once used is gone, as an amount to
+// measure: nil when nothing measured any of it, when it's all used, or when
+// the amount isn't one anyone measures.
+func leftOf(m mention, used *big.Rat) *Measure {
+	if used == nil || used.Sign() < 0 || m.amount == nil || m.leftOut || m.swapped || (!measuredUnits[m.amount.Unit] && !countedUnit(m.amount.Unit)) {
 		return nil
 	}
 	left := new(big.Rat).Sub(m.amount.Quantity.Rat(), used)
@@ -768,6 +775,8 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		}
 		if left := remainder(lowerBefore, m, usedSoFar); left != nil {
 			amount, part, remaining = left, true, true
+			// The rest goes in here: none of it is left over after.
+			usedHere[hit] = new(big.Rat).Sub(m.amount.Quantity.Rat(), ratOrZero(amounts.used[hit]))
 		}
 		// The text keeps its own words when the amount is only for the list:
 		// "¼ of the onion" is ¼ onion to have ready, and reads as written.

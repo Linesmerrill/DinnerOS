@@ -285,8 +285,14 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 	}
 	for _, st := range in.Ingredients {
 		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: copytext.IngredientName(st.Name), SwapName: copytext.IngredientName(st.SwapName)}
-		if st.Amount != nil {
-			sr.AmountText = st.Amount.Text()
+		// The recipe page names what's cooked, as the steps and the cooking
+		// list do: "1 tsp Chicken Bouillon Base", not the packet it stands in for.
+		name, amount, single := cookedAs(st)
+		if single {
+			sr.SwapName = copytext.IngredientName(name)
+		}
+		if amount != nil {
+			sr.AmountText = amount.Text()
 		}
 		if lo := st.LeftOut; lo != nil {
 			sr.LeftOut = &LeftOutResponse{SkipID: lo.SkipID, Scope: lo.Scope, Once: lo.Once}
@@ -295,6 +301,11 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 			sr.Component = &ComponentResponse{
 				SpecialtyID: c.SpecialtyID, SpecialtyName: c.SpecialtyName, OptionName: c.OptionName, Type: c.Type,
 				Parts: orEmpty(c.Parts),
+			}
+			if single {
+				// "Made with 1 tsp Chicken Bouillon Base" under that same name
+				// would only repeat it.
+				sr.Component.Parts = []string{}
 			}
 		}
 		resp.Ingredients = append(resp.Ingredients, sr)
