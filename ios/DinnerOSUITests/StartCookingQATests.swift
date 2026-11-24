@@ -160,7 +160,7 @@ final class StartCookingQATests: XCTestCase {
     /// height under the bar.
     @MainActor
     private func bringToTop(_ element: XCUIElement, in app: XCUIApplication, column: CGFloat) {
-        for _ in 0..<6 {
+        for _ in 0..<8 {
             guard element.exists else {
                 scrollCooking(app, column: column)
                 continue
@@ -168,8 +168,9 @@ final class StartCookingQATests: XCTestCase {
             let target = CookingQAChecks.barBottom(app) + 40
             let distance = element.frame.minY - target
             guard abs(distance) > 12 else { return }
-            let step = max(min(distance, app.frame.height * 0.5), -app.frame.height * 0.5)
-            let y = app.frame.height * 0.75
+            let step = max(min(distance, app.frame.height * 0.4), -app.frame.height * 0.4)
+            // Up from low on the screen, or back down from high on it.
+            let y = step > 0 ? app.frame.height * 0.75 : app.frame.height * 0.3
             let from = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0))
                 .withOffset(CGVector(dx: 0, dy: y))
             let to = app.coordinate(withNormalizedOffset: CGVector(dx: column, dy: 0))

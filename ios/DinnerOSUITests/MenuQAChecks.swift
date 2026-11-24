@@ -207,7 +207,11 @@ enum MenuQAChecks {
         guard
             let add = adds.first(where: { add in rows.contains { abs($0.midY - add.midY) < $0.height / 2 + 1 } })
         else { return ["\(screen): no add button beside “\(recipe)”"] }
-        return searchAddProblems(button: add, screen: frame, name: screen)
+        // iPhone Duo's cover screen keeps its last 84 points for the button rail (x from 382, as
+        // QAShotCompare.mask has it): the page's right margin is at the rail.
+        var content = frame
+        if Int(frame.width.rounded()) == 466 && Int(frame.height.rounded()) == 678 { content.size.width = 382 }
+        return searchAddProblems(button: add, screen: content, name: screen)
     }
 
     /// The add button's 44-point target ends at the 20-point margin; a little slack for rounding.

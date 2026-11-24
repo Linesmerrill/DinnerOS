@@ -131,10 +131,14 @@ def all_recipes():
             return out
 
 TYPED_DESCRIPTION = (
-    "Our quick weeknight pasta. Store-bought pesto is fine, and a spoon of the pasta water makes it "
-    "silky instead of oily. Use whatever greens are in the fridge: baby spinach, arugula or kale all "
-    "work. Halve the tomatoes so they soak up the sauce. Good warm or cold the next day for lunch, so "
-    "it's worth making the full box. Add grilled chicken or white beans to make it more filling."
+    "Our quick weeknight pasta, on the table in about 20 minutes. Store-bought pesto is fine here, and a "
+    "spoon of the pasta water is what makes it silky instead of oily, so don't skip saving some before you "
+    "drain. Use whatever greens are in the fridge: baby spinach, arugula or kale all work, and the heat of "
+    "the pasta wilts them in a minute. Halve the tomatoes so they soak up the sauce. Toasting the pine nuts "
+    "takes two minutes and makes a big difference, but watch them closely because they burn fast.\n\n"
+    "It's good warm, and just as good cold the next day for lunch, so it's worth making the whole box even "
+    "for two. To make it more filling, add grilled chicken, white beans or a handful of frozen peas in the "
+    "last minute of boiling. For the kids, leave out the red pepper flakes and add extra parmesan at the table."
 )
 
 # The screenshots' typed-by-hand recipe (QA_MANUAL_NAME in the matrix): a real dinner with a real
@@ -181,7 +185,7 @@ TYPED = {
 for old in [r for r in all_recipes() if r["name"] == TYPED["name"]]:
     full = call("GET", f"/households/{hid}/recipes/{old['id']}")
     full = full.get("recipe") or full
-    if len(full.get("ingredients") or []) >= len(TYPED["ingredients"]) and full.get("description"):
+    if len(full.get("ingredients") or []) >= len(TYPED["ingredients"]) and full.get("description") == TYPED_DESCRIPTION:
         continue
     fresh = call("POST", f"/households/{hid}/recipes", TYPED)["id"]
     db = os.environ.get("QA_MONGO_DB", "dinneros_multistore")
