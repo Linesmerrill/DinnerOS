@@ -247,6 +247,68 @@ struct QAOwnHousehold {
         return try XCTUnwrap(id, "\(recipe.name) wasn’t imported")
     }
 
+    /// Several meal-kit recipes with their whole ingredient lists and steps, in one import, as
+    /// `importRecipe` brings one. Returns name → id.
+    func importRecipes(_ recipes: [QARecipeFixture]) async throws -> [String: String] {
+        let file: [String: Any] = [
+            "version": 1, "source": "hellofresh", "generatedAt": ISO8601DateFormatter().string(from: .now),
+            "review": [[String: Any]](),
+            "recipes": recipes.enumerated().map { number, recipe -> [String: Any] in
+                [
+                    "source": "hellofresh", "sourceRecipeId": "\(subject)-full-\(number)", "sourceUrl": "",
+                    "name": recipe.name, "imageUrl": recipe.imageURL, "isAddon": false,
+                    "servings": [2, 4], "totalMinutes": QARecipeTimes.minutes(recipe.name), "cuisines": ["italian"],
+                    "tags": [String](), "orderWeeks": [String](),
+                    "ingredients": recipe.ingredients.enumerated().map { index, item -> [String: Any] in
+                        let units = ["unit": "count", "ounce": "oz", "tablespoon": "tbsp", "teaspoon": "tsp"]
+                        let amounts: [[String: Any]] =
+                            item.quantity.map { quantity in
+                                [2, 4].map { servings in
+                                    let scaled = quantity * Double(servings) / 2
+                                    return [
+                                        "servings": servings, "quantity": scaled, "unit": units[item.unit] ?? item.unit,
+                                        "sourceUnit": item.unit, "rawText": "\(scaled) \(item.unit)",
+                                    ]
+                                }
+                            } ?? []
+                        return [
+                            "sourceIngredientId": "\(subject)-\(number)-\(index)", "name": item.name,
+                            "pantryStaple": item.quantity == nil, "amounts": amounts,
+                        ]
+                    },
+                    "steps": recipe.steps.enumerated().map { ["index": $0.offset + 1, "text": $0.element] },
+                ]
+            },
+        ]
+        _ = try await Self.call("POST", "households/\(householdID)/recipes/import", token: token, body: file)
+        let listed = try await Self.call("GET", "households/\(householdID)/recipes", token: token)
+        var ids: [String: String] = [:]
+        for item in listed["items"] as? [[String: Any]] ?? [] {
+            if let name = item["name"] as? String, let id = item["id"] as? String { ids[name] = id }
+        }
+        if let missing = recipes.first(where: { ids[$0.name] == nil }) {
+            throw NSError(
+                domain: "QAOwnHousehold", code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "\(missing.name) wasn’t imported"])
+        }
+        return ids
+    }
+
+    /// Skip › "This Dish, Always" for one of a recipe's ingredients, as the recipe page does it:
+    /// the skip is made with the key the recipe's instructions give that ingredient.
+    func skipInDish(_ ingredient: String, recipeID: String) async throws {
+        let instructions = try await Self.call(
+            "GET", "households/\(householdID)/recipes/\(recipeID)/instructions", token: token)
+        let states = instructions["ingredients"] as? [[String: Any]] ?? []
+        let state = try XCTUnwrap(
+            states.first { ($0["name"] as? String)?.caseInsensitiveCompare(ingredient) == .orderedSame },
+            "\(ingredient) isn’t in the recipe")
+        let key = try XCTUnwrap(state["ingredientKey"] as? String, "\(ingredient) has no key")
+        _ = try await Self.call(
+            "POST", "households/\(householdID)/grocery-skips", token: token,
+            body: ["ingredientKey": key, "name": ingredient, "scope": "recipe", "recipeId": recipeID])
+    }
+
     /// Says a planned meal was made, as "I Made It" does: the plan then carries the answer, and the
     /// Menu asks how it was.
     func markMade(entryID: String, recipeID: String, date: String, weeksAhead: Int) async throws {
@@ -383,6 +445,57 @@ struct QARecipeFixture {
     let imageURL: String
     let ingredients: [Ingredient]
     let steps: [String]
+
+    private static let photos = "https://img.hellofresh.com/f_auto,fl_lossy,q_auto,w_1200/hellofresh_s3/image/"
+
+    /// Merrill's dinner on Nov 24 (build 122, iPad in landscape), cut down: cilantro and a lime
+    /// that the week's later dinners use too, and a pack of crispy fried onions shared with the
+    /// pork bowls. The steps are written for the test, in the meal kit's style.
+    static let stirFryTacos = QARecipeFixture(
+        name: "One-Pan Beef Stir-Fry Tacos", imageURL: photos + "6267fa613f1203a0fa0c0004-bcdc9530.jpg",
+        ingredients: [
+            .init(name: "Cilantro", quantity: 0.25, unit: "ounce"),
+            .init(name: "Lime", quantity: 1, unit: "unit"),
+            .init(name: "Ground Beef", quantity: 10, unit: "ounce"),
+            .init(name: "Flour Tortillas", quantity: 6, unit: "unit"),
+            .init(name: "Crispy Fried Onions", quantity: 1, unit: "unit"),
+        ],
+        steps: [
+            "Roughly chop ¼ oz cilantro. Halve 1 lime.",
+            "Cook 10 oz ground beef in a large pan until browned, 5 minutes.",
+            "Warm 6 tortillas. Fill with beef, then top with cilantro, crispy fried onions, and a squeeze of lime.",
+        ])
+
+    /// The week's second dinner: the same cilantro, lime and crispy fried onions.
+    static let sesamePorkBowls = QARecipeFixture(
+        name: "Sesame-Soy Pork Bowls", imageURL: photos + "5fa06a5f20b9661c0d5e342f-9d881539-9859fadd.jpg",
+        ingredients: [
+            .init(name: "Cilantro", quantity: 0.25, unit: "ounce"),
+            .init(name: "Lime", quantity: 1, unit: "unit"),
+            .init(name: "Ground Pork", quantity: 10, unit: "ounce"),
+            .init(name: "Jasmine Rice", quantity: 0.75, unit: "cup"),
+            .init(name: "Crispy Fried Onions", quantity: 1, unit: "unit"),
+        ],
+        steps: [
+            "Cook ¾ cup jasmine rice. Roughly chop ¼ oz cilantro. Quarter 1 lime.",
+            "Cook 10 oz ground pork in a large pan until browned, 5 minutes.",
+            "Serve the pork over the rice, topped with cilantro, crispy fried onions, and a squeeze of lime.",
+        ])
+
+    /// The week's third dinner: cilantro and lime again, so the pork bowls keep some for it.
+    static let lettuceCups = QARecipeFixture(
+        name: "Thai Chicken Lettuce Cups", imageURL: photos + "6267fa613f1203a0fa0c0004-bcdc9530.jpg",
+        ingredients: [
+            .init(name: "Cilantro", quantity: 0.25, unit: "ounce"),
+            .init(name: "Lime", quantity: 1, unit: "unit"),
+            .init(name: "Ground Chicken", quantity: 10, unit: "ounce"),
+            .init(name: "Butter Lettuce", quantity: 1, unit: "unit"),
+        ],
+        steps: [
+            "Roughly chop ¼ oz cilantro. Halve 1 lime. Separate 1 butter lettuce into leaves.",
+            "Cook 10 oz ground chicken in a large pan until cooked through, 6 minutes.",
+            "Fill the lettuce leaves with chicken and top with cilantro and a squeeze of lime.",
+        ])
 
     /// Merrill's dinner on Nov 23 (TestFlight 120): a pasta with a photo, 13 ingredients, salt
     /// and pepper with no amount, and butter that a late step adds "to the pan with the sauce".
