@@ -178,7 +178,9 @@ final class BiometricSignInQATests: XCTestCase {
     }
 
     /// Up from the bottom edge, held, as a person opens the app switcher. The app goes inactive
-    /// there, not to the background.
+    /// there, not to the background. On a phone with a home button (the small iPhone) the same
+    /// swipe opens Control Center, which also leaves the app inactive; XCUITest can't press home
+    /// twice fast enough for that phone's switcher.
     @MainActor
     private func openAppSwitcher(_ app: XCUIApplication) {
         let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.998))
