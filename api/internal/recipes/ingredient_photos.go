@@ -49,6 +49,31 @@ var wrongFoodPhotos = map[string][]string{
 	"64b6744fd4684302b8753e64": {"grape tomato", "grape tomatoes", "cherry tomato", "cherry tomatoes"},
 }
 
+// catalogPhotoBase is where the meal kit's catalog keeps its ingredient photos.
+const catalogPhotoBase = "https://img.hellofresh.com/f_auto,fl_lossy,q_auto,w_1200/hellofresh_s3/ingredient/"
+
+// keyPhotos are catalog photos for common ingredients that some recipes name
+// without a photo or with a wrong one (Hark's build 121 review, round 4: the
+// starter pesto's basil, pepper flakes and black pepper, and the meal kit's
+// tofu and pork chops showed letters). Each is the catalog's own photo of that
+// ingredient, or of the same food under its catalog name (black pepper is the
+// catalog's Pepper, red pepper flakes its Chili Flakes). A stored photo wins,
+// unless it is wrong for the ingredient.
+var keyPhotos = map[string]string{
+	"grape tomato":      "554a385afd2cb9324b8b456c-344873b8.png",
+	"grape tomatoes":    "554a385afd2cb9324b8b456c-344873b8.png",
+	"cherry tomato":     "554a385afd2cb9324b8b456c-344873b8.png",
+	"cherry tomatoes":   "554a385afd2cb9324b8b456c-344873b8.png",
+	"basil":             "64b67452a7c1f8a1e13bae58-dd6aeeec.png",
+	"fresh basil":       "64b67452a7c1f8a1e13bae58-dd6aeeec.png",
+	"black pepper":      "5566dc00f8b25e5b298b4568-b5daf661.png",
+	"red pepper flakes": "554a35f4fd2cb9cf488b4569-6f0638f4.png",
+	"chili flakes":      "554a35f4fd2cb9cf488b4569-6f0638f4.png",
+	"pork chop":         "554a3a04fd2cb9324b8b456e-d68749c2.png",
+	"pork chops":        "554a3a04fd2cb9324b8b456e-d68749c2.png",
+	"tofu":              "68d57d91d232ff05cfc441d1-8909ca87.png",
+}
+
 // photoID is the catalog's ID for a photo URL: the start of its file name,
 // lower case, or "" when raw isn't a URL.
 func photoID(raw string) string {
@@ -64,15 +89,18 @@ func photoID(raw string) string {
 
 // IngredientPhotoFor is IngredientPhoto for the ingredient keyed key: also
 // "" when the photo shows another food than that ingredient.
+// When that leaves no photo, a known catalog photo for the key fills in.
 func IngredientPhotoFor(key, raw string) string {
-	photo := IngredientPhoto(raw)
-	if photo == "" {
-		return ""
-	}
 	key = strings.ToLower(strings.TrimSpace(key))
+	photo := IngredientPhoto(raw)
 	for _, k := range wrongFoodPhotos[photoID(photo)] {
 		if k == key {
-			return ""
+			photo = ""
+		}
+	}
+	if photo == "" {
+		if file, ok := keyPhotos[key]; ok {
+			return catalogPhotoBase + file
 		}
 	}
 	return photo

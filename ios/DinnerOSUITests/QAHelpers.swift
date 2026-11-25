@@ -197,6 +197,10 @@ enum QAShotCompare {
         "iPad cooking screen at its top, from either way in": ["start-cooking-steps", "cooking-imported"],
         "Pantry with Butter in view": ["pantry", "pantry-scrolled-to-butter"],
         "Shop with the flour in view": ["shop", "shop-scrolled-to-flour"],
+        "By Day with Saturday in view": ["menu-by-day", "menu-by-day-saturday"],
+        "Ingredients that fit on the screen": [
+            "recipe-page-typed-by-hand-ingredients", "recipe-page-typed-by-hand-ingredients-end",
+        ],
         // Account fits on a large iPhone's and an iPad's screen: its end is the screen as it opens.
         "Account that fits on the screen": [
             "face-id-back-from-the-background", "face-id-back-from-the-background-end",

@@ -50,6 +50,11 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             # checked in every config (Hark's build 121 review, item 18). On a phone the sweep
             # scrolls to each; an iPad keeps the shot with the row already in view.
             "Pantry › scrolled to Butter", "Shop › scrolled to Flour",
+            # By Day at its Saturday, the typed recipe's Ingredients tab at its end, and a dish's
+            # Save Some for Later with an ingredient skipped there and used later in the week, in
+            # every config (Hark's build 121 review, round 4, items 2 and 3).
+            "Menu › By Day › Saturday", "Recipe page › typed by hand › Ingredients › end",
+            "Start Cooking › an ingredient skipped here and used later",
             # The steps brought down to Step 3 beside "Start Cooking › Steps" at rest, and the middle
             # of the typed recipe's cooking list, where its top and end leave rows between them
             # (Hark's review, build 121 round 2, items 1 and 6: Basil Pesto on the Duo).

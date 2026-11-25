@@ -49,6 +49,11 @@ MASKS = {
 # in a wide, mostly empty page; the Household tab of a household without Plus differs from the
 # main test household's only in its name, its initials and its Plus line.
 ALLOWED_PAIRS = {
+    # On an iPad the whole week and the whole pesto list fit: their ends are the screens as they
+    # open (Hark's build 121 review, round 4, item 3).
+    "By Day with Saturday in view": frozenset({"menu-by-day", "menu-by-day-saturday"}),
+    "Ingredients that fit on the screen": frozenset(
+        {"recipe-page-typed-by-hand-ingredients", "recipe-page-typed-by-hand-ingredients-end"}),
     # Two searches, one result card each: on an iPad the rest of the Menu is the same.
     "Menu search, one card each": frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
     # A household without Plus differs only in its name, initials and Plus line.

@@ -7,6 +7,10 @@ import Testing
 struct IngredientFallbackTests {
     @Test func theLetterIsTheFoodsFirstLetter() {
         #expect(IngredientFallbackGlyph.initial(for: "Pine Nuts") == "P")
+        #expect(IngredientFallbackGlyph.initial(for: "2x Pork Chops") == "P")
+        #expect(IngredientFallbackGlyph.initial(for: "2x Tofu") == "T")
+        #expect(IngredientFallbackGlyph.initial(for: "x2 Tofu") == "T")
+        #expect(IngredientFallbackGlyph.initial(for: "½ Lemon") == "L")
         #expect(IngredientFallbackGlyph.initial(for: "grape tomatoes") == "G")
         #expect(IngredientFallbackGlyph.initial(for: "Ćevapi") == "Ć")
     }

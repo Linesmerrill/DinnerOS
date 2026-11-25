@@ -258,7 +258,9 @@ final class StartCookingQATests: XCTestCase {
         let app = launchSignedIn(as: own)
         var problems: [String] = []
 
-        if let first = cookingList(tacos.name, in: app) {
+        if let first = cookingList(
+            tacos.name, in: app, shot: "Start Cooking › an ingredient skipped here and used later")
+        {
             let rows = first.rows.filter { $0.localizedCaseInsensitiveContains("cilantro") }
             if !rows.isEmpty { problems.append("\(tacos.name) skip cilantro, but its list has \(rows)") }
             if let card = first.card {
@@ -303,7 +305,9 @@ final class StartCookingQATests: XCTestCase {
     /// Opens `recipe`'s cooking screen from All Meals and reads its Save Some for Later card and
     /// its ingredient rows, then goes back to the Menu. `nil` when it didn't open.
     @MainActor
-    private func cookingList(_ recipe: String, in app: XCUIApplication) -> (card: String?, rows: [String])? {
+    private func cookingList(
+        _ recipe: String, in app: XCUIApplication, shot: String? = nil
+    ) -> (card: String?, rows: [String])? {
         open(recipe, in: app)
         let start = app.buttons["Start Cooking"].firstMatch
         guard start.waitForExistence(timeout: 15) else { return nil }
@@ -317,6 +321,12 @@ final class StartCookingQATests: XCTestCase {
         let card = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", "Save Some for Later")).firstMatch
         let cardLabel = card.waitForExistence(timeout: 10) ? card.label : nil
+        // The card as a person sees it (Hark's build 121 review, round 4): brought up under the bar,
+        // in the ingredients column.
+        if let shot, cardLabel != nil {
+            bringToTop(card, in: app, column: UIDevice.current.userInterfaceIdiom == .pad ? 0.2 : 0.5)
+            snap(app, shot)
+        }
         // One snapshot, walked here: asking each row for its label is a query each.
         var rows: [String] = []
         var stack = (try? app.snapshot()).map { [$0] } ?? []

@@ -225,6 +225,12 @@ final class ScreensQATests: XCTestCase {
                 app.swipeUp()
                 sleep(1)
                 problems += MenuQAChecks.checkIngredientFallbacks(app, screen: screen)
+                // The list's end, Pine Nuts and all (Hark's build 121 review, round 4, item 3).
+                if kind == "typed by hand" {
+                    FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+                    problems += FadeQAChecks.checkRest(app, screen: "\(screen) › end", edges: .bottom)
+                    keep(capture(app), "Recipe page › \(kind) › Ingredients › end (\(mode))")
+                }
             }
             scrollToTop(app)
         }
@@ -452,6 +458,14 @@ final class ScreensQATests: XCTestCase {
             // The whole week from its first day, nothing under the strip (build 121 review round
             // 2, Hark's item 9). After the shot: it scrolls.
             problems += MenuQAChecks.checkByDayWholeWeek(app, screen: "Menu › By Day (\(mode))")
+            // The week's last day, Saturday, at the list's end (Hark's build 121 review, round 4).
+            FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+            let saturday = app.descendants(matching: .any)["byDay.day.sat"]
+            if !saturday.exists || saturday.frame.isEmpty {
+                problems.append("Menu › By Day: Saturday isn’t on screen at the end of the week")
+            }
+            keep(capture(app), "Menu › By Day › Saturday (\(mode))")
+            for _ in 0..<6 { app.swipeDown() }
         }
         let back = app.segmentedControls.buttons["Menu"].firstMatch
         if back.exists { back.tap() }

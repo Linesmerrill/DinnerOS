@@ -179,7 +179,12 @@ struct IngredientFallbackGlyph: View {
     /// The tile's letter: the first letter of the name's first word that says what the food is,
     /// capitalized, or nil for a name with no letters (the tile then shows alone).
     static func initial(for name: String) -> String? {
-        let words = name.lowercased().split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "\u{2019}" })
+        // A quantity is no word of the name: "2x Pork Chops" is P, not X (Hark's build 121 review,
+        // round 4).
+        let named = name.lowercased().split(whereSeparator: \.isWhitespace)
+            .filter { !$0.contains(where: { $0.isNumber }) }
+            .joined(separator: " ")
+        let words = named.split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "\u{2019}" })
         let word = words.first { !descriptors.contains(String($0)) } ?? words.first
         return word?.first { $0.isLetter }.map { String($0).uppercased() }
     }
