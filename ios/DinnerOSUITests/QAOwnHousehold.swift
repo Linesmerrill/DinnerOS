@@ -176,7 +176,8 @@ struct QAOwnHousehold {
                 [
                     "source": "hellofresh", "sourceRecipeId": "\(subject)-\(index)", "sourceUrl": "",
                     "name": recipe.name, "imageUrl": recipe.imageURL, "isAddon": recipe.isAddon,
-                    "servings": [2, 4], "totalMinutes": 30, "cuisines": ["italian"], "tags": [String](),
+                    "servings": [2, 4], "totalMinutes": QARecipeTimes.minutes(recipe.name), "cuisines": ["italian"],
+                    "tags": [String](),
                     "orderWeeks": [String](),
                     "ingredients": [
                         [
@@ -214,7 +215,8 @@ struct QAOwnHousehold {
                 [
                     "source": "hellofresh", "sourceRecipeId": "\(subject)-full", "sourceUrl": "",
                     "name": recipe.name, "imageUrl": recipe.imageURL, "isAddon": false,
-                    "servings": [2, 4], "totalMinutes": 35, "cuisines": ["italian"], "tags": [String](),
+                    "servings": [2, 4], "totalMinutes": QARecipeTimes.minutes(recipe.name), "cuisines": ["italian"],
+                    "tags": [String](),
                     "orderWeeks": [String](),
                     "ingredients": recipe.ingredients.enumerated().map { index, item -> [String: Any] in
                         var amounts: [[String: Any]] = []
@@ -361,6 +363,15 @@ extension XCTestCase {
 
 /// A whole recipe for `QAOwnHousehold.importRecipe`: each ingredient with its amount for 2 (none
 /// for a pantry staple), and the steps.
+/// One time per meal-kit recipe in every test household (Hark's build 121 review, round 3): the
+/// Menu read 20 min for Chicken Penne al Limone from the shared household's meal kit, Your Meals
+/// 30 and the cooking screen 35 from the tests' own imports. These are the shared household's.
+enum QARecipeTimes {
+    static let known = ["Chicken Penne al Limone": 20, "Garlic Bread": 15]
+
+    static func minutes(_ name: String) -> Int { known[name] ?? 30 }
+}
+
 struct QARecipeFixture {
     struct Ingredient {
         let name: String

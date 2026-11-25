@@ -190,6 +190,51 @@ final class StartCookingQATests: XCTestCase {
         app.terminate()
     }
 
+    /// One recipe, one time (Hark's build 121 review, round 3): the Menu card, the recipe page and
+    /// the cooking screen all read the recipe's one total time.
+    @MainActor
+    func testTheMenuRecipePageAndCookingShowOneTime() throws {
+        continueAfterFailure = true
+        let recipe = QARecipeFixture.lemonPenne
+        let own = try ownHousehold("cooktime", recipe: "") { own in
+            let id = try await own.importRecipe(recipe)
+            try await own.plan(id, weeksAhead: 0, day: MenuCardsQATests.nightsFromToday()[0])
+        }
+        let app = launchSignedIn(as: own)
+        var shown: [(screen: String, text: String?)] = []
+
+        let card = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", MenuQAChecks.cardPrefix))
+            .buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(recipe.name),")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 30), "\(recipe.name)’s card isn’t on the Menu")
+        shown.append(("The Menu card", card.exists ? card.label : nil))
+
+        card.tap()
+        let total = app.descendants(matching: .any)["Total Time"].firstMatch
+        XCTAssertTrue(total.waitForExistence(timeout: 15), "The recipe page shows no Total Time")
+        shown.append(("The recipe page", total.exists ? total.value as? String : nil))
+
+        let start = app.buttons["Start Cooking"].firstMatch
+        XCTAssertTrue(start.waitForExistence(timeout: 10), "\(recipe.name) has no Start Cooking")
+        start.tap()
+        let welcome = app.staticTexts["Welcome to Cooking with DinnerOS"]
+        if welcome.waitForExistence(timeout: 4) {
+            app.buttons["Skip"].firstMatch.tap()
+            _ = waitGone(welcome, timeout: 5)
+        }
+        XCTAssertTrue(openedCooking(recipe.name, in: app), "Start Cooking didn’t open \(recipe.name)")
+        let header = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Serves'")).firstMatch
+        shown.append(("The cooking screen", header.waitForExistence(timeout: 10) ? header.label : nil))
+
+        let problems = QATimeChecks.problems(
+            shown, expected: QARecipeTimes.minutes(recipe.name), recipe: recipe.name)
+        if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
+        signOut(app)
+        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+        app.terminate()
+    }
+
     /// A step on the cooking screen's steps column: one element, labelled "Step 3, …".
     @MainActor
     private func stepCard(_ index: Int, in app: XCUIApplication) -> XCUIElement {

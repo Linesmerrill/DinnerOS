@@ -68,6 +68,21 @@ final class CookingQAChecksTests: XCTestCase {
         XCTAssertEqual(CookingQAChecks.fadedHeadings([above], bar: bar, in: screen(), screen: screenFrame), [])
     }
 
+    /// A time read from any screen, shown or spoken (Hark's build 121 review, round 3).
+    func testTimesAreReadFromShownAndSpokenText() {
+        XCTAssertEqual(QATimeChecks.minutes(in: "Chicken Penne al Limone, 20 minutes, quick, in your week"), 20)
+        XCTAssertEqual(QATimeChecks.minutes(in: "Serves 2, 35 min"), 35)
+        XCTAssertEqual(QATimeChecks.minutes(in: "1 hr 5 min"), 65)
+        XCTAssertEqual(QATimeChecks.minutes(in: "1 hour, 5 minutes"), 65)
+        XCTAssertEqual(QATimeChecks.minutes(in: "2 hr"), 120)
+        XCTAssertNil(QATimeChecks.minutes(in: "Serves 2"))
+        let shown: [(screen: String, text: String?)] = [
+            ("Menu", "Pasta, 20 minutes"), ("Recipe", "30 minutes"), ("Cooking", nil),
+        ]
+        XCTAssertEqual(QATimeChecks.problems(shown, expected: 20, recipe: "Pasta").count, 2)
+        XCTAssertEqual(QATimeChecks.problems([("Menu", "Pasta, 20 minutes")], expected: 20, recipe: "Pasta"), [])
+    }
+
     func testTheListsHeadingsAreKnown() {
         for label in ["Ingredients", "Have Ready", "Step 1", "Step 12"] {
             XCTAssertTrue(CookingQAChecks.isHeading(label), label)
