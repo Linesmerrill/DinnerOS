@@ -216,6 +216,9 @@ func (s *Service) options(ctx context.Context, householdID string, r recipes.Rec
 	}
 	for i, l := range lines {
 		g := Group{Line: l, ImageURL: images[l.IngredientID]}
+		if g.ImageURL == "" {
+			g.ImageURL = recipes.IngredientPhotoFor(l.Name, "")
+		}
 		if entry != nil {
 			g.Selected = current[l.Key]
 			if g.Selected == "" {
@@ -227,6 +230,11 @@ func (s *Service) options(ctx context.Context, householdID string, r recipes.Rec
 			if c.IsSwap() {
 				t := targets[c.Protein.ID]
 				opt.IngredientName, opt.ImageURL = t.Name, t.ImageURL
+			}
+			// A swap whose ingredient has no photo shows the catalog's, when it has one (Hark's
+			// build 121 review, round 4: Tofu and Pork Chops showed letters).
+			if opt.ImageURL == "" {
+				opt.ImageURL = recipes.IngredientPhotoFor(opt.IngredientName, "")
 			}
 			g.Choices = append(g.Choices, opt)
 		}

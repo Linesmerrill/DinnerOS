@@ -685,3 +685,33 @@ func TestAmountTextRendering(t *testing.T) {
 		}
 	}
 }
+
+// Hark's build 121 review, round 4: a swap whose ingredient has no photo
+// (Tofu, Pork Chops on the Street Cart bowls) showed a letter. One the
+// catalog has a photo for shows it; an unknown one still has none.
+func TestASwapWithNoPhotoGetsTheCatalogsKnownPhoto(t *testing.T) {
+	svc := NewService(ServiceOptions{Plans: newFakePlans(), Recipes: fakeRecipes{householdTacos().ID: householdTacos()}})
+	o, err := svc.Options(context.Background(), hhAda, householdTacos().ID, Query{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	for _, g := range o.Groups {
+		for _, c := range g.Choices {
+			seen[c.IngredientName] = c.ImageURL
+		}
+	}
+	for name := range seen {
+		if want := recipes.IngredientPhotoFor(name, ""); want != "" && seen[name] != want {
+			t.Errorf("%s shows %q, want the catalog's %q", name, seen[name], want)
+		}
+	}
+	if seen["Ground Turkey"] != "" {
+		t.Errorf("Ground Turkey got a photo: %q", seen["Ground Turkey"])
+	}
+	for _, name := range []string{"Tofu", "Pork Chops"} {
+		if seen[name] == "" {
+			t.Errorf("%s has no photo: %v", name, seen)
+		}
+	}
+}
