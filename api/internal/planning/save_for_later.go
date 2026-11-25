@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
@@ -97,9 +98,10 @@ func (s *Service) saveForLaterIn(ctx context.Context, householdID string, p Plan
 	}
 	items := list.Items
 	for _, item := range list.SkippedItems {
-		// Left out of a recipe isn't used there; skipped for the week or for
-		// good is at home, and still has to last.
-		if item.SkipScope != grocery.SkipRecipe {
+		// Not bought this week is at home, and still has to last. Left out of
+		// a recipe isn't used there, and left out of every dish isn't used at
+		// all: neither is anything to save (build 123, Merrill's iPad review).
+		if item.SkipScope == grocery.SkipThisWeek {
 			items = append(items, item)
 		}
 	}
@@ -150,19 +152,29 @@ func saveForLaterNote(item grocery.Item, recipeID string, meals mealOrder, also 
 			keys = append(keys, a.Key)
 		}
 	}
+	groups := byRecipe(others)
+	slices.SortStableFunc(groups, func(a, b []grocery.Share) int {
+		return meals[a[0].RecipeID].order - meals[b[0].RecipeID].order
+	})
+	// A meal kit's "1 unit Crispy Fried Onions" is a pack of them: "Use 1 of
+	// the 2 packs", not "Use 1 Crispy Fried Onions" (build 123, Merrill's
+	// iPad review).
+	packs := packCounts(mine, groups, item.Name)
 	use := sharesText(mine, item.Name)
+	if packs != nil {
+		use = packs.use()
+	}
 	if use == "" {
 		// "Salt to taste" says nothing about how much to keep.
 		return recipes.SaveForLater{}, false
 	}
 	var parts []string
 	var short string
-	groups := byRecipe(others)
-	slices.SortStableFunc(groups, func(a, b []grocery.Share) int {
-		return meals[a[0].RecipeID].order - meals[b[0].RecipeID].order
-	})
 	for i, group := range groups {
 		amount := sharesText(group, item.Name)
+		if packs != nil {
+			amount = packs.save(i)
+		}
 		name := group[0].RecipeName
 		part := "some for " + name
 		if amount != "" {
@@ -231,11 +243,196 @@ func sharesText(shares []grocery.Share, name string) string {
 	for _, a := range total {
 		text := amountText(a)
 		if a.Unit.Label(a.Quantity) == "" {
-			text += " " + name
+			text += " " + countName(a.Quantity, name)
 		}
 		texts = append(texts, text)
 	}
 	return strings.Join(texts, " + ")
+}
+
+var one = ingredients.NewQuantity(1, 1)
+var half = ingredients.NewQuantity(1, 2)
+
+// countName is name after a count: "½ Yellow Onion", "1 Scallion", "2
+// Lemons".
+func countName(q ingredients.Quantity, name string) string {
+	head, last := splitLast(name)
+	if q.Cmp(one) > 0 {
+		if pluralWord(last) {
+			return name
+		}
+		return head + pluralOf(last)
+	}
+	if pluralWord(last) {
+		return head + singularOf(last)
+	}
+	return name
+}
+
+// mealPacks are the packs of an item each meal uses, when every meal counts
+// it in packs: this meal's first, then each later meal's in order.
+type mealPacks struct {
+	word   string
+	counts []ingredients.Quantity
+}
+
+// packCounts reads the shares as packs, when the item is bought by the pack
+// and every share is a plain count of them; nil otherwise.
+func packCounts(mine []grocery.Share, groups [][]grocery.Share, name string) *mealPacks {
+	word, ok := packWord(name)
+	if !ok {
+		return nil
+	}
+	out := &mealPacks{word: word}
+	for _, shares := range append([][]grocery.Share{mine}, groups...) {
+		var total ingredients.Quantity
+		for i, sh := range shares {
+			if sh.Unquantified || len(sh.Amounts) != 1 {
+				return nil
+			}
+			a := sh.Amounts[0]
+			if a.Unit.Label(a.Quantity) != "" || a.Quantity.IsZero() {
+				return nil
+			}
+			if i == 0 {
+				total = a.Quantity
+			} else {
+				total = total.Add(a.Quantity)
+			}
+		}
+		out.counts = append(out.counts, total)
+	}
+	return out
+}
+
+func (p *mealPacks) total() ingredients.Quantity {
+	sum := p.counts[0]
+	for _, q := range p.counts[1:] {
+		sum = sum.Add(q)
+	}
+	return sum
+}
+
+// use is this meal's packs: "1 of the 2 packs", "half the bag", "1 ½ packs".
+func (p *mealPacks) use() string {
+	mine, total := p.counts[0], p.total()
+	switch {
+	case whole(mine) && whole(total):
+		return mine.Format() + " of the " + total.Format() + " " + p.plural()
+	case total.Equal(one) && mine.Equal(half):
+		return "half the " + p.word
+	case total.Equal(one):
+		return mine.Format() + " of the " + p.word
+	}
+	return p.amount(mine)
+}
+
+// save is the i-th later meal's packs: "1 pack", "half a bag", or "the other
+// half" when two meals split one pack.
+func (p *mealPacks) save(i int) string {
+	q := p.counts[i+1]
+	if len(p.counts) == 2 && q.Equal(half) && p.counts[0].Equal(half) {
+		return "the other half"
+	}
+	return p.amount(q)
+}
+
+func (p *mealPacks) amount(q ingredients.Quantity) string {
+	switch {
+	case q.Equal(half):
+		return "half a " + p.word
+	case q.Cmp(one) < 0:
+		return q.Format() + " of a " + p.word
+	case q.Equal(one):
+		return "1 " + p.word
+	}
+	return q.Format() + " " + p.plural()
+}
+
+func (p *mealPacks) plural() string { return pluralOf(p.word) }
+
+func whole(q ingredients.Quantity) bool {
+	_, den := q.Fraction()
+	return den == 1
+}
+
+// packTails are last words of a name that come in a pack when counted: "1
+// Apricot Jam" is a packet of it, and "1 Marinara Cup" is a cup.
+var packTails = map[string]string{
+	"cup": "cup", "can": "can", "jar": "jar", "tub": "tub", "bag": "bag", "box": "box", "pouch": "pouch",
+	"packet": "packet", "pack": "pack", "container": "container", "bottle": "bottle",
+	"jam": "pack", "dressing": "pack", "crema": "pack", "glaze": "pack", "mayonnaise": "pack", "mayo": "pack",
+	"mustard": "pack", "honey": "pack", "syrup": "pack", "spread": "pack", "vinaigrette": "pack",
+	"sauce": "pack", "paste": "pack", "seasoning": "pack", "mix": "pack", "cream": "pack",
+}
+
+// packWord is the word a counted item comes in ("pack", "cup"), when a count
+// of it means packs rather than pieces: a name ending in its packaging, or a
+// plural pantry name like Crispy Fried Onions. Lemons, Scallions, Eggs and
+// Tortillas are counted one by one.
+func packWord(name string) (string, bool) {
+	_, last := splitLast(name)
+	last = strings.ToLower(last)
+	if word, ok := packTails[last]; ok {
+		return word, true
+	}
+	if !pluralWord(last) {
+		return "", false
+	}
+	switch category, _ := ingredients.Categorize(name); category {
+	case ingredients.CategoryPantry, ingredients.CategorySpices, ingredients.CategoryCondiments,
+		ingredients.CategoryFrozen, ingredients.CategoryDeli:
+		return "pack", true
+	}
+	return "", false
+}
+
+// splitLast is name's last word and what comes before it, space included.
+func splitLast(name string) (head, last string) {
+	i := strings.LastIndexByte(name, ' ')
+	return name[:i+1], name[i+1:]
+}
+
+// pluralWord reports whether a word reads as a plural: "Onions", not
+// "Asparagus", "Hummus" or "Swiss".
+func pluralWord(w string) bool {
+	lower := strings.ToLower(w)
+	if !strings.HasSuffix(lower, "s") {
+		return false
+	}
+	for _, end := range []string{"ss", "us", "is"} {
+		if strings.HasSuffix(lower, end) {
+			return false
+		}
+	}
+	return true
+}
+
+func pluralOf(w string) string {
+	lower := strings.ToLower(w)
+	switch {
+	case lower == "tomato" || lower == "potato":
+		return w + "es"
+	case strings.HasSuffix(lower, "x") || strings.HasSuffix(lower, "ch") || strings.HasSuffix(lower, "sh") ||
+		strings.HasSuffix(lower, "s"):
+		return w + "es"
+	case strings.HasSuffix(lower, "y") && len(lower) > 1 && !strings.ContainsRune("aeiou", rune(lower[len(lower)-2])):
+		return w[:len(w)-1] + "ies"
+	}
+	return w + "s"
+}
+
+func singularOf(w string) string {
+	lower := strings.ToLower(w)
+	switch {
+	case strings.HasSuffix(lower, "toes"):
+		return w[:len(w)-2]
+	case strings.HasSuffix(lower, "ies") && len(lower) > 4:
+		return w[:len(w)-3] + "y"
+	case strings.HasSuffix(lower, "ches") || strings.HasSuffix(lower, "shes") || strings.HasSuffix(lower, "xes"):
+		return w[:len(w)-2]
+	}
+	return w[:len(w)-1]
 }
 
 // joinAnd joins "a", "a and b", "a, b, and c".

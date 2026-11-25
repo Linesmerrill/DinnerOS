@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -115,5 +116,31 @@ func TestSaveForLaterShowsABlendOnce(t *testing.T) {
 	// A part of the blend keeps its own name on the blend's line.
 	if p := got[2]; p.Name != "Smoked Paprika" || p.IngredientIndex == nil || *p.IngredientIndex != 3 {
 		t.Errorf("part = %+v", p)
+	}
+}
+
+// Cilantro skipped for this dish (just this once, or always) isn't used
+// here, so it never says to use some and save the rest (build 123, Merrill's
+// iPad review), whether the note reaches the line by its key or only by its
+// name. What the meal still uses keeps its note.
+func TestSaveForLaterDropsWhatThisMealLeavesOut(t *testing.T) {
+	notes := []SaveForLater{
+		{Keys: []string{"cilantro-id"}, Name: "Cilantro", Text: "Use ¼ oz. Save ¼ oz for Sesame-Soy Pork Bowls on Wednesday."},
+		{Keys: []string{"other-id"}, Name: "Cilantro", Text: "Use ¼ oz. Save ¼ oz for Pork Bowls."},
+		{Keys: []string{"lime"}, Name: "Lime", Text: "Use 1 Lime. Save 1 Lime for Pork Bowls."},
+	}
+	for _, lo := range []*grocery.LeftOut{
+		{SkipID: "s", Scope: grocery.SkipRecipe, Once: true},
+		{SkipID: "s", Scope: grocery.SkipRecipe},
+		{SkipID: "s", Scope: grocery.SkipAlways},
+	} {
+		in := Instructions{Ingredients: []IngredientState{
+			{Index: 0, IngredientKey: "cilantro-id", Name: "Cilantro", LeftOut: lo},
+			{Index: 1, IngredientKey: "lime", Name: "Lime"},
+		}}
+		got := saveForLaterResponses(notes, in)
+		if len(got) != 1 || got[0].Name != "Lime" {
+			t.Errorf("%+v: notes = %+v, want only the lime", lo, got)
+		}
 	}
 }
