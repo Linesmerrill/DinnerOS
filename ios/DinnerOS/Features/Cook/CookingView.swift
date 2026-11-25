@@ -378,14 +378,26 @@ struct CookDish {
     let instructions: RecipeInstructions?
 
     /// The server's checklist when it sent one; the app's own reading of the steps otherwise.
+    /// What's skipped for this meal isn't used, so it isn't listed (build 123).
     var ingredients: [CookIngredient] {
-        if let checklist = instructions?.checklist { return checklist.cookIngredients(recipe: recipe) }
-        return CookChecklist.make(recipe: recipe, servings: servings ?? 0, instructions: instructions)
+        if let checklist = instructions?.checklist {
+            return CookChecklist.used(checklist.cookIngredients(recipe: recipe))
+        }
+        return CookChecklist.used(
+            CookChecklist.make(recipe: recipe, servings: servings ?? 0, instructions: instructions))
     }
 
     var stepGroups: [CookStepGroup] {
-        if let checklist = instructions?.checklist { return checklist.cookStepGroups }
-        return CookChecklist.byStep(recipe: recipe, servings: servings ?? 0, instructions: instructions)
+        if let checklist = instructions?.checklist { return CookChecklist.used(checklist.cookStepGroups) }
+        return CookChecklist.used(
+            CookChecklist.byStep(recipe: recipe, servings: servings ?? 0, instructions: instructions))
+    }
+
+    /// What to keep for later meals, without anything this meal skips: a saved answer from an
+    /// older server may still name it.
+    var saveForLater: [InstructionSaveForLater] {
+        guard let instructions else { return [] }
+        return CookChecklist.used(instructions.saveForLater, ingredients: instructions.ingredients)
     }
 }
 
@@ -487,8 +499,8 @@ struct CookIngredientList: View {
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, DS.Space.s)
                 .dsFadesAtBarEdge(heading: true)
-            if let notes = dish.instructions?.saveForLater, !notes.isEmpty {
-                CookSaveForLaterCard(notes: notes)
+            if !dish.saveForLater.isEmpty {
+                CookSaveForLaterCard(notes: dish.saveForLater)
                     .padding(.bottom, DS.Space.s)
                     .dsFadesAtBarEdge()
             }
@@ -518,7 +530,7 @@ struct CookIngredientList: View {
                 let current = session.current(recipe: dish.recipe.id)
                 let groups = CookStepGroups.shown(dish.stepGroups)
                 let reminders = CookStepGroups.saveReminderRows(
-                    groups, notes: dish.instructions?.saveForLater ?? [])
+                    groups, notes: dish.saveForLater)
                 ForEach(groups) { group in
                     stepGroup(group, isCurrent: group.index == current, reminders: reminders)
                 }

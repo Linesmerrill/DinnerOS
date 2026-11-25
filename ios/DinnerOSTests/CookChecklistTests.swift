@@ -65,4 +65,34 @@ struct CookChecklistTests {
         session.tapStep(2, recipe: "main")
         #expect(session.current(recipe: "main") == nil)
     }
+
+    /// Cilantro skipped for this dish: a saved answer from an older server still lists it struck
+    /// through and still says to save some. The cooking screen shows neither (build 123).
+    @Test func aSkippedIngredientIsNotListedOrSaved() throws {
+        let json = Data(
+            #"""
+            {"recipeId":"r1","steps":[],"leftOutApplied":true,
+             "ingredients":[
+               {"index":0,"ingredientKey":"rice","name":"Rice"},
+               {"index":1,"ingredientKey":"cilantro","name":"Cilantro","leftOut":{"skipId":"s","scope":"recipe","once":true}}],
+             "checklist":{"all":[
+               {"id":"0-rice","index":0,"name":"Rice","ingredientKey":"rice","parts":[],"components":[]},
+               {"id":"1-cilantro","index":1,"name":"Cilantro","leftOut":true,"ingredientKey":"cilantro","parts":[],"components":[]}],
+              "byStep":[
+               {"index":1,"items":[
+                 {"id":"a","ingredientIndex":0,"name":"Rice","ingredientKey":"rice","parts":[]},
+                 {"id":"b","ingredientIndex":1,"name":"Cilantro","prep":"roughly chopped","leftOut":true,"ingredientKey":"cilantro","parts":[]}]},
+               {"index":2,"items":[
+                 {"id":"c","ingredientIndex":1,"name":"Cilantro","leftOut":true,"ingredientKey":"cilantro","parts":[]}]}]},
+             "saveForLater":[
+               {"ingredientIndex":1,"ingredientKey":"cilantro","name":"Cilantro","text":"Use ¼ oz. Save ¼ oz for Pork Bowls.","short":"Save ¼ oz for Pork Bowls"},
+               {"ingredientIndex":0,"ingredientKey":"rice","name":"Rice","text":"Use 1 cup. Save 1 cup for Pork Bowls.","short":"Save 1 cup for Pork Bowls"}]}
+            """#.utf8)
+        let instructions = try JSONCoding.makeDecoder().decode(RecipeInstructions.self, from: json)
+        let dish = CookDish(recipe: RecipePreviewData.recipe, servings: 2, instructions: instructions)
+        #expect(dish.ingredients.map(\.name) == ["Rice"])
+        #expect(dish.stepGroups.map(\.index) == [1])
+        #expect(dish.stepGroups.flatMap(\.items).map(\.name) == ["Rice"])
+        #expect(dish.saveForLater.map(\.name) == ["Rice"])
+    }
 }
