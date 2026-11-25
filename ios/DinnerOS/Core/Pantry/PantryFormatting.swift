@@ -92,7 +92,11 @@ nonisolated enum PantryFormat {
             return nil
         }
         let code = item.unit ?? PantryUnit.defaultCode
-        let unit = RecipeFormat.unitLabel(code, sourceUnit: code, plural: RecipeFormat.isPlural(item.quantityValue))
+        var unit = RecipeFormat.unitLabel(code, sourceUnit: code, plural: RecipeFormat.isPlural(item.quantityValue))
+        if unit.isEmpty, code == PantryUnit.defaultCode, let noun = item.countNoun {
+            // "3 onions", not a bare "3" (Hark's build 121 review).
+            unit = noun.word(for: item.quantityValue)
+        }
         return unit.isEmpty ? quantity : "\(quantity) \(unit)"
     }
 

@@ -742,6 +742,47 @@ nonisolated enum ShopRowLayout {
     static let minWrappingTextWidth: CGFloat = 260
     /// The narrowest column a phone row's name wraps in beside Choose Product: a word or two a line.
     static let minNameWidth: CGFloat = 80
+    /// The most lines a phone row's name, or its amount, wraps to beside Choose Product. Past
+    /// that the button goes on a line of its own under the text, which gets the row's width
+    /// ("All-Purpose Flour" took 5 lines beside it on an iPhone SE, Hark's review, build 121).
+    static let maxLinesBesideButton = 2
+}
+
+/// Lays out one text at the width it's given, and reports as its ideal width the narrowest
+/// width that keeps it to `maxLines` lines. A `ViewThatFits` option built on it fits only when
+/// the text gets that width, so the text never wraps past `maxLines` lines in it.
+struct LineLimitedWidth: Layout {
+    var maxLines: Int
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let text = subviews.first else { return .zero }
+        let width = proposal.width ?? Self.narrowestWidth(of: text, maxLines: maxLines)
+        return text.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: bounds.width, height: nil))
+    }
+
+    /// The narrowest width at which `text` takes `maxLines` lines or fewer, to the point.
+    static func narrowestWidth(of text: LayoutSubview, maxLines: Int) -> CGFloat {
+        let oneLine = text.sizeThatFits(.unspecified)
+        guard oneLine.width > 0, oneLine.height > 0 else { return oneLine.width }
+        // Half a line of slack: two lines are a little under twice one line's height.
+        let tallest = oneLine.height * (CGFloat(maxLines) + 0.5)
+        var low: CGFloat = 0
+        var high = ceil(oneLine.width)
+        while high - low > 1 {
+            let mid = ((low + high) / 2).rounded(.down)
+            if text.sizeThatFits(ProposedViewSize(width: mid, height: nil)).height <= tallest {
+                high = mid
+            } else {
+                low = mid
+            }
+        }
+        return high
+    }
 }
 
 /// A line without a saved product: its name, amount and notes, then Choose Product and the
@@ -786,12 +827,12 @@ struct NeedsProductRow: View {
                 // 121) and the note keeps the row's full width.
                 VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     HStack(alignment: .top, spacing: DS.Space.m) {
-                        // A long name ("Chicken Breast Strips") wraps beside the buttons too.
-                        head
+                        // A long name ("Chicken Breast Strips") wraps beside the buttons too, up
+                        // to two lines for the name and two for the amount. A row that would need
+                        // more falls through to `stacked`, where the text has the row's width.
+                        lineLimitedHead
                             .fixedSize(horizontal: false, vertical: true)
-                            .frame(
-                                minWidth: ShopRowLayout.minNameWidth, idealWidth: ShopRowLayout.minNameWidth,
-                                maxWidth: .infinity, alignment: .leading)
+                            .frame(minWidth: ShopRowLayout.minNameWidth, maxWidth: .infinity, alignment: .leading)
                         buttons(pushesRemove: false)
                     }
                     // No width of its own: it wraps in whatever the row has, so this layout is
@@ -832,6 +873,23 @@ struct NeedsProductRow: View {
                 Text(line.quantityText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// The name and amount beside the buttons on a phone, each wanting the width that keeps it
+    /// to `ShopRowLayout.maxLinesBesideButton` lines.
+    private var lineLimitedHead: some View {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
+            LineLimitedWidth(maxLines: ShopRowLayout.maxLinesBesideButton) {
+                Text(line.name)
+            }
+            if !line.quantityText.isEmpty {
+                LineLimitedWidth(maxLines: ShopRowLayout.maxLinesBesideButton) {
+                    Text(line.quantityText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
