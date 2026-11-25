@@ -51,10 +51,16 @@ type SaveForLaterResponse struct {
 	Short         string `json:"short"`
 }
 
-// saveForLaterResponses matches each note to the recipe's ingredients.
+// saveForLaterResponses matches each note to the recipe's ingredients. An
+// ingredient the household leaves out of this meal (just this once, for this
+// dish, or for every dish) isn't used here, so there's nothing to save from
+// it: its note is dropped (build 123, Merrill's iPad review).
 func saveForLaterResponses(notes []SaveForLater, in Instructions) []SaveForLaterResponse {
 	out := make([]SaveForLaterResponse, 0, len(notes))
 	for _, n := range notes {
+		if leftOutOfMeal(n, in) {
+			continue
+		}
 		r := SaveForLaterResponse{Name: n.Name, Text: n.Text, Short: n.Short}
 		for _, st := range in.Ingredients {
 			if slices.ContainsFunc(n.Keys, func(k string) bool { return sameKey(k, st.IngredientKey) }) {
@@ -78,6 +84,26 @@ func saveForLaterResponses(notes []SaveForLater, in Instructions) []SaveForLater
 		out = append(out, r)
 	}
 	return out
+}
+
+// leftOutOfMeal reports whether note is for an ingredient this meal leaves
+// out: one of its keys, or its name, is a left-out ingredient of the recipe.
+// The name counts too, so a note bought under a catalog name the recipe's
+// line doesn't carry still can't outlive the line being crossed out.
+func leftOutOfMeal(n SaveForLater, in Instructions) bool {
+	name := "name:" + ingredients.NormalizeName(n.Name)
+	for _, st := range in.Ingredients {
+		if st.LeftOut == nil {
+			continue
+		}
+		if slices.ContainsFunc(n.Keys, func(k string) bool { return sameKey(k, st.IngredientKey) }) {
+			return true
+		}
+		if n.Name != "" && (sameKey(name, st.IngredientKey) || sameKey(name, "name:"+ingredients.NormalizeName(st.Name))) {
+			return true
+		}
+	}
+	return false
 }
 
 func sameIndex(a, b *int) bool {

@@ -48,6 +48,50 @@ func TestAnnotateMarksALeftOutIngredientInsteadOfDeletingIt(t *testing.T) {
 	}
 }
 
+// The cooking checklist has no row for a skipped ingredient: not all
+// together, not in Have Ready, not under the step that names it (build 123,
+// Merrill's iPad review). The step still says "You skip the Cilantro."
+func TestChecklistLeavesOutSkippedIngredients(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{
+			instructionLine("ing-rice", "Rice", "1", "cup"),
+			instructionLine("", "Cilantro", "1/4", "oz"),
+		},
+		"Fluff the rice and top with roughly chopped cilantro.",
+		"Garnish with the cilantro.")
+	for _, lo := range []grocery.LeftOut{
+		{SkipID: "s", Scope: grocery.SkipRecipe, Once: true},
+		{SkipID: "s", Scope: grocery.SkipRecipe},
+		{SkipID: "s", Scope: grocery.SkipAlways},
+	} {
+		in := AnnotateWith(r, 2, nil, true, grocery.LeftOutSet{"name:cilantro": lo}, true)
+		resp := newInstructionsResponse(in)
+		if all := resp.Checklist.All; len(all) != 1 || all[0].Name != "Rice" {
+			t.Errorf("%+v: all = %+v, want rice only", lo, all)
+		}
+		for _, g := range resp.Checklist.ByStep {
+			for _, it := range g.Items {
+				if it.Name != "Rice" || it.LeftOut {
+					t.Errorf("%+v: group %d has %+v", lo, g.Index, it)
+				}
+			}
+		}
+		// Step 2 only adds cilantro: it has nothing to gather.
+		for _, g := range resp.Checklist.ByStep {
+			if g.Index == 2 {
+				t.Errorf("%+v: step 2 group = %+v, want none", lo, g)
+			}
+		}
+		if n := resp.Steps[0].Notes; len(n) != 1 || n[0].Text != "You skip the Cilantro." {
+			t.Errorf("%+v: step notes = %+v", lo, n)
+		}
+		// The recipe page still knows it's skipped, so it can offer Put Back.
+		if resp.Ingredients[1].LeftOut == nil {
+			t.Errorf("%+v: ingredient state lost the skip", lo)
+		}
+	}
+}
+
 // A catalog ingredient is found under its name spelling too, the way a skip
 // made from a free-text line in another recipe spells it.
 func TestAnnotateFindsALeftOutCatalogIngredientByName(t *testing.T) {

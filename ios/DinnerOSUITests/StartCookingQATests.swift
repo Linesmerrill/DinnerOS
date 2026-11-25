@@ -235,6 +235,101 @@ final class StartCookingQATests: XCTestCase {
         app.terminate()
     }
 
+    /// Merrill's dinner on Nov 24 (build 122, iPad in landscape): cilantro skipped for the tacos
+    /// still showed struck through in their cooking list, and their Save Some for Later card said
+    /// to use ¼ oz and save ¼ oz for Wednesday's pork bowls; crispy fried onions read "Use 1
+    /// Crispy Fried Onions". Now the tacos list no cilantro anywhere, the pork bowls still use all
+    /// of theirs and keep some for the lettuce cups, and the onions read as packs.
+    @MainActor
+    func testASkippedIngredientIsNotListedOrSavedForLater() throws {
+        // Carries on past a failed check, so the sign-out at the end always runs.
+        continueAfterFailure = true
+        let tacos = QARecipeFixture.stirFryTacos, bowls = QARecipeFixture.sesamePorkBowls
+        let cups = QARecipeFixture.lettuceCups
+        let own = try ownHousehold("cookskip", recipe: "") { own in
+            let ids = try await own.importRecipes([tacos, bowls, cups])
+            // Today and the next two nights, in this order (on a Saturday all three share it, and
+            // the order they were planned in still holds).
+            for (recipe, day) in zip([tacos, bowls, cups], MenuCardsQATests.nightsFromToday()) {
+                try await own.plan(try XCTUnwrap(ids[recipe.name]), weeksAhead: 0, day: day)
+            }
+            try await own.skipInDish("Cilantro", recipeID: try XCTUnwrap(ids[tacos.name]))
+        }
+        let app = launchSignedIn(as: own)
+        var problems: [String] = []
+
+        if let first = cookingList(tacos.name, in: app) {
+            let rows = first.rows.filter { $0.localizedCaseInsensitiveContains("cilantro") }
+            if !rows.isEmpty { problems.append("\(tacos.name) skip cilantro, but its list has \(rows)") }
+            if let card = first.card {
+                if card.contains("Cilantro") {
+                    problems.append("\(tacos.name)’s Save Some for Later names cilantro: \(card)")
+                }
+                if !card.contains("Lime:") {
+                    problems.append("\(tacos.name)’s Save Some for Later has no lime: \(card)")
+                }
+                if !card.contains("Crispy Fried Onions: Use 1 of the 2 packs. Save 1 pack for \(bowls.name)") {
+                    problems.append("\(tacos.name)’s crispy fried onions don’t read as packs: \(card)")
+                }
+            } else {
+                problems.append("\(tacos.name) has no Save Some for Later card")
+            }
+        } else {
+            problems.append("\(tacos.name)’s cooking screen didn’t open")
+        }
+
+        if let later = cookingList(bowls.name, in: app) {
+            if !later.rows.contains(where: { $0.localizedCaseInsensitiveContains("cilantro") }) {
+                problems.append("\(bowls.name) use cilantro, but its list has none: \(later.rows)")
+            }
+            if let card = later.card {
+                if !card.contains("Cilantro: Use ¼ oz. Save ¼ oz for \(cups.name)") {
+                    problems.append(
+                        "\(bowls.name)’s Save Some for Later doesn’t keep cilantro for \(cups.name): \(card)")
+                }
+            } else {
+                problems.append("\(bowls.name) has no Save Some for Later card")
+            }
+        } else {
+            problems.append("\(bowls.name)’s cooking screen didn’t open")
+        }
+
+        // Signed out first, so the next test signs in to the shared test household, not this one.
+        signOut(app)
+        XCTAssertTrue(problems.isEmpty, problems.joined(separator: "\n"))
+        app.terminate()
+    }
+
+    /// Opens `recipe`'s cooking screen from All Meals and reads its Save Some for Later card and
+    /// its ingredient rows, then goes back to the Menu. `nil` when it didn't open.
+    @MainActor
+    private func cookingList(_ recipe: String, in app: XCUIApplication) -> (card: String?, rows: [String])? {
+        open(recipe, in: app)
+        let start = app.buttons["Start Cooking"].firstMatch
+        guard start.waitForExistence(timeout: 15) else { return nil }
+        start.tap()
+        let welcome = app.staticTexts["Welcome to Cooking with DinnerOS"]
+        if welcome.waitForExistence(timeout: 4) {
+            app.buttons["Skip"].firstMatch.tap()
+            _ = waitGone(welcome, timeout: 5)
+        }
+        guard openedCooking(recipe, in: app) else { return nil }
+        let card = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Save Some for Later")).firstMatch
+        let cardLabel = card.waitForExistence(timeout: 10) ? card.label : nil
+        // One snapshot, walked here: asking each row for its label is a query each.
+        var rows: [String] = []
+        var stack = (try? app.snapshot()).map { [$0] } ?? []
+        while let element = stack.popLast() {
+            stack.append(contentsOf: element.children)
+            if element.identifier == QAMarkers.cookIngredient { rows.append(element.label) }
+        }
+        if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
+        let back = backButton(app)
+        if back.waitForExistence(timeout: 5) { back.tap() }
+        return (cardLabel, rows)
+    }
+
     /// A step on the cooking screen's steps column: one element, labelled "Step 3, …".
     @MainActor
     private func stepCard(_ index: Int, in app: XCUIApplication) -> XCUIElement {
@@ -307,6 +402,18 @@ final class StartCookingQATests: XCTestCase {
         }
         XCTAssertTrue(field.waitForExistence(timeout: 5), "No meal search")
         field.tap()
+        // Back from an earlier recipe, the search still holds its name.
+        if let typed = field.value as? String, !typed.isEmpty, typed != field.placeholderValue {
+            // The field's own clear button; else delete from the end, where a tap puts the cursor.
+            let clear = app.buttons["Clear text"].firstMatch
+            if clear.exists, clear.isHittable {
+                clear.tap()
+            } else {
+                field.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+                field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count))
+            }
+            if !app.keyboards.firstMatch.waitForExistence(timeout: 2) { field.tap() }
+        }
         field.typeText(recipe)
         let done = app.toolbars.buttons["Done"].firstMatch
         if done.waitForExistence(timeout: 2) { done.tap() }

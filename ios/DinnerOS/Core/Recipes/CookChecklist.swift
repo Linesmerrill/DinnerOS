@@ -29,6 +29,34 @@ nonisolated struct CookIngredient: Equatable, Sendable, Identifiable {
 
 /// Builds the cooking checklist from the recipe and its rendered steps.
 nonisolated enum CookChecklist {
+    /// The rows this meal uses: an ingredient skipped for it isn't listed at all (build 123).
+    /// The server already leaves them out; this covers a saved answer from an older one.
+    static func used(_ ingredients: [CookIngredient]) -> [CookIngredient] {
+        ingredients.filter { !$0.isLeftOut }
+    }
+
+    /// Each step's rows this meal uses, without a step left with nothing to gather.
+    static func used(_ groups: [CookStepGroup]) -> [CookStepGroup] {
+        groups.compactMap { group in
+            let items = group.items.filter { !$0.isLeftOut }
+            return items.isEmpty ? nil : CookStepGroup(index: group.index, items: items)
+        }
+    }
+
+    /// What to keep for later meals, without a note for an ingredient this meal skips.
+    static func used(
+        _ notes: [InstructionSaveForLater], ingredients: [InstructionIngredient]
+    ) -> [InstructionSaveForLater] {
+        let skipped = ingredients.filter(\.isLeftOut)
+        guard !skipped.isEmpty else { return notes }
+        return notes.filter { note in
+            !skipped.contains { state in
+                note.ingredientIndex == state.index
+                    || (note.ingredientKey?.isEmpty == false && note.ingredientKey == state.ingredientKey)
+            }
+        }
+    }
+
     static func make(recipe: Recipe, servings: Int, instructions: RecipeInstructions?) -> [CookIngredient] {
         let lines = recipe.ingredientLines(servings: servings)
         let states = RecipeIngredientStates.make(lines: lines, instructions: instructions)

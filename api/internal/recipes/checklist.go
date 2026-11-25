@@ -75,9 +75,21 @@ type CookStepItem struct {
 	IngredientKey string
 }
 
+// buildChecklist leaves out what the household skips for this meal: it isn't
+// used, so it isn't a row to cross off, here or under any step (build 123,
+// Merrill's iPad review). The steps still say "You skip …".
 func buildChecklist(r Recipe, in Instructions) Checklist {
 	all := checklistIngredients(r, in)
-	return Checklist{All: all, ByStep: checklistByStep(in.Steps, all)}
+	groups := checklistByStep(in.Steps, all)
+	kept := groups[:0]
+	for _, g := range groups {
+		g.Items = slices.DeleteFunc(g.Items, func(it CookStepItem) bool { return it.LeftOut })
+		if len(g.Items) > 0 {
+			kept = append(kept, g)
+		}
+	}
+	all = slices.DeleteFunc(all, func(ci CookIngredient) bool { return ci.LeftOut })
+	return Checklist{All: all, ByStep: kept}
 }
 
 func checklistIngredients(r Recipe, in Instructions) []CookIngredient {
