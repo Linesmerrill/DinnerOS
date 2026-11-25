@@ -51,9 +51,11 @@ type Measure struct {
 func (m Measure) Text() string {
 	if m.Or == "" && !m.Exact {
 		m = tidySpoons(m)
-		// "10 tsp" measures as "3 Tbsp + 1 tsp".
-		if mixed := spoonsMixed(m); mixed != "" {
-			return mixed
+		// Spoons that didn't tidy read as one kitchen measure, the rule Shop
+		// and the grocery list use: "10 tsp" is "3 ½ Tbsp", never
+		// "3 Tbsp + 1 tsp".
+		if text, ok := spoons(m); ok {
+			return text
 		}
 	}
 	m = kitchenRound(m)
@@ -110,16 +112,24 @@ func kitchenRound(m Measure) Measure {
 	return m
 }
 
-// spoonsMixed writes 3 tsp or more that didn't tidy to whole or half
-// tablespoons as a kitchen measures them: "3 Tbsp + 1 tsp", not "10 tsp";
-// "1 Tbsp + 1 tsp", not "4 tsp"; "⅓ cup", not "5 Tbsp + 1 tsp" (Hark's build
-// 121 review). It is "" for anything else.
-func spoonsMixed(m Measure) string {
-	if m.Unit != "tsp" || m.Quantity.Cmp(ingredients.NewQuantity(3, 1)) < 0 {
-		return ""
+// spoons writes 1 Tbsp or more that didn't tidy to whole or half tablespoons
+// or a quarter cup ("10 tsp", "8/3 Tbsp") with ingredients.KitchenSpoons, so it
+// reads as one measure: "3 ½ Tbsp", not "3 Tbsp + 1 tsp". ok is false for
+// anything else, which keeps its own amount ("⅜ tsp", "4 Tbsp").
+func spoons(m Measure) (string, bool) {
+	switch m.Unit {
+	case "tsp":
+		if m.Quantity.Cmp(ingredients.NewQuantity(3, 1)) < 0 {
+			return "", false
+		}
+	case "tbsp":
+		if m.Quantity.Cmp(ingredients.NewQuantity(1, 1)) < 0 || m.Quantity.MulRat(big.NewRat(2, 1)).Rat().IsInt() {
+			return "", false
+		}
+	default:
+		return "", false
 	}
-	text, _ := ingredients.KitchenSpoons(m.Quantity, m.Unit)
-	return text
+	return ingredients.KitchenSpoons(m.Quantity, m.Unit)
 }
 
 // tidySpoons moves 3 tsp or more up to tablespoons, and 8 Tbsp or more up to

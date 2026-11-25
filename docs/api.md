@@ -1695,6 +1695,7 @@ bulk, staples, purchases) has these fields:
 | `lowThresholdPercent` | The item's own threshold (1–100), or `null` to use the household's |
 | `unitSize` | `{per, quantity, quantityValue, unit}`: one `per` ("count") holds `quantity` `unit` ("1/2" "cup"), or `null` |
 | `estimate` | `null` when no amount is recorded; otherwise the object below |
+| `countNoun` | `{one, other}`: the word a bare count reads with ("3 onions"), lowercase; `null` unless the unit is `count` |
 
 | `estimate` field | Meaning |
 | --- | --- |
