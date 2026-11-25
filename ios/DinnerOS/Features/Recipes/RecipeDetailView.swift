@@ -285,7 +285,9 @@ struct RecipeDetailView: View {
                     barEdge: rowFadeEdge,
                     maxForward: reachable - geometry.contentOffset.y),
                 let shift = RecipeDetailHeader.keepingPinned(
-                    shift, offset: geometry.contentOffset.y, zone: snapZone)
+                    shift, offset: geometry.contentOffset.y, zone: snapZone),
+                let shift = RecipeDetailHeader.keepingEnd(
+                    shift, offset: geometry.contentOffset.y, reachable: reachable)
             {
                 // At rest no row sits part way into the picker's fade: it moves to show the row
                 // whole (Hark's review, build 122 round 5: the Allergens line rested at 1.5:1).
@@ -1356,6 +1358,15 @@ enum RecipeDetailHeader {
         guard let zone, offset >= zone.upperBound - 0.5 else { return shift }
         let kept = max(offset + shift, zone.upperBound) - offset
         return abs(kept) > 0.5 ? kept : nil
+    }
+
+    /// `shift`, except that a page resting at its end (`offset` within half a point of
+    /// `reachable`) never moves back: its last row stays whole above the bottom bar's fade. The
+    /// row at the picker's edge came back into view and pushed "Cooking Steps" under the bar at
+    /// the end of the Ingredients tab (Hark's review, build 121 round 4). `nil` when that leaves
+    /// nothing to move.
+    nonisolated static func keepingEnd(_ shift: CGFloat, offset: CGFloat, reachable: CGFloat) -> CGFloat? {
+        shift < 0 && offset >= reachable - 0.5 ? nil : shift
     }
 
     /// The room between the picker and the section under it: the section starts right under the

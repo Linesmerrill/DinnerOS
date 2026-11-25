@@ -106,6 +106,11 @@ struct RecipeHeaderEdgeTests {
         #expect(RecipeDetailHeader.keepingPinned(-34, offset: 459, zone: zone) == nil)
         #expect(RecipeDetailHeader.keepingPinned(-40, offset: 480, zone: zone) == -21)
         #expect(RecipeDetailHeader.keepingPinned(60, offset: 459, zone: zone) == 60)
+        // At the page's end the last row stays whole: no move back (build 121 round 4), though
+        // short of the end, or forward, it still moves.
+        #expect(RecipeDetailHeader.keepingEnd(-30, offset: 800, reachable: 800) == nil)
+        #expect(RecipeDetailHeader.keepingEnd(-30, offset: 760, reachable: 800) == -30)
+        #expect(RecipeDetailHeader.keepingEnd(12, offset: 800, reachable: 800) == 12)
         // Above the zone, or with none, the move is left alone.
         #expect(RecipeDetailHeader.keepingPinned(-20, offset: 50, zone: zone) == -20)
         #expect(RecipeDetailHeader.keepingPinned(-20, offset: 500, zone: nil) == -20)
