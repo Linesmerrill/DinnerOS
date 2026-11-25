@@ -72,7 +72,15 @@ var keyPhotos = map[string]string{
 	"pork chop":         "554a3a04fd2cb9324b8b456e-d68749c2.png",
 	"pork chops":        "554a3a04fd2cb9324b8b456e-d68749c2.png",
 	"tofu":              "68d57d91d232ff05cfc441d1-8909ca87.png",
+	// The catalog has no pine nuts (Hark's build 121 review, round 5): a public domain photo of
+	// shelled pine nuts on Wikimedia Commons (File:P_armandii_nuts.jpg, "released into the
+	// public domain ... worldwide").
+	"pine nuts":         pineNutsPhoto,
+	"pine nut":          pineNutsPhoto,
+	"toasted pine nuts": pineNutsPhoto,
 }
+
+const pineNutsPhoto = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/P_armandii_nuts.jpg/500px-P_armandii_nuts.jpg"
 
 // photoID is the catalog's ID for a photo URL: the start of its file name,
 // lower case, or "" when raw isn't a URL.
@@ -100,6 +108,9 @@ func IngredientPhotoFor(key, raw string) string {
 	}
 	if photo == "" {
 		if file, ok := keyPhotos[key]; ok {
+			if strings.HasPrefix(file, "https://") {
+				return file
+			}
 			return catalogPhotoBase + file
 		}
 	}

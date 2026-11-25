@@ -345,6 +345,24 @@ enum MenuQAChecks {
         return problems
     }
 
+    /// The seeded recipes' ingredients all have photos (Hark's build 121 review, round 5: Pine Nuts
+    /// showed its letter tile): any no-photo tile on screen is a problem. A photo still loading
+    /// gets up to `wait` seconds to come in.
+    @MainActor
+    static func checkIngredientPhotos(_ app: XCUIApplication, screen: String, wait: Int = 8) -> [String] {
+        let frame = app.frame
+        var names: [String] = []
+        for attempt in 0...wait {
+            names = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier == %@", ingredientFallback)).allElementsBoundByIndex
+                .filter { !$0.frame.isEmpty && frame.intersects($0.frame) }
+                .map { $0.label.components(separatedBy: ": ").first ?? $0.label }
+            if names.isEmpty { return [] }
+            if attempt < wait { sleep(1) }
+        }
+        return names.map { "\(screen): “\($0)” shows a letter tile, not a photo" }
+    }
+
     // MARK: - Build 121 review round 2 (Hark's items 9 to 13)
 
     /// (8) Your Meals' "N meals planned" is the meal cards, add-ons not counted, and a card past

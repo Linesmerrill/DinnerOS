@@ -222,13 +222,16 @@ final class ScreensQATests: XCTestCase {
                 // Ingredients without a photo show their lettered tile, down to the list's end.
                 let screen = "Recipe page › \(kind) › Ingredients"
                 problems += MenuQAChecks.checkIngredientFallbacks(app, screen: screen)
+                problems += MenuQAChecks.checkIngredientPhotos(app, screen: screen)
                 app.swipeUp()
                 sleep(1)
                 problems += MenuQAChecks.checkIngredientFallbacks(app, screen: screen)
+                problems += MenuQAChecks.checkIngredientPhotos(app, screen: screen)
                 // The list's end, Pine Nuts and all (Hark's build 121 review, round 4, item 3).
                 if kind == "typed by hand" {
                     FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
                     problems += FadeQAChecks.checkRest(app, screen: "\(screen) › end", edges: .bottom)
+                    problems += MenuQAChecks.checkIngredientPhotos(app, screen: "\(screen) › end")
                     keep(capture(app), "Recipe page › \(kind) › Ingredients › end (\(mode))")
                 }
             }

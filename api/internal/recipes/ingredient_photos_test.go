@@ -85,7 +85,10 @@ func TestKnownIngredientsWithNoPhotoGetTheCatalogs(t *testing.T) {
 	if got := IngredientPhotoFor("fresh basil", own); got != own {
 		t.Errorf("a stored photo was replaced: %q", got)
 	}
-	if got := IngredientPhotoFor("pine nuts", ""); got != "" {
+	if got := IngredientPhotoFor("pine nuts", ""); got != pineNutsPhoto {
+		t.Errorf("pine nuts = %q, want the public domain photo", got)
+	}
+	if got := IngredientPhotoFor("saffron threads", ""); got != "" {
 		t.Errorf("an unknown ingredient got a photo: %q", got)
 	}
 }
