@@ -439,7 +439,13 @@ Two things happen that the plain recipe doesn't do:
   then next week; the other meals are that week's entries nobody has marked
   made or not made, read through the same grocery pipeline as the list
   (customizations, specialty ingredients, linked names, skips). Staples and
-  amounts the recipe doesn't give ("salt to taste") get no note.
+  amounts the recipe doesn't give ("salt to taste") get no note, and neither
+  does anything this meal leaves out (just this once, for this dish, or for
+  every dish). A count with no unit reads as packs when the item comes in
+  one ("Use 1 of the 2 packs. Save 1 pack for …", "Use half the pack. Save
+  the other half for …"), and with the right singular or plural otherwise
+  ("1 Scallion", "2 Lemons"). The `checklist` has no row for a left-out
+  ingredient; the step's "You skip …" note still says it.
   `ingredientIndex` and `ingredientKey` are absent when the recipe doesn't
   list it under a name it was bought as. A failed plan read leaves the list
   empty; the steps still load.
