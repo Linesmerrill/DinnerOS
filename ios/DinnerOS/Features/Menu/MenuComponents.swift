@@ -116,15 +116,17 @@ struct RecipePhotoFrame: Layout {
     }
 }
 
-/// A small round ingredient photo with a fallback glyph, on the design system's one thumbnail
-/// plate: the same white circle with a hairline in light and dark, so a product shot on white
-/// and the fallback look alike side by side (build 121).
+/// A small round ingredient photo, or its lettered fallback tile, on the design system's one
+/// thumbnail plate: the same white circle with a hairline in light and dark, so a product shot
+/// on white and the fallback look alike side by side (build 121).
 struct IngredientPhoto: View {
     let url: URL?
+    /// The ingredient's name, for the fallback's letter.
+    let name: String
     var size: CGFloat = 48
 
     @Environment(\.displayScale) private var displayScale
-    /// The fallback glyph is showing, for the UI tests' marker (`QAMarkers`).
+    /// The fallback tile is showing, for the UI tests' marker (`QAMarkers`).
     @State private var showsPlaceholder = false
 
     var body: some View {
@@ -135,7 +137,7 @@ struct IngredientPhoto: View {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
                     fallbackGlyph
                 } fallback: {
-                    // Only the fallback counts: the same glyph also waits behind a loading photo.
+                    // Only the fallback counts: the same tile also waits behind a loading photo.
                     fallbackGlyph
                         .onAppear { if QAMarkers.isOn { showsPlaceholder = true } }
                         .onDisappear { if QAMarkers.isOn { showsPlaceholder = false } }
@@ -144,30 +146,58 @@ struct IngredientPhoto: View {
             .clipShape(.circle)
             .overlay(Circle().strokeBorder(Color(.separator)))
             .accessibilityHidden(true)
-            .qaMarker(QAMarkers.photoPlaceholder, label: "ingredient", isShown: showsPlaceholder)
+            .qaMarker(QAMarkers.photoPlaceholder, label: name, isShown: showsPlaceholder)
+            .qaMarker(
+                QAMarkers.ingredientFallback, label: IngredientFallbackGlyph.markerLabel(for: name),
+                isShown: showsPlaceholder)
     }
 
-    /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the glyph.
+    /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the tile.
     private var fallbackGlyph: some View {
-        IngredientFallbackGlyph(size: size)
+        IngredientFallbackGlyph(name: name, size: size)
     }
 }
 
-/// The one glyph every ingredient thumbnail shows without a photo (a recipe's ingredients, its
-/// choices, the prep plan): the design system's neutral fork and knife in one gray at one
-/// weight, never a particular food (Hark's build 121 review, item 17: the prep plan drew a
-/// carrot or a basket by aisle while the recipe page drew the fork and knife).
+/// What every ingredient thumbnail shows without a photo (a recipe's ingredients, its choices,
+/// the prep plan): a soft sage tile with the ingredient's first letter, filling whatever plate
+/// it sits on. The letter is always right, where a food symbol by aisle once put a carrot beside
+/// chicken, and a gray fork and knife read as a missing image (Hark's build 121 reviews).
 struct IngredientFallbackGlyph: View {
+    let name: String
     let size: CGFloat
 
-    static let symbol = DS.Colors.thumbnailGlyphSymbol
-    /// The glyph's share of the plate it sits on.
-    static let scale: CGFloat = 0.4
+    /// The letter's share of the plate it sits on.
+    static let scale: CGFloat = 0.44
+
+    /// Words that say how an ingredient is cut or sized, not what it is: "Fresh Basil" is a B.
+    static let descriptors: Set<String> = [
+        "baby", "boneless", "chopped", "cubed", "diced", "fresh", "grated", "halved", "large", "medium",
+        "minced", "organic", "peeled", "shredded", "skinless", "sliced", "small", "thick", "thin", "trimmed",
+        "whole",
+    ]
+
+    /// The tile's letter: the first letter of the name's first word that says what the food is,
+    /// capitalized, or nil for a name with no letters (the tile then shows alone).
+    static func initial(for name: String) -> String? {
+        let words = name.lowercased().split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "\u{2019}" })
+        let word = words.first { !descriptors.contains(String($0)) } ?? words.first
+        return word?.first { $0.isLetter }.map { String($0).uppercased() }
+    }
+
+    /// The UI tests' marker label: the name and what the tile shows ("Pine Nuts: P").
+    static func markerLabel(for name: String) -> String {
+        "\(name): \(initial(for: name) ?? "no letter")"
+    }
 
     var body: some View {
-        Image(systemName: Self.symbol)
-            .font(.system(size: size * Self.scale, weight: .regular))
-            .foregroundStyle(DS.Colors.thumbnailGlyph)
+        ZStack {
+            Rectangle().fill(DS.Colors.thumbnailFallbackFill)
+            if let letter = Self.initial(for: name) {
+                Text(verbatim: letter)
+                    .font(.system(size: size * Self.scale, weight: .semibold, design: .rounded))
+                    .foregroundStyle(DS.Colors.thumbnailFallbackInk)
+            }
+        }
     }
 }
 

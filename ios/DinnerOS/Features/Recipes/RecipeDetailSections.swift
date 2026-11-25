@@ -250,7 +250,7 @@ struct IngredientRow: View {
 
     private var details: some View {
         HStack(alignment: .center, spacing: DS.Space.m) {
-            IngredientPhoto(url: line.imageURL)
+            IngredientPhoto(url: line.imageURL, name: line.name)
                 .opacity(isLeftOut ? 0.4 : 1)
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(RecipeFormat.displayName(line.nameWithNote))

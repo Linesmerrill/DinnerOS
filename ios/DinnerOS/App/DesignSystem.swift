@@ -68,11 +68,12 @@ nonisolated enum DS {
         /// An ingredient thumbnail's plate: white in light and dark, like the product photos
         /// shot on white that sit beside it (build 121).
         static let thumbnailFill = Color.white
-        /// The fallback glyph on that plate: one mid gray in light and dark.
-        static let thumbnailGlyph = Color(white: 0.62)
-        /// The fallback glyph's symbol: a plain fork and knife, which reads as "food" for any
-        /// ingredient. A carrot sat beside chicken thighs, pork chops and tofu (build 122).
-        static let thumbnailGlyphSymbol = "fork.knife"
+        /// An ingredient without a photo: a soft sage tile with its first letter in deep green,
+        /// the same in light and dark like the white plate it replaces (5.4:1). A fork and knife
+        /// read as a missing image, and a food symbol by aisle put a carrot beside chicken
+        /// (Hark's build 121 round 3 and build 122 reviews).
+        static let thumbnailFallbackFill = Color(red: 0.89, green: 0.94, blue: 0.90)
+        static let thumbnailFallbackInk = Color(red: 0.17, green: 0.42, blue: 0.24)
         /// The wash behind the bar's buttons, tab labels and status bar where they sit on a photo:
         /// the screen's own color, strong enough that their glyphs reach 4.5:1 on any photo, and
         /// one status bar style over the whole hero (build 122).

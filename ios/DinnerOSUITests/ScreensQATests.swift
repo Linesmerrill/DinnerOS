@@ -218,6 +218,14 @@ final class ScreensQATests: XCTestCase {
             // The tab's first rows start whole under the pinned picker, with nothing resting
             // half under it or the bar above it (Hark's review, build 121 round 2).
             problems += FadeQAChecks.checkRest(app, screen: "Recipe page › \(kind) › \(tab)", edges: .top)
+            if tab == "Ingredients" {
+                // Ingredients without a photo show their lettered tile, down to the list's end.
+                let screen = "Recipe page › \(kind) › Ingredients"
+                problems += MenuQAChecks.checkIngredientFallbacks(app, screen: screen)
+                app.swipeUp()
+                sleep(1)
+                problems += MenuQAChecks.checkIngredientFallbacks(app, screen: screen)
+            }
             scrollToTop(app)
         }
         let more = app.buttons["More"].firstMatch
