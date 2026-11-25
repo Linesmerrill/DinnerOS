@@ -335,7 +335,7 @@ func (d recipeDoc) toRecipe() Recipe {
 func (d ingredientDoc) toIngredient() Ingredient {
 	ing := Ingredient{
 		ID: d.ID.Hex(), Key: d.Key, Name: d.Name, Category: d.Category, CategoryConfident: d.CategoryConfident,
-		ImageURL: IngredientPhoto(d.ImageURL), CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
+		ImageURL: IngredientPhotoFor(d.Key, d.ImageURL), CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	for _, ref := range d.SourceRefs {
 		ing.SourceRefs = append(ing.SourceRefs, SourceRef(ref))
