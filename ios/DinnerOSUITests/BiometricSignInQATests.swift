@@ -29,14 +29,21 @@ final class BiometricSignInQATests: XCTestCase {
         setToggle(app, on: true)
         snap(app, "Face ID › Account toggle on")
 
-        // Launch: the lock asks and a match opens the app.
-        app = relaunch(app, fake: "match")
+        // A relaunch with a valid session opens the app with no check (decision 767).
+        app = relaunch(app, fake: "interrupt")
+        assertOpenWithoutFaceID(app, after: "a relaunch with Face ID on")
+
+        // A session older builds kept only behind Face ID: the lock asks once and a match opens
+        // the app; the next launch doesn't ask.
+        app = relaunch(app, fake: "match", oldKeychain: true)
         XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn’t open the app")
         XCTAssertFalse(app.buttons["lock.anotherWay"].exists)
+        app = relaunch(app, fake: "interrupt")
+        assertOpenWithoutFaceID(app, after: "a relaunch after the one-time check")
 
         // Interrupted: the lock screen stays, and Sign in another way goes to the sign-in screen,
         // which keeps Sign In with Face ID (build 119) without asking by itself.
-        app = relaunch(app, fake: "interrupt")
+        app = relaunch(app, fake: "interrupt", oldKeychain: true)
         let another = app.buttons["lock.anotherWay"]
         XCTAssertTrue(another.waitForExistence(timeout: 15), "No lock screen")
         XCTAssertTrue(app.buttons["lock.unlock"].exists)
@@ -53,7 +60,7 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertEqual(toggleValue(app), true, "Signing in another way turned Face ID off")
 
         // Cancel at launch: the sign-in screen with every way to sign in, and no second ask.
-        app = relaunch(app, fake: "cancel,match")
+        app = relaunch(app, fake: "cancel,match", oldKeychain: true)
         XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "A cancel didn’t go to sign-in")
         XCTAssertTrue(faceIDButton(app).exists, "A cancel lost Face ID sign-in")
         snap(app, "Face ID › Cancel goes to sign-in")
@@ -61,7 +68,7 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign In with Face ID didn’t sign in")
 
         // Faces changed since it was turned on: it's removed, with a message, then offered again.
-        app = relaunch(app, fake: "changed")
+        app = relaunch(app, fake: "changed", oldKeychain: true)
         XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "Changed faces didn’t go to sign-in")
         XCTAssertTrue(
             app.descendants(matching: .any)["signIn.biometricNotice"].waitForExistence(timeout: 5),
@@ -79,8 +86,10 @@ final class BiometricSignInQATests: XCTestCase {
         app.terminate()
     }
 
-    /// Face ID only unlocks sign-in (Merrill, Nov 22): with it on, leaving the app and coming
-    /// back goes straight back to where the person was, with no Face ID check.
+    /// Face ID is only a sign-in step (Merrill, Nov 22 and Nov 25): with it on and signed in,
+    /// coming back from the background, from the app switcher, and a relaunch (as after iOS ends
+    /// the app in the background) all open the app with no Face ID check. Every fake check after
+    /// turning it on is "interrupt", which leaves the lock screen up, so any ask shows.
     @MainActor
     func testComingBackFromTheBackgroundNeverAsksForFaceID() async throws {
         // A person of this run's own, signed in with email, so Account shows a real-looking
@@ -130,11 +139,58 @@ final class BiometricSignInQATests: XCTestCase {
         keep(end, "Face ID › Back from the background › end (\(mode))")
         XCTAssertTrue(fades.isEmpty, fades.joined(separator: "\n"))
 
-        // A new launch still unlocks with Face ID.
-        app = relaunch(app, fake: "match")
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match at launch didn’t open the app")
+        // The app switcher: up from the bottom edge and held, then back to the app.
+        openAppSwitcher(app)
+        app.activate()
+        assertOpenWithoutFaceID(app, after: "the app switcher")
+
+        // Ended while in the background, then opened again: a cold launch with a valid session.
+        XCUIDevice.shared.press(.home)
+        sleep(2)
+        app = relaunch(app, fake: "interrupt")
+        assertOpenWithoutFaceID(app, after: "a relaunch from the background")
+        // Ended in front, then opened again.
+        app = relaunch(app, fake: "interrupt")
+        assertOpenWithoutFaceID(app, after: "a relaunch")
+        // And back from the background once more after the relaunch.
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        app.activate()
+        assertOpenWithoutFaceID(app, after: "the background after a relaunch")
         setToggle(app, on: false)
         app.terminate()
+    }
+
+    /// Signed in and nothing asking: no lock screen, no system prompt, not signed out.
+    @MainActor
+    private func assertOpenWithoutFaceID(_ app: XCUIApplication, after: String) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        // Long enough for a launch's restore and any ask to show.
+        XCTAssertFalse(app.buttons["lock.anotherWay"].waitForExistence(timeout: 6), "Face ID was asked after \(after)")
+        XCTAssertFalse(app.buttons["lock.unlock"].exists, "The lock screen showed after \(after)")
+        XCTAssertFalse(springboard.alerts.firstMatch.exists, "A system prompt showed after \(after)")
+        XCTAssertFalse(devSignIn(app).exists, "Signed out after \(after)")
+        XCTAssertFalse(faceIDButton(app).exists, "The Face ID sign-in screen showed after \(after)")
+        if app.buttons["Start Planning"].exists { app.buttons["Start Planning"].tap() }
+        if app.buttons["Thanks"].exists { app.buttons["Thanks"].tap() }
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The app didn’t open after \(after)")
+        XCTAssertTrue(waitForToggle(app, true, opening: true), "Face ID sign-in turned off after \(after)")
+    }
+
+    /// Up from the bottom edge, held, as a person opens the app switcher. The app goes inactive
+    /// there, not to the background.
+    @MainActor
+    private func openAppSwitcher(_ app: XCUIApplication) {
+        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.998))
+        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+        bottom.press(forDuration: 0.05, thenDragTo: middle, withVelocity: .slow, thenHoldForDuration: 1.2)
+        sleep(2)
+        // Not in the screenshot set: a debug look that the switcher really opened.
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "debug app switcher (\(mode))"
+        shot.lifetime = .keepAlways
+        add(shot)
+        print("QA-INFO: after the app switcher gesture the app is \(app.state.rawValue)")
     }
 
     /// The whole loop (build 119): sign in, turn Face ID on, sign out, and sign back in with it.
@@ -271,15 +327,20 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(waitForToggle(app, true), "A matched face didn’t turn it on")
         snap(app, "Simulator Face ID › On")
 
-        // Launch: the system check, then a match opens the app.
-        app = relaunch(app, fake: nil, expectLock: true)
-        sleep(2)
-        faceMatches(true)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A matched face didn’t open the app")
+        // A relaunch and a trip to the background with a valid session: no system check.
+        app = relaunch(app, fake: nil)
+        assertOpenWithoutFaceID(app, after: "a relaunch with the simulator’s Face ID")
+        XCUIDevice.shared.press(.home)
+        sleep(3)
+        app.activate()
+        assertOpenWithoutFaceID(app, after: "the background with the simulator’s Face ID")
 
-        // No match, then Cancel: normal sign-in.
-        app = relaunch(app, fake: nil, expectLock: true)
-        sleep(2)
+        // Signed out, a new launch has no valid session: it asks by itself. No match, then
+        // Cancel: the sign-in screen with every way to sign in.
+        signOut(app)
+        XCTAssertTrue(faceIDButton(app).waitForExistence(timeout: 10), "No Sign In with Face ID after signing out")
+        app = relaunch(app, fake: nil)
+        sleep(3)
         faceMatches(false)
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let cancel = springboard.buttons["Cancel"].firstMatch
@@ -289,7 +350,7 @@ final class BiometricSignInQATests: XCTestCase {
         } else {
             faceMatches(false)
         }
-        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "No match didn’t go to sign-in")
+        XCTAssertTrue(devSignIn(app).waitForExistence(timeout: 20), "No match didn’t stay on sign-in")
         XCTAssertTrue(faceIDButton(app).exists, "No match lost Face ID sign-in")
 
         // The sign-in screen's button (build 119): no match keeps the screen, a match signs in.
@@ -322,9 +383,10 @@ final class BiometricSignInQATests: XCTestCase {
     // MARK: Steps
 
     @MainActor
-    private func launch(fake: String?, hideDeveloper: Bool = false) -> XCUIApplication {
+    private func launch(fake: String?, hideDeveloper: Bool = false, oldKeychain: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         if hideDeveloper { app.launchEnvironment["QA_HIDE_DEVELOPER_SIGN_IN"] = "1" }
+        if oldKeychain { app.launchEnvironment["DINNEROS_QA_OLD_FACE_ID_KEYCHAIN"] = "1" }
         applyOrientation()
         for (key, value) in ProcessInfo.processInfo.environment where key.hasPrefix("QA_APP_") {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
@@ -340,10 +402,11 @@ final class BiometricSignInQATests: XCTestCase {
     /// Relaunches; with `expectLock`, the lock screen must show first.
     @MainActor
     private func relaunch(
-        _ app: XCUIApplication, fake: String?, expectLock: Bool = false, hideDeveloper: Bool = false
+        _ app: XCUIApplication, fake: String?, expectLock: Bool = false, hideDeveloper: Bool = false,
+        oldKeychain: Bool = false
     ) -> XCUIApplication {
         app.terminate()
-        let next = launch(fake: fake, hideDeveloper: hideDeveloper)
+        let next = launch(fake: fake, hideDeveloper: hideDeveloper, oldKeychain: oldKeychain)
         if expectLock {
             XCTAssertTrue(next.buttons["lock.anotherWay"].waitForExistence(timeout: 15), "No lock screen at launch")
         }

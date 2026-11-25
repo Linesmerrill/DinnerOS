@@ -254,8 +254,8 @@ struct BiometricSessionTests {
         #expect(s.setting.isOn)
         #expect(s.setting.enrollmentState == Data([7]))
         #expect(s.protected.session == saved)
-        // Nothing readable without Face ID is left.
-        #expect(s.store.session == nil)
+        // Signed in, the normal item stays, so a relaunch never asks (decision 767).
+        #expect(s.store.session == saved)
     }
 
     @Test func onAtLaunchLocksWithoutReadingAnything() async throws {
@@ -293,7 +293,7 @@ struct BiometricSessionTests {
         await s.session.restore()
         #expect(await s.session.unlock(with: BiometricProof(context: nil)))
         #expect(s.protected.session?.tokens.refreshToken == "refresh-2")
-        #expect(s.store.session == nil)
+        #expect(s.store.session?.tokens.refreshToken == "refresh-2")
     }
 
     @Test func aWriteWhileTheDeviceIsLockedIsRetried() async throws {
@@ -309,7 +309,74 @@ struct BiometricSessionTests {
         s.protected.failsSaving = false
         s.session.saveUnsavedSession()
         #expect(s.protected.session?.tokens.refreshToken == "refresh-2")
+        #expect(s.store.session?.tokens.refreshToken == "refresh-2")
+    }
+
+    // MARK: Relaunch with a valid session (Merrill, Nov 25: TestFlight 121 asked every time)
+
+    /// The same Keychain and settings as `s`, in a new session: a cold launch, as after iOS
+    /// ended the app in the background.
+    private func relaunched(_ s: Setup) throws -> AuthSession {
+        let api = AuthAPI(
+            client: APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: s.transport))
+        return AuthSession(api: api, store: s.store, protectedStore: s.protected, biometricSetting: s.setting)
+    }
+
+    @Test func turnedOnThenRelaunchedOpensSignedInWithoutAsking() async throws {
+        let s = try setup(stored: saved)
+        await s.session.restore()
+        try s.session.turnOnBiometricSignIn(enrollmentState: nil)
+        let next = try relaunched(s)
+        await next.restore()
+        #expect(next.state == .signedIn(Fixtures.user))
+        #expect(next.isBiometricSignInOn)
+        let auth = ScriptedAuthenticator([.matched])
+        let lock = BiometricLock(session: next, authenticator: auth)
+        lock.sceneChanged(to: .active)
+        await lock.askIfReady()
+        await lock.signInIfReady()
+        #expect(auth.asks == 0)
+        #expect(!lock.isLocked)
+    }
+
+    /// Builds before 124 kept a signed-in session only behind Face ID: one check moves it, and
+    /// every later launch opens without one.
+    @Test func aSessionOnlyBehindFaceIDIsAskedForOnceThenNever() async throws {
+        let s = try setup(protected: saved, on: true)
+        await s.session.restore()
+        #expect(s.session.state == .locked)
+        #expect(await s.session.unlock(with: BiometricProof(context: nil)))
+        #expect(s.store.session == saved)
+        for _ in 0..<3 {
+            let next = try relaunched(s)
+            await next.restore()
+            #expect(next.state == .signedIn(Fixtures.user))
+        }
+    }
+
+    @Test func signedInWithFaceIDThenRelaunchedOpensWithoutAsking() async throws {
+        let s = try setup(stored: saved)
+        await s.session.restore()
+        try s.session.turnOnBiometricSignIn(enrollmentState: nil)
+        await s.session.signOut()
         #expect(s.store.session == nil)
+        #expect(await s.session.signInWithBiometrics(proof: BiometricProof(context: nil)) == .signedIn)
+        let next = try relaunched(s)
+        await next.restore()
+        #expect(next.state == .signedIn(Fixtures.user))
+    }
+
+    /// Signed out, nothing valid is readable without Face ID: the sign-in screen, where Face ID
+    /// is a way to sign in.
+    @Test func signedOutThenRelaunchedIsTheSignInScreen() async throws {
+        let s = try setup(stored: saved)
+        await s.session.restore()
+        try s.session.turnOnBiometricSignIn(enrollmentState: nil)
+        await s.session.signOut()
+        let next = try relaunched(s)
+        await next.restore()
+        #expect(next.state == .signedOut)
+        #expect(next.canSignInWithBiometrics)
     }
 
     @Test func turningOffMovesItBack() async throws {
@@ -360,7 +427,7 @@ struct BiometricSessionTests {
         #expect(s.session.state == .signedIn(Fixtures.user))
         #expect(s.transport.requests(to: refreshPath).count == 1)
         #expect(s.protected.session?.tokens.refreshToken == "refresh-2")
-        #expect(s.store.session == nil)
+        #expect(s.store.session?.tokens.refreshToken == "refresh-2")
         #expect(!s.setting.isSignedOut)
         #expect(s.session.biometricNotice == nil)
     }
@@ -410,7 +477,7 @@ struct BiometricSessionTests {
         await s.session.restore()
         try await s.session.signIn { api in try await api.signInWithGoogle(idToken: "g", rawNonce: "n") }
         #expect(s.protected.session?.tokens.refreshToken == "r-new")
-        #expect(s.store.session == nil)
+        #expect(s.store.session?.tokens.refreshToken == "r-new")
         #expect(!s.setting.isSignedOut)
         #expect(s.session.isBiometricSignInOn)
     }

@@ -83,6 +83,13 @@ final class AppDependencies {
             } else {
                 authenticator = LocalBiometricAuthenticator()
             }
+            // UI tests can start from a Keychain as builds before 124 left it, with a signed-in
+            // session only behind Face ID, to reach the one-time lock screen.
+            if ProcessInfo.processInfo.environment["DINNEROS_QA_OLD_FACE_ID_KEYCHAIN"] == "1",
+                BiometricSetting().isOn, !BiometricSetting().isSignedOut
+            {
+                try? KeychainTokenStore().clear()
+            }
         #else
             authenticator = LocalBiometricAuthenticator()
         #endif

@@ -2,9 +2,10 @@ import Foundation
 import Observation
 import os
 
-/// Face ID (or Touch ID, Optic ID) sign-in: the offer after signing in, the Account toggle, and
-/// the unlock at launch (decision 760). It's only for signing in: coming back to the app from
-/// the background never asks.
+/// Face ID (or Touch ID, Optic ID) sign-in: the offer after signing in, the Account toggle, the
+/// sign-in screen's button (decision 760), and a one-time lock for a session older builds kept
+/// only behind Face ID. It's only for signing in: coming back from the background, the app
+/// switcher, or a relaunch with a valid session never asks (decisions 766, 767).
 ///
 /// The rules live in `BiometricLockMachine`; this runs its effects. Every way a check can end
 /// short of a match ends in normal sign-in, so the lock never hangs or loops.
