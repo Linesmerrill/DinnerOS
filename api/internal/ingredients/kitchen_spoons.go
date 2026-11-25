@@ -2,17 +2,19 @@ package ingredients
 
 import "math/big"
 
-// KitchenSpoons writes a US spoon or cup amount (tsp, tbsp, cup) the way a
-// kitchen measures it (Hark's build 121 review: "16 tsp" of milk, "8 tsp" of
-// flour, "5 Tbsp + 1 tsp" of milk):
+// KitchenSpoons writes a US spoon or cup amount (tsp, tbsp, cup) as one
+// everyday kitchen measure, never two added together (Hark's build 121
+// reviews: "16 tsp" of milk, "8 tsp" of flour, "2 Tbsp + 2 tsp" of flour):
 //
 //   - under 1 Tbsp: teaspoons to the nearest quarter ("½ tsp", "2 tsp"), or
 //     "⅛ tsp" for less than a quarter;
-//   - under ¼ cup: whole or half tablespoons, else tablespoons plus teaspoons
-//     ("2 Tbsp + 2 tsp");
-//   - from ¼ cup: cups when it is a quarter or third ("⅓ cup", "1 ¼ cups");
-//     under a cup, otherwise whole or half tablespoons ("6 Tbsp"); else cups to
-//     the nearest quarter or third, a tie going up.
+//   - from 1 Tbsp to a cup: a quarter or third of a cup when it is exactly
+//     that, else whole or half tablespoons when it is exactly that ("6 Tbsp"),
+//     else the nearest cup fraction (¼ ⅓ ½ ⅔ ¾ 1) within a tenth, else the
+//     nearest half tablespoon, a tie going up ("2 ½ Tbsp" for 8 tsp);
+//   - from a cup: cups to the nearest quarter or third, a tie going up.
+//
+// A half-tablespoon result that is a quarter cup exactly reads in cups.
 //
 // ok is false for any other unit, which the caller writes as it is.
 func KitchenSpoons(q Quantity, unit string) (string, bool) {
@@ -31,58 +33,59 @@ func KitchenSpoons(q Quantity, unit string) (string, bool) {
 	if tsp.Sign() <= 0 {
 		return "", false
 	}
-	switch {
-	case tsp.Cmp(big.NewRat(1, 4)) < 0:
+	if tsp.Cmp(big.NewRat(1, 4)) < 0 {
 		return spoonText(big.NewRat(1, 8), "tsp"), true
-	case tsp.Cmp(big.NewRat(3, 1)) < 0:
+	}
+	if tsp.Cmp(big.NewRat(3, 1)) < 0 {
 		if r := nearestRat(tsp, 4, 1); r.Cmp(big.NewRat(3, 1)) < 0 {
 			return spoonText(r, "tsp"), true
 		}
 		return "1 Tbsp", true
-	case tsp.Cmp(big.NewRat(12, 1)) < 0:
-		return tablespoons(tsp), true
 	}
 	cups := new(big.Rat).Quo(tsp, big.NewRat(48, 1))
-	if isMultiple(cups, 4) || isMultiple(cups, 3) {
-		return spoonText(cups, "cup"), true
+	tbsp := new(big.Rat).Quo(tsp, big.NewRat(3, 1))
+	if cups.Cmp(big.NewRat(1, 1)) >= 0 {
+		return spoonText(nearestCups(cups), "cup"), true
 	}
-	if tsp.Cmp(big.NewRat(48, 1)) < 0 {
-		if tbsp := new(big.Rat).Quo(tsp, big.NewRat(3, 1)); isMultiple(tbsp, 2) {
+	if cups.Cmp(big.NewRat(1, 4)) >= 0 {
+		if isMultiple(cups, 4) || isMultiple(cups, 3) {
+			return spoonText(cups, "cup"), true
+		}
+		if isMultiple(tbsp, 2) {
 			return spoonText(tbsp, "tbsp"), true
 		}
+		if c := nearestCups(cups); withinTenth(c, cups) {
+			return spoonText(c, "cup"), true
+		}
 	}
+	half := nearestRat(tbsp, 2, 2)
+	if c := new(big.Rat).Quo(half, big.NewRat(16, 1)); isMultiple(c, 4) {
+		return spoonText(c, "cup"), true
+	}
+	return spoonText(half, "tbsp"), true
+}
+
+// nearestCups rounds cups to the nearest quarter or third, a tie going up.
+func nearestCups(cups *big.Rat) *big.Rat {
 	quarter, third := nearestRat(cups, 4, 1), nearestRat(cups, 3, 1)
 	dq := new(big.Rat).Abs(new(big.Rat).Sub(quarter, cups))
 	dt := new(big.Rat).Abs(new(big.Rat).Sub(third, cups))
 	switch c := dt.Cmp(dq); {
 	case c < 0:
-		return spoonText(third, "cup"), true
+		return third
 	case c > 0:
-		return spoonText(quarter, "cup"), true
+		return quarter
 	case third.Cmp(quarter) > 0:
-		return spoonText(third, "cup"), true
+		return third
 	default:
-		return spoonText(quarter, "cup"), true
+		return quarter
 	}
 }
 
-// tablespoons writes 3 to 12 tsp as whole or half tablespoons, or tablespoons
-// plus the teaspoons left to the nearest quarter: 8 tsp is "2 Tbsp + 2 tsp".
-func tablespoons(tsp *big.Rat) string {
-	tbsp := new(big.Rat).Quo(tsp, big.NewRat(3, 1))
-	if isMultiple(tbsp, 2) {
-		return spoonText(tbsp, "tbsp")
-	}
-	whole := new(big.Int).Quo(tbsp.Num(), tbsp.Denom())
-	rest := new(big.Rat).Sub(tsp, new(big.Rat).SetInt(new(big.Int).Mul(whole, big.NewInt(3))))
-	rest = nearestRat(rest, 4, 0)
-	switch {
-	case rest.Sign() == 0:
-		return spoonText(new(big.Rat).SetInt(whole), "tbsp")
-	case rest.Cmp(big.NewRat(3, 1)) >= 0:
-		return spoonText(new(big.Rat).SetInt(whole.Add(whole, big.NewInt(1))), "tbsp")
-	}
-	return spoonText(new(big.Rat).SetInt(whole), "tbsp") + " + " + spoonText(rest, "tsp")
+// withinTenth reports whether near is no more than a tenth away from r.
+func withinTenth(near, r *big.Rat) bool {
+	diff := new(big.Rat).Abs(new(big.Rat).Sub(near, r))
+	return diff.Cmp(new(big.Rat).Mul(r, big.NewRat(1, 10))) <= 0
 }
 
 func spoonText(r *big.Rat, unit string) string {

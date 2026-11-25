@@ -239,7 +239,7 @@ func TestAnnotateStoreAlternativeWithSeveralIngredientsExplainsItself(t *testing
 	if got, want := joined(step), "Stir in 2 Tbsp Tex-Mex Paste."; got != want {
 		t.Fatalf("text = %q, want the original name kept: %q", got, want)
 	}
-	if len(step.Notes) != 1 || !strings.Contains(step.Notes[0].Text, "1 Tbsp + 1 tsp Tomato Paste") ||
+	if len(step.Notes) != 1 || !strings.Contains(step.Notes[0].Text, "1 ½ Tbsp Tomato Paste") ||
 		!strings.Contains(step.Notes[0].Text, "1 tsp Chili Powder") {
 		t.Fatalf("notes = %+v, want both scaled ingredients spelled out", step.Notes)
 	}

@@ -81,7 +81,7 @@ func TestAnnotateDescribesAndLeavesOutAComponent(t *testing.T) {
 
 	kept := AnnotateWith(r, 2, specs, true, nil, true)
 	c := kept.Ingredients[0].Component
-	if c == nil || c.SpecialtyName != "Smoky Red Pepper Crema" || len(c.Parts) != 3 || c.Parts[0] != "1 Tbsp + 1 tsp Sour Cream" {
+	if c == nil || c.SpecialtyName != "Smoky Red Pepper Crema" || len(c.Parts) != 3 || c.Parts[0] != "1 ½ Tbsp Sour Cream" {
 		t.Fatalf("component = %+v, want the crema and its three parts for 2 Tbsp", c)
 	}
 	if len(kept.Substitutions) != 1 {

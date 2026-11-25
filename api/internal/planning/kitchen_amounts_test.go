@@ -8,7 +8,7 @@ import (
 )
 
 // Hark's build 121 review, item 14: the Cream Sauce Base's Milk read "16 tsp"
-// and its Flour "8 tsp" on Shop. They read "⅓ cup" and "2 Tbsp + 2 tsp".
+// and its Flour "8 tsp" on Shop. They read "⅓ cup" and "2 ½ Tbsp".
 func TestAmountTextReadsAsKitchenMeasures(t *testing.T) {
 	unit := func(code string) ingredients.Unit {
 		u, err := ingredients.LookupUnit(code)
@@ -23,8 +23,8 @@ func TestAmountTextReadsAsKitchenMeasures(t *testing.T) {
 		want string
 	}{
 		{ingredients.NewQuantity(16, 1), "tsp", "⅓ cup"},
-		{ingredients.NewQuantity(8, 1), "tsp", "2 Tbsp + 2 tsp"},
-		{ingredients.NewQuantity(4, 1), "tsp", "1 Tbsp + 1 tsp"},
+		{ingredients.NewQuantity(8, 1), "tsp", "2 ½ Tbsp"},
+		{ingredients.NewQuantity(4, 1), "tsp", "1 ½ Tbsp"},
 		{ingredients.NewQuantity(16, 3), "tbsp", "⅓ cup"},
 		{ingredients.NewQuantity(2, 1), "clove", "2 cloves"},
 		{ingredients.NewQuantity(3, 1), "count", "3"},

@@ -11,13 +11,13 @@ func TestAmountsReadAsKitchenMeasures(t *testing.T) {
 		want string
 	}{
 		{[]Amount{{Quantity: "16", Unit: "tsp"}}, "⅓ cup"},
-		{[]Amount{{Quantity: "8", Unit: "tsp"}}, "2 Tbsp + 2 tsp"},
-		{[]Amount{{Quantity: "4", Unit: "tsp"}}, "1 Tbsp + 1 tsp"},
+		{[]Amount{{Quantity: "8", Unit: "tsp"}}, "2 ½ Tbsp"},
+		{[]Amount{{Quantity: "4", Unit: "tsp"}}, "1 ½ Tbsp"},
 		{[]Amount{{Quantity: "16/3", Unit: "tbsp"}}, "⅓ cup"},
 		{[]Amount{{Quantity: "3", Unit: "tbsp"}}, "3 Tbsp"},
 		{[]Amount{{Quantity: "3/2", Unit: "cup"}}, "1 ½ cups"},
 		{[]Amount{{Quantity: "10", Unit: "oz"}}, "10 oz"},
-		{[]Amount{{Quantity: "2", Unit: "count"}, {Quantity: "8", Unit: "tsp"}}, "2 + 2 Tbsp + 2 tsp"},
+		{[]Amount{{Quantity: "2", Unit: "count"}, {Quantity: "8", Unit: "tsp"}}, "2 + 2 ½ Tbsp"},
 	} {
 		resp, text := amounts(tc.in)
 		if text != tc.want {

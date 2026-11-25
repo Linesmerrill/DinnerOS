@@ -10239,7 +10239,7 @@ components:
       example: freezer
     PantryItem:
       type: object
-      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, storage, frozen, statusSource, lowThresholdPercent, unitSize, estimate, updatedBy, createdAt, updatedAt]
+      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, storage, frozen, statusSource, lowThresholdPercent, unitSize, estimate, countNoun, updatedBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -10306,6 +10306,17 @@ components:
             - $ref: "#/components/schemas/PantryEstimate"
             - type: "null"
           description: The usage estimate; null when no amount is recorded.
+        countNoun:
+          type: [object, "null"]
+          description: The word a bare count reads with, so 3 reads "3 onions"; null unless the unit is count.
+          required: [one, other]
+          properties:
+            one:
+              type: string
+              description: For one, lowercase ("onion").
+            other:
+              type: string
+              description: For any other number, lowercase ("onions").
         updatedBy:
           type: string
           description: User ID of the last change by a person.

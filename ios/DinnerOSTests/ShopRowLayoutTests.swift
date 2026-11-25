@@ -16,10 +16,10 @@ struct ShopRowLayoutTests {
     private static let longNote =
         "1 for this meal · Also in Street Cart-Style Chicken Bowls and Chicken Penne al Limone"
 
-    private func line(_ name: String) -> ShoppingExcludedLine {
+    private func line(_ name: String, amount: String = "2") -> ShoppingExcludedLine {
         ShoppingExcludedLine(
             ingredientKey: "name:\(name.lowercased())", ingredientID: nil, name: name, category: "produce",
-            amounts: [], quantityText: "2", unquantified: false, groceryStatus: .toBuy, reason: .noProduct,
+            amounts: [], quantityText: amount, unquantified: false, groceryStatus: .toBuy, reason: .noProduct,
             text: "Choose a product", searchTerms: ShoppingSearchTerms.plain(name))
     }
 
@@ -29,9 +29,9 @@ struct ShopRowLayoutTests {
         return controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude)).height
     }
 
-    private func row(note: String?, name: String = "Lemon") -> some View {
+    private func row(note: String?, name: String = "Lemon", amount: String = "2") -> some View {
         NeedsProductRow(
-            line: line(name), canChoose: true, mealNote: note,
+            line: line(name, amount: amount), canChoose: true, mealNote: note,
             remove: ShopRemoveOptions(name: name, thisWeek: {}, always: {}), choose: {})
     }
 
@@ -74,5 +74,66 @@ struct ShopRowLayoutTests {
             let narrow = height(of: row(note: nil, name: name), width: width)
             #expect(narrow - wide < button * 0.8, "at \(width): wide \(wide), narrow \(narrow), button \(button)")
         }
+    }
+
+    // MARK: - Two lines at most beside the button
+
+    /// An iPhone SE (375 points wide) gives a Shop row under a meal 291 points: the
+    /// shop-scrolled-to-flour shot's row runs from x 48 to 339.
+    private static let seRowWidth: CGFloat = 291
+
+    /// The name and amount on their own, one line each at a row's full width.
+    private func textHeight(name: String, amount: String, width: CGFloat) -> CGFloat {
+        height(
+            of: VStack(alignment: .leading, spacing: DS.Space.hairline) {
+                Text(name)
+                Text(amount).font(.subheadline)
+            }.frame(maxWidth: .infinity, alignment: .leading),
+            width: width)
+    }
+
+    private var buttonHeight: CGFloat {
+        height(of: Button("Choose Product") {}.buttonStyle(.dsSecondary(.small)), width: Self.seRowWidth)
+    }
+
+    @Test func onAnSEFlourGetsTheRowsWidthAndTheButtonGoesUnder() {
+        // "All-Purpose Flour / 2 Tbsp + 2 tsp" took 5 lines beside Choose Product on an iPhone SE
+        // (Hark's review, build 121). The name would need 3 lines beside it, so the button goes
+        // on a line of its own and the name and amount read on one line each.
+        for amount in ["2 Tbsp + 2 tsp", "2 ½ Tbsp"] {
+            // On an iPad's width the row is one line high: as tall as its buttons, or its text.
+            let buttonsLine = height(of: row(note: nil, name: "All-Purpose Flour", amount: amount), width: 560)
+            for width: CGFloat in [288, Self.seRowWidth] {
+                let text = textHeight(name: "All-Purpose Flour", amount: amount, width: width)
+                let row = height(of: row(note: nil, name: "All-Purpose Flour", amount: amount), width: width)
+                #expect(
+                    row >= text + buttonHeight * 0.9,
+                    "\(amount) at \(width): row \(row), text \(text), button \(buttonHeight); want the button under")
+                // The text a line each, then the buttons: no wrapped line (about 20 points) on
+                // top, only a few points of spacing.
+                #expect(
+                    row <= text + DS.Space.s + buttonsLine + 4,
+                    "\(amount) at \(width): row \(row), text \(text), buttons \(buttonsLine); want one line each")
+            }
+        }
+    }
+
+    @Test func onAnSELemonKeepsTheButtonBesideIt() {
+        // Last round's fix: the Lemon row's Choose Product stays on the row (small, large, Duo).
+        let wide = height(of: row(note: nil, amount: "1"), width: 560)
+        let wideNoted = height(of: row(note: Self.longNote, amount: "1"), width: 560)
+        for width: CGFloat in [288, Self.seRowWidth, 303, 322] {
+            let narrow = height(of: row(note: nil, amount: "1"), width: width)
+            #expect(narrow - wide < buttonHeight * 0.5, "at \(width): wide \(wide), narrow \(narrow)")
+            let noted = height(of: row(note: Self.longNote, amount: "1"), width: width)
+            #expect(noted - wideNoted < buttonHeight * 0.8, "at \(width): wide \(wideNoted), narrow \(noted)")
+        }
+    }
+
+    @Test func aNameThatFitsInTwoLinesStaysBesideTheButton() {
+        // Two lines beside the button is fine: "Ground Turkey" wraps beside it at 303 points.
+        let wide = height(of: row(note: nil, name: "Ground Turkey"), width: 560)
+        let narrow = height(of: row(note: nil, name: "Ground Turkey"), width: 303)
+        #expect(narrow - wide < buttonHeight * 0.8, "wide \(wide), narrow \(narrow)")
     }
 }

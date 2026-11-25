@@ -193,18 +193,39 @@ func TestAnnotateMixesABlendOnceAcrossSteps(t *testing.T) {
 	}
 }
 
+// Hark's build 121 review: the Cream Sauce Base's rows on the recipe page and
+// the cooking screen read "2 Tbsp + 2 tsp Butter" and "2 Tbsp + 2 tsp
+// All-Purpose Flour". Each part is one kitchen measure, the rule Shop uses.
+func TestComponentPartsReadAsOneMeasure(t *testing.T) {
+	components := []grocery.Component{
+		{Name: "Butter", Quantity: quantityPtr(t, "2"), Unit: "tsp"},
+		{Name: "All-Purpose Flour", Quantity: quantityPtr(t, "2"), Unit: "tsp"},
+		{Name: "Milk", Quantity: quantityPtr(t, "4"), Unit: "tsp"},
+	}
+	got := strings.Join(componentTexts(components, big.NewRat(4, 1)), " | ")
+	want := "2 ½ Tbsp Butter | 2 ½ Tbsp All-Purpose Flour | ⅓ cup Milk"
+	if got != want {
+		t.Errorf("parts = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "+") {
+		t.Errorf("parts = %q, want no amounts added together", got)
+	}
+}
+
 func TestMeasureTextTidiesBigSpoonCounts(t *testing.T) {
 	for _, tc := range []struct{ q, unit, want string }{
 		{"12", "tsp", "4 Tbsp"},
 		{"9/2", "tsp", "1 ½ Tbsp"},
 		{"2", "tsp", "2 tsp"},
-		{"4", "tsp", "1 Tbsp + 1 tsp"},
+		{"4", "tsp", "1 ½ Tbsp"},
 		{"16", "tsp", "⅓ cup"},
-		{"8", "tsp", "2 Tbsp + 2 tsp"},
+		{"8", "tsp", "2 ½ Tbsp"},
 		{"12", "tbsp", "¾ cup"},
-		{"10", "tsp", "3 Tbsp + 1 tsp"},
+		{"10", "tsp", "3 ½ Tbsp"},
 		{"15/2", "tsp", "2 ½ Tbsp"},
-		{"13/2", "tsp", "2 Tbsp + ½ tsp"},
+		{"13/2", "tsp", "2 Tbsp"},
+		{"8/3", "tbsp", "2 ½ Tbsp"},
+		{"8", "tsp", "2 ½ Tbsp"},
 		{"4", "tbsp", "4 Tbsp"},
 	} {
 		if got := (Measure{Quantity: *quantityPtr(t, tc.q), Unit: tc.unit}).Text(); got != tc.want {
@@ -306,11 +327,11 @@ func TestTwoPacketsOfTexMexPaste(t *testing.T) {
 		[]RecipeIngredient{tacoLine("ing-texmex", "Tex-Mex Paste", "2", "3", "count")},
 		"Stir in Tex-Mex paste.")
 	in := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true)
-	want := "Instead of 4 Tbsp Tex-Mex Paste, mix 2 tsp Smoky Chipotle Bouillon Base and 3 Tbsp + 1 tsp Tomato Paste."
+	want := "Instead of 4 Tbsp Tex-Mex Paste, mix 2 tsp Smoky Chipotle Bouillon Base and 3 ½ Tbsp Tomato Paste."
 	if n := in.Steps[0].Notes; len(n) != 1 || n[0].Text != want {
 		t.Errorf("note = %+v, want %q", n, want)
 	}
-	if c := in.Ingredients[0].Component; c == nil || strings.Join(c.Parts, " | ") != "2 tsp Smoky Chipotle Bouillon Base | 3 Tbsp + 1 tsp Tomato Paste" {
+	if c := in.Ingredients[0].Component; c == nil || strings.Join(c.Parts, " | ") != "2 tsp Smoky Chipotle Bouillon Base | 3 ½ Tbsp Tomato Paste" {
 		t.Errorf("parts = %+v", c)
 	}
 }

@@ -101,9 +101,19 @@ type PantryItemResponse struct {
 	LowThresholdPercent *int              `json:"lowThresholdPercent"`
 	UnitSize            *UnitSizeResponse `json:"unitSize"`
 	Estimate            *EstimateResponse `json:"estimate"`
-	UpdatedBy           string            `json:"updatedBy"`
-	CreatedAt           time.Time         `json:"createdAt"`
-	UpdatedAt           time.Time         `json:"updatedAt"`
+	// CountNoun is the word a bare count reads with ("3 onions"), set when the
+	// amount is a count; null otherwise.
+	CountNoun *CountNounResponse `json:"countNoun"`
+	UpdatedBy string             `json:"updatedBy"`
+	CreatedAt time.Time          `json:"createdAt"`
+	UpdatedAt time.Time          `json:"updatedAt"`
+}
+
+// CountNounResponse is the word for one of an item and for several:
+// {"one": "onion", "other": "onions"}.
+type CountNounResponse struct {
+	One   string `json:"one"`
+	Other string `json:"other"`
 }
 
 // PantryListResponse is returned by GET .../pantry.
@@ -219,6 +229,11 @@ func newItemResponse(item Item) PantryItemResponse {
 		if q, err := ingredients.ParseQuantity(exact); err == nil {
 			v := q.Float64()
 			resp.QuantityValue = &v
+		}
+		if unit == "count" {
+			if one, other, ok := ingredients.CountNoun(item.DisplayName); ok {
+				resp.CountNoun = &CountNounResponse{One: one, Other: other}
+			}
 		}
 	}
 	if item.ExpiresOn != "" {

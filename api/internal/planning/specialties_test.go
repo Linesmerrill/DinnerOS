@@ -111,9 +111,9 @@ func TestGroceryListAppliesSpecialties(t *testing.T) {
 	if _, ok := items["Tex-Mex Paste"]; ok {
 		t.Error("Tex-Mex Paste is still listed")
 	}
-	// 1 packet = 2 Tbsp of paste → 4 tsp of tomato paste, read as 1 Tbsp + 1 tsp.
+	// 1 packet = 2 Tbsp of paste → 4 tsp of tomato paste, read as 1 ½ Tbsp.
 	paste := items["Tomato Paste"]
-	if paste.QuantityText != "1 Tbsp + 1 tsp" || paste.Specialty || len(paste.Via) != 1 || paste.Via[0].Text != "for Tex-Mex Paste in Smoky Pork Tacos" ||
+	if paste.QuantityText != "1 ½ Tbsp" || paste.Specialty || len(paste.Via) != 1 || paste.Via[0].Text != "for Tex-Mex Paste in Smoky Pork Tacos" ||
 		paste.Via[0].Kind != grocery.ViaStoreAlternative || paste.Via[0].Yield != nil || paste.Via[0].Batches != nil {
 		t.Errorf("tomato paste = %+v", paste)
 	}

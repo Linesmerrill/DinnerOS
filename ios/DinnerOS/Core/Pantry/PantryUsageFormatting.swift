@@ -56,6 +56,11 @@ nonisolated enum PantryUsageFormat {
         guard let estimate = item.estimate, estimate.unit == (item.unit ?? PantryUnit.defaultCode),
             let (number, label) = glanceParts(estimate, locale: locale)
         else { return recorded }
+        if label.isEmpty, estimate.unit == PantryUnit.defaultCode, let noun = item.countNoun {
+            // "3 onions", not a bare "3" (Hark's build 121 review).
+            let shown = max(1, estimate.remaining.quantityValue.rounded())
+            return "\(number) \(noun.word(for: shown))"
+        }
         return label.isEmpty ? number : "\(number) \(label)"
     }
 

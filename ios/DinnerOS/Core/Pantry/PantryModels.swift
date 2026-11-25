@@ -73,6 +73,9 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
     /// Other ingredients this item is, as the household named them: "Thyme" kept dried also
     /// counts as a recipe's "Dried Thyme".
     var alsoCountsAs: [String] = []
+    /// The word a bare count reads with ("3 onions"), from the server; `nil` unless the unit is
+    /// a count, and from a server too old to send it.
+    var countNoun: PantryCountNoun? = nil
 
     init(
         id: String, householdID: String, ingredientID: String?, key: String, displayName: String, category: String,
@@ -121,7 +124,7 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
         case ingredientID = "ingredientId"
         case key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy,
             createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate, storage, frozen, storedOn,
-            alsoCountsAs
+            alsoCountsAs, countNoun
     }
 
     /// The usage fields are additive, so they're read leniently: a response without them, or
@@ -153,6 +156,18 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
             frozen: (try? container.decodeIfPresent(PantryFrozen.self, forKey: .frozen)) ?? nil)
         storedOn = try? container.decodeIfPresent(String.self, forKey: .storedOn)
         alsoCountsAs = (try? container.decodeIfPresent([String].self, forKey: .alsoCountsAs)) ?? []
+        countNoun = (try? container.decodeIfPresent(PantryCountNoun.self, forKey: .countNoun)) ?? nil
+    }
+}
+
+/// The word for one of a counted pantry item and for several: "onion", "onions".
+nonisolated struct PantryCountNoun: Decodable, Hashable, Sendable {
+    let one: String
+    let other: String
+
+    /// The word for `value`: only exactly one is singular ("1 onion", "0 onions", "3 onions").
+    func word(for value: Double?) -> String {
+        value == 1 ? one : other
     }
 }
 
