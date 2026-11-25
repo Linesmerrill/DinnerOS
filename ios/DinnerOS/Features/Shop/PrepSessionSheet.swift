@@ -240,7 +240,7 @@ private struct PrepThisWeekCard: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.l))
         layout {
             PrepIngredientTile(
-                url: presentation.card.imageURL,
+                url: presentation.card.imageURL, name: presentation.card.name,
                 size: min(photoSize, 140))
             VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text("This week")
@@ -373,7 +373,7 @@ private struct PrepBagCard: View {
             : AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
         layout {
             PrepIngredientTile(
-                url: presentation.card.imageURL, size: min(photoSize, 96)
+                url: presentation.card.imageURL, name: presentation.card.name, size: min(photoSize, 96)
             )
             .overlay(alignment: .topTrailing) {
                 Image(systemName: "snowflake")
@@ -526,6 +526,8 @@ enum PrepStyle {
 /// same tile when there is no photo or it can't be loaded — never a broken image.
 struct PrepIngredientTile: View {
     let url: URL?
+    /// The ingredient's name, for the fallback's letter.
+    let name: String
     var size: CGFloat = 88
 
     @Environment(\.displayScale) private var displayScale
@@ -552,7 +554,7 @@ struct PrepIngredientTile: View {
     }
 
     private var glyph: some View {
-        IngredientFallbackGlyph(size: size)
+        IngredientFallbackGlyph(name: name, size: size)
     }
 }
 
@@ -648,7 +650,7 @@ struct PrepSessionBanner: View {
     /// extra and what was on hand. Stacked, not trailing, so the size fits on an iPhone SE.
     private func itemRow(_ row: PrepCardPresentation) -> some View {
         HStack(alignment: .top, spacing: DS.Space.sm) {
-            PrepIngredientTile(url: row.card.imageURL, size: min(rowPhotoSize, 52))
+            PrepIngredientTile(url: row.card.imageURL, name: row.card.name, size: min(rowPhotoSize, 52))
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.card.name)
                     .font(.subheadline)
@@ -676,7 +678,7 @@ struct PrepSessionBanner: View {
             layout {
                 HStack(spacing: DS.Space.m) {
                     PrepIngredientTile(
-                        url: presentation.card?.imageURL,
+                        url: presentation.card?.imageURL, name: presentation.card?.name ?? "",
                         size: min(photoSize, 72))
                     summary
                 }

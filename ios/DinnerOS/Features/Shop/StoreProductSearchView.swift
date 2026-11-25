@@ -200,8 +200,8 @@ struct StoreProductRow: View {
             AsyncImage(url: product.imageURL) { image in
                 image.resizable().scaledToFit()
             } placeholder: {
-                Image(systemName: "photo")
-                    .foregroundStyle(.tertiary)
+                // The same lettered tile as every ingredient thumbnail without a photo.
+                IngredientFallbackGlyph(name: product.name, size: 56)
             }
             .frame(width: 56, height: 56)
             .background(Color.white, in: RoundedRectangle(cornerRadius: DS.Radius.small))

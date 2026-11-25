@@ -39,6 +39,45 @@ var photoSwaps = map[string]string{
 	"5ab2a22030006c610e61b892": "59c2b202c288007f56514711-4f7e3ff4.png", // chicken breast strips
 }
 
+// wrongFoodPhotos are catalog photos of another food than the ingredient
+// they are filed under, by photo ID and the ingredient keys they are wrong
+// for. The photo stays right for any other ingredient that uses it. The
+// catalog's Grape Tomatoes photo shows roma tomatoes (Hark's build 121
+// review, round 3); the catalog has no grape or cherry tomato photo, so the
+// row shows the app's fallback instead.
+var wrongFoodPhotos = map[string][]string{
+	"64b6744fd4684302b8753e64": {"grape tomato", "grape tomatoes", "cherry tomato", "cherry tomatoes"},
+}
+
+// photoID is the catalog's ID for a photo URL: the start of its file name,
+// lower case, or "" when raw isn't a URL.
+func photoID(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	base := strings.ToLower(path.Base(u.Path))
+	base = strings.TrimSuffix(base, path.Ext(base))
+	id, _, _ := strings.Cut(base, "-")
+	return id
+}
+
+// IngredientPhotoFor is IngredientPhoto for the ingredient keyed key: also
+// "" when the photo shows another food than that ingredient.
+func IngredientPhotoFor(key, raw string) string {
+	photo := IngredientPhoto(raw)
+	if photo == "" {
+		return ""
+	}
+	key = strings.ToLower(strings.TrimSpace(key))
+	for _, k := range wrongFoodPhotos[photoID(photo)] {
+		if k == key {
+			return ""
+		}
+	}
+	return photo
+}
+
 // IngredientPhoto returns raw, "" when it is a photo of a cooked dish rather
 // than of the ingredient, or the photo to show instead of one that reads as
 // another ingredient.
@@ -47,13 +86,10 @@ func IngredientPhoto(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	u, err := url.Parse(raw)
-	if err != nil {
+	if _, err := url.Parse(raw); err != nil {
 		return raw
 	}
-	base := strings.ToLower(path.Base(u.Path))
-	base = strings.TrimSuffix(base, path.Ext(base))
-	id, _, _ := strings.Cut(base, "-")
+	id := photoID(raw)
 	if dishPhotoIDs[id] {
 		return ""
 	}

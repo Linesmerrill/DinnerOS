@@ -322,6 +322,29 @@ enum MenuQAChecks {
         return beside?.label ?? "an item at \(Int(row.midX)),\(Int(row.midY))"
     }
 
+    /// The ingredient thumbnails' no-photo tile (`QAMarkers.ingredientFallback`).
+    static let ingredientFallback = "ingredient.fallback"
+
+    /// Every ingredient on screen without a photo shows the lettered tile, never the old gray
+    /// fork and knife or an empty plate (Hark's build 121 round 3: Pine Nuts). Each marker is
+    /// labeled with the name and its letter ("Pine Nuts: P").
+    @MainActor
+    static func checkIngredientFallbacks(_ app: XCUIApplication, screen: String) -> [String] {
+        let frame = app.frame
+        var problems: [String] = []
+        let markers = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier == %@", ingredientFallback)).allElementsBoundByIndex
+            .filter { !$0.frame.isEmpty && frame.intersects($0.frame) }
+        for marker in markers {
+            let parts = marker.label.components(separatedBy: ": ")
+            let letter = parts.count > 1 ? parts[parts.count - 1] : ""
+            if letter.count != 1 || !(letter.first?.isLetter ?? false) {
+                problems.append("\(screen): “\(parts.first ?? marker.label)” has no letter on its no-photo tile")
+            }
+        }
+        return problems
+    }
+
     // MARK: - Build 121 review round 2 (Hark's items 9 to 13)
 
     /// (8) Your Meals' "N meals planned" is the meal cards, add-ons not counted, and a card past
