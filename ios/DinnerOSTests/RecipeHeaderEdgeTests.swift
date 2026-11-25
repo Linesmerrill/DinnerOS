@@ -467,7 +467,7 @@ struct RecipeHeaderEdgeTests {
 
     /// The page's end keeps room for a row moved back at rest, so the last row stays clear of
     /// the bottom bar's fade (build 121 round 4).
-    @Test func thePageEndHasRoomForARowMovedBack() {
+    @MainActor @Test func thePageEndHasRoomForARowMovedBack() {
         #expect(RecipeDetailView.bottomPadding >= DS.Size.edgeFade + DS.Size.rowEdgeFade)
     }
 }
