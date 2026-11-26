@@ -149,7 +149,8 @@ struct IngredientPhoto: View {
             .qaMarker(QAMarkers.photoPlaceholder, label: name, isShown: showsPlaceholder)
             .qaMarker(
                 QAMarkers.ingredientFallback, label: IngredientFallbackGlyph.markerLabel(for: name),
-                isShown: showsPlaceholder)
+                isShown: showsPlaceholder
+            )
             .qaMarker(QAMarkers.ingredientThumb, label: name, isShown: true)
     }
 
