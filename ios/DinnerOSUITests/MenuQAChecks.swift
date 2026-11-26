@@ -544,6 +544,15 @@ enum MenuQAChecks {
 // MARK: - Every ingredient row's thumbnail in a kept shot (Hark's qa/124 review, item 5)
 
 extension MenuQAChecks {
+    /// Drags the list up by `distance` from just under the screen's middle, clear of the bottom
+    /// bar, slowly and held, so it stops where the finger does.
+    @MainActor
+    static func dragList(_ app: XCUIApplication, by distance: CGFloat) {
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62))
+        let to = from.withOffset(CGVector(dx: 0, dy: -distance))
+        from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.4)
+    }
+
     /// What the list shows at one place on the way down: the thumbnails resting whole in the
     /// clear band, and where each one is, to tell how far the list moved since.
     struct ListPlace {
@@ -557,17 +566,25 @@ extension MenuQAChecks {
     @MainActor
     static func ingredientPlace(_ app: XCUIApplication) -> ListPlace {
         let screen = app.frame
-        let covers = FadeQAChecks.covers(app) ?? []
-        let top = covers.filter { $0.frame.midY < screen.midY }.map(\.frame.maxY).max() ?? screen.minY
-        let bottom = covers.filter { $0.frame.midY >= screen.midY }.map(\.frame.minY).min() ?? screen.maxY
+        // Bars only: a row under a fade still shows (the fade is the bar's soft edge).
+        let bars = (FadeQAChecks.covers(app) ?? []).filter { !$0.isFade }.map(\.frame)
         var place = ListPlace(shown: [], minY: [:])
+        var notes: [String] = []
+        defer { print("QA-NOTE: ingredient thumbnails whole: \(place.shown.sorted()), at: \(notes)") }
         for thumb in app.descendants(matching: .any).matching(identifier: QAMarkers.ingredientThumb)
             .allElementsBoundByIndex
         {
             let frame = thumb.frame
-            guard !frame.isEmpty, screen.intersects(frame) else { continue }
+            // The thumbnail's own element (a row can carry the identifier too, with a longer label).
+            guard !frame.isEmpty, frame.width < 120, screen.intersects(frame) else { continue }
             place.minY[thumb.label] = frame.minY
-            if frame.minY >= top - 1 && frame.maxY <= bottom + 1 { place.shown.insert(thumb.label) }
+            // The bars over this thumbnail's column, on the iPad's two columns too.
+            let over = bars.filter { $0.minX < frame.maxX && $0.maxX > frame.minX }
+            let top = over.filter { $0.midY < screen.midY }.map(\.maxY).max() ?? screen.minY
+            let bottom = over.filter { $0.midY >= screen.midY }.map(\.minY).min() ?? screen.maxY
+            let whole = frame.minY >= top - 1 && frame.maxY <= bottom + 1
+            if whole { place.shown.insert(thumb.label) }
+            notes.append("\(thumb.label) \(Int(frame.minY)) in \(Int(top))-\(Int(bottom))")
         }
         return place
     }
@@ -578,26 +595,30 @@ extension MenuQAChecks {
         return moves.isEmpty ? nil : moves[moves.count / 2]
     }
 
-    /// The place on the way (an index into `onTheWay`) to keep as the middle shot: the one that
-    /// shows the most of `expected` the top and end shots don't, the nearer the list's middle on a
-    /// tie. Nil when none shows any. `missing` is what still shows in no shot with that middle.
-    static func middlePick(
+    /// The places on the way (indexes into `onTheWay`, in list order) to keep as middle shots:
+    /// each the one that shows the most of `expected` the top, the end and the places already
+    /// picked don't, the nearer the list's middle on a tie. Usually one; a long list on a short
+    /// screen (the SE) can need two. `missing` is what still shows in no shot.
+    static func middlePicks(
         top: Set<String>, end: Set<String>, onTheWay: [Set<String>], expected: [String]
-    ) -> (index: Int?, missing: [String]) {
-        let wanted = Set(expected.map { $0.lowercased() })
+    ) -> (indexes: [Int], missing: [String]) {
         func lower(_ set: Set<String>) -> Set<String> { Set(set.map { $0.lowercased() }) }
-        let left = wanted.subtracting(lower(top)).subtracting(lower(end))
-        var best: (index: Int, gain: Int, distance: Double)?
+        var left = Set(expected.map { $0.lowercased() }).subtracting(lower(top)).subtracting(lower(end))
+        var picked: [Int] = []
         let middle = Double(onTheWay.count - 1) / 2
-        for (i, shown) in onTheWay.enumerated() {
-            let gain = left.intersection(lower(shown)).count
-            let distance = abs(Double(i) - middle)
-            if gain > 0, best == nil || gain > best!.gain || (gain == best!.gain && distance < best!.distance) {
-                best = (i, gain, distance)
+        while !left.isEmpty {
+            var best: (index: Int, gain: Int, distance: Double)?
+            for (i, shown) in onTheWay.enumerated() where !picked.contains(i) {
+                let gain = left.intersection(lower(shown)).count
+                let distance = abs(Double(i) - middle)
+                if gain > 0, best == nil || gain > best!.gain || (gain == best!.gain && distance < best!.distance) {
+                    best = (i, gain, distance)
+                }
             }
+            guard let best else { break }
+            picked.append(best.index)
+            left.subtract(lower(onTheWay[best.index]))
         }
-        let covered = best.map { lower(onTheWay[$0.index]) } ?? []
-        let missing = expected.filter { left.contains($0.lowercased()) && !covered.contains($0.lowercased()) }
-        return (best?.index, missing)
+        return (picked.sorted(), expected.filter { left.contains($0.lowercased()) })
     }
 }

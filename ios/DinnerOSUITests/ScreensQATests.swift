@@ -214,6 +214,7 @@ final class ScreensQATests: XCTestCase {
                 picker.isSelected || (picker.value as? String)?.contains("elected") == true,
                 "Recipe page › \(kind): the \(tab) tab isn’t selected")
             pinPicker(picker, in: app)
+            if tab == "Ingredients" { bringFirstRowUnderPicker(picker, in: app) }
             shot(app, "Recipe page › \(kind) › \(tab)")
             // Which rows' thumbnails the tab's top shot shows whole, for the middle shot below.
             let topPlace = tab == "Ingredients" ? MenuQAChecks.ingredientPlace(app) : nil
@@ -237,11 +238,12 @@ final class ScreensQATests: XCTestCase {
                     // Oil or Garlic).
                     scrollToTop(app)
                     pinPicker(picker, in: app)
+                    bringFirstRowUnderPicker(picker, in: app)
                     var places: [(place: MenuQAChecks.ListPlace, shot: QAShot)] = [
                         (MenuQAChecks.ingredientPlace(app), capture(app))
                     ]
                     for _ in 0..<20 {
-                        CookingQAChecks.drag(app, column: 0.5, by: app.frame.height * 0.25)
+                        MenuQAChecks.dragList(app, by: app.frame.height * 0.25)
                         sleep(1)
                         let place = MenuQAChecks.ingredientPlace(app)
                         if place.minY.isEmpty { break }
@@ -265,7 +267,8 @@ final class ScreensQATests: XCTestCase {
                     {
                         scrollToTop(app)
                         pinPicker(picker, in: app)
-                        CookingQAChecks.drag(app, column: 0.5, by: travel / 2)
+                        bringFirstRowUnderPicker(picker, in: app)
+                        MenuQAChecks.dragList(app, by: travel / 2)
                         sleep(1)
                         let half = capture(app)
                         if !half.isSameScreen(as: end) && !half.isSameScreen(as: places[0].shot) {
@@ -273,14 +276,18 @@ final class ScreensQATests: XCTestCase {
                         }
                         FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
                     }
-                    let pick = MenuQAChecks.middlePick(
+                    let picks = MenuQAChecks.middlePicks(
                         top: topPlace?.shown ?? places[0].place.shown, end: endPlace.shown,
                         onTheWay: between.map(\.place.shown), expected: Self.typedIngredients)
-                    if let index = pick.index ?? (between.isEmpty ? nil : between.count / 2) {
-                        keep(between[index].shot, "Recipe page › \(kind) › Ingredients › middle (\(mode))")
-                    } else {
+                    let indexes = picks.indexes.isEmpty ? (between.isEmpty ? [] : [between.count / 2]) : picks.indexes
+                    for (n, index) in indexes.enumerated() {
+                        let name = n == 0 ? "middle" : "middle \(n + 1)"
+                        keep(between[index].shot, "Recipe page › \(kind) › Ingredients › \(name) (\(mode))")
+                    }
+                    if indexes.isEmpty {
                         print("QA-SKIP: “Recipe page › \(kind) › Ingredients › middle” left out: the list moves only to its end")
                     }
+                    let pick = picks
                     if !pick.missing.isEmpty {
                         problems.append(
                             "\(screen): no shot shows the thumbnail of \(pick.missing.joined(separator: ", ")) whole")
@@ -689,6 +696,23 @@ final class ScreensQATests: XCTestCase {
             app.swipeUp(velocity: .slow)
         }
         sleep(1)
+    }
+
+    /// After `pinPicker`: a tab whose first row went up under the pinned picker (Bow Tie Pasta
+    /// on the iPad in landscape, Hark's qa/124 review) is pulled back down so that row starts
+    /// whole under it, as a person sees the tab when they pick it.
+    @MainActor
+    private func bringFirstRowUnderPicker(_ picker: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<2 {
+            let first = MenuQAChecks.ingredientPlace(app).minY.values.min()
+            let under = picker.frame.maxY + 8
+            guard let first, first < under else { return }
+            let gap = under - first
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: gap + 12)),
+                withVelocity: .slow, thenHoldForDuration: 0.4)
+            sleep(1)
+        }
     }
 
     /// Drags the page up just far enough that the tab picker reaches the top and pins, so a
