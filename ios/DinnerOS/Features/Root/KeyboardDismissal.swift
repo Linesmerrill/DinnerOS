@@ -21,11 +21,22 @@ private struct KeyboardDismissal: ViewModifier {
                 if showsDone {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
-                        Button("Done") { Keyboard.dismiss() }
-                            .fontWeight(.semibold)
+                        KeyboardDone { Keyboard.dismiss() }
                     }
                 }
             }
+    }
+}
+
+/// Done above the keyboard, the same everywhere: filled, so it reads on its own and not against
+/// what's under the keyboard's floating bar (white on yellow over a photo, Hark's review item 10).
+/// Pantry's forms and the meal search showed two different Dones (Hark's build 123 review).
+struct KeyboardDone: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button("Done", action: action)
+            .buttonStyle(.dsPrimary(.small))
     }
 }
 

@@ -12,7 +12,7 @@ private struct KeyboardDoneButton: ViewModifier {
                 if isFocused {
                     ToolbarItemGroup(placement: .keyboard) {
                         Spacer()
-                        Button("Done") { isFocused = false }
+                        KeyboardDone { isFocused = false }
                     }
                 }
             }

@@ -250,6 +250,21 @@ struct YourMealsSection: View {
     }
 }
 
+/// The "Autopilot suggested" lines, singular for one meal ("add it"), plural otherwise.
+enum AutopilotPicksText {
+    static func title(meals: Int) -> String {
+        meals == 1
+            ? String(localized: "Autopilot suggested 1 meal")
+            : String(localized: "Autopilot suggested \(meals) meals")
+    }
+
+    static func subtitle(meals: Int) -> String {
+        meals == 1
+            ? String(localized: "Review, swap, and add it to your week.")
+            : String(localized: "Review, swap, and add them to your week.")
+    }
+}
+
 /// "Autopilot suggested 4 meals" with a button that opens the review sheet.
 /// Swipe left or tap the close button to dismiss the picks without changing the plan.
 struct ReviewPicksCard: View {
@@ -261,14 +276,10 @@ struct ReviewPicksCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
-            Label(
-                meals == 1
-                    ? String(localized: "Autopilot suggested 1 meal")
-                    : String(localized: "Autopilot suggested \(meals) meals"), systemImage: "sparkles"
-            )
-            .font(.headline)
-            .foregroundStyle(Color.primary)
-            Text("Review, swap, and add them to your week.")
+            Label(AutopilotPicksText.title(meals: meals), systemImage: "sparkles")
+                .font(.headline)
+                .foregroundStyle(Color.primary)
+            Text(AutopilotPicksText.subtitle(meals: meals))
                 .font(.subheadline)
                 .foregroundStyle(Color.secondary)
             Button("Review Autopilot’s Picks", action: review)

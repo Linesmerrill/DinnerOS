@@ -357,10 +357,7 @@ struct MenuView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    // Filled, so it reads on its own and not against the photo under the
-                    // keyboard's floating bar (white on yellow, Hark's review item 10).
-                    Button("Done") { Keyboard.dismiss() }
-                        .buttonStyle(.dsPrimary(.small))
+                    KeyboardDone { Keyboard.dismiss() }
                 }
             }
             // The scroll view's width doesn't depend on what's in it, so this can't loop.
