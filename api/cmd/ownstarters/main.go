@@ -19,6 +19,12 @@
 // its words gets new words and, when needed, new ingredients, on the starter,
 // its unedited copies and its Shared Recipes entry.
 //
+// Descriptions: -descriptions names a JSON file of [Description]
+// (descriptions.go), kept in git: every starter's description in DinnerOS's
+// own words, matched by name, on the starter, its unedited copies and its
+// Shared Recipes entry (build 124). The file is refused if any description
+// uses meal-kit words (mealKitPhrases).
+//
 // Labels: -labels drops a scraper's label from the start of every recipe's
 // and Shared Recipes entry's description ("Web Description: Fun fact: …"
 // reads "Fun fact: …", build 122). It needs no starter household.
@@ -27,6 +33,7 @@
 //	  go run ./cmd/ownstarters -rewrites 'out-*.json'                  # dry run
 //	  go run ./cmd/ownstarters -images https://dinneros.app/img/recipes -image-ids ids.txt -apply
 //	  go run ./cmd/ownstarters -fixes cmd/ownstarters/fixes/build-122.json -labels -apply
+//	  go run ./cmd/ownstarters -descriptions cmd/ownstarters/descriptions/build-124.json   # dry run
 //
 // It never prints the URI or any recipe text.
 package main
@@ -85,7 +92,12 @@ type Result struct {
 	Starters, Copies, SkippedEdited, Images, CopyImages, Dropped int
 	// CatalogEntries is how many Shared Recipes entries a fix rewrote.
 	CatalogEntries int
-	Missing        []string
+	// DescStarters, DescCopies and DescEntries count the starters, copies
+	// and Shared Recipes entries -descriptions rewrote; NoDescription names
+	// starters the file has no description for.
+	DescStarters, DescCopies, DescEntries int
+	NoDescription                         []string
+	Missing                               []string
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string, out io.Writer) error {
@@ -95,16 +107,17 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	images := flags.String("images", "", "base URL of the new photos, like https://dinneros.app/img/recipes")
 	imageIDs := flags.String("image-ids", "", "file listing the starter ids that have a new photo")
 	fixesFile := flags.String("fixes", "", "JSON file of starter fixes (fixes.go)")
+	descFile := flags.String("descriptions", "", "JSON file of starter descriptions (descriptions.go)")
 	dropPhotos := flags.Bool("drop-photos", false, "remove the photo of starters without a new one")
 	labels := flags.Bool("labels", false, "drop scraped labels like \"Web Description:\" from descriptions")
 	apply := flags.Bool("apply", false, "write the changes (default is a dry run)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if *rewrites == "" && *images == "" && *fixesFile == "" && !*labels {
-		return errors.New("give -rewrites, -images, -fixes, -labels, or more than one")
+	if *rewrites == "" && *images == "" && *fixesFile == "" && *descFile == "" && !*labels {
+		return errors.New("give -rewrites, -images, -fixes, -descriptions, -labels, or more than one")
 	}
-	needStarter := *rewrites != "" || *images != "" || *fixesFile != ""
+	needStarter := *rewrites != "" || *images != "" || *fixesFile != "" || *descFile != ""
 	starterID := strings.TrimSpace(getenv("STARTER_RECIPES_HOUSEHOLD_ID"))
 	starter, err := mongodb.ParseID(starterID)
 	if err != nil && needStarter {
@@ -158,6 +171,16 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 			return err
 		}
 	}
+	// After -fixes, so a fixed starter ends with the description both files give it.
+	if *descFile != "" {
+		descs, err := loadDescriptions(*descFile)
+		if err != nil {
+			return err
+		}
+		if err := applyDescriptions(ctx, client.Database(), starter, descs, *apply, &res); err != nil {
+			return err
+		}
+	}
 	verb := "would update"
 	if *apply {
 		verb = "updated"
@@ -176,6 +199,13 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 		database, verb, res.Starters, res.Copies, res.SkippedEdited, res.Images, res.CopyImages, res.Dropped)
 	if *fixesFile != "" {
 		fmt.Fprintf(out, "  fixes: %s %d Shared Recipes entries\n", verb, res.CatalogEntries)
+	}
+	if *descFile != "" {
+		fmt.Fprintf(out, "  descriptions: %s %d starters, %d copies and %d Shared Recipes entries; %d starters have no description in the file\n",
+			verb, res.DescStarters, res.DescCopies, res.DescEntries, len(res.NoDescription))
+		for _, n := range res.NoDescription {
+			fmt.Fprintf(out, "    no description: %s\n", n)
+		}
 	}
 	if len(res.Missing) > 0 {
 		fmt.Fprintf(out, "  %d ids not found in the starter household: %s\n", len(res.Missing), strings.Join(res.Missing, ", "))
