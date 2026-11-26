@@ -298,7 +298,11 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 		// round 4, Hark's review).
 		for i, it := range items {
 			from, ok := firstIn[it.IngredientIndex]
-			if ok && !it.LeftOut && isWedge(it.Name) && !strings.Contains(it.Prep, "from step") {
+			// Half a lime the card halved earlier, squeezed: one of those
+			// halves, not another lime.
+			half := wedgeCitrus(it.Name) != "" && it.Prep == "" && it.AmountText != "" &&
+				it.AmountText != byIndex[it.IngredientIndex].AmountText
+			if ok && !it.LeftOut && (isWedge(it.Name) || half) && !strings.Contains(it.Prep, "from step") {
 				items[i].Prep = strings.TrimPrefix(it.Prep+", from step "+fmt.Sprint(from), ", ")
 			}
 		}
@@ -441,6 +445,15 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 		// review item 10).
 		if ci.LeftOver != "" && row.Prep == "" && len(row.Parts) == 0 {
 			row.Prep = leftOverNote(groups, ci)
+		}
+		// Butter cut up ahead for a step that uses only some of it says
+		// what's left too: "cut into pieces, for step 4, 1 ½ tsp left over".
+		if _, isAhead := ahead[ci.Index]; ci.LeftOver != "" && isAhead && !ci.LeftOut {
+			if len(row.Parts) > 0 {
+				row.Parts = append(slices.Clone(row.Parts), ci.LeftOver+" left over")
+			} else if row.Prep != "" {
+				row.Prep += ", " + ci.LeftOver + " left over"
+			}
 		}
 		ready = append(ready, row)
 	}

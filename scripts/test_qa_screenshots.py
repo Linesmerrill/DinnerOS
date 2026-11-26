@@ -139,5 +139,26 @@ class CoverageTest(unittest.TestCase):
         self.assertIn('"face-id-back-from-the-background", "face-id-back-from-the-background-end",', helpers)
 
 
+class DetailTest(unittest.TestCase):
+    SKIPPED = "Start Cooking › an ingredient skipped here and used later"
+
+    def test_the_skipped_ingredient_is_named_and_the_file_name_holds(self):
+        # Hark's build 123 review: the manifest says which ingredient the shot skips.
+        screen, detail = qa.screen_and_detail(self.SKIPPED + " (Cilantro)")
+        self.assertEqual((screen, detail), (self.SKIPPED, "Cilantro"))
+        self.assertEqual(qa.slug(screen), "start-cooking-an-ingredient-skipped-here-and-used-later")
+        self.assertEqual(qa.missing_screens("ipadL-light", {screen} | set(qa.REQUIRED)), [])
+
+    def test_the_appearance_is_not_a_detail(self):
+        self.assertEqual(qa.screen_and_detail("Shop › Sauce with every item had (dark)"),
+                         ("Shop › Sauce with every item had", ""))
+        self.assertEqual(qa.screen_and_detail("Menu"), ("Menu", ""))
+
+    def test_the_test_names_the_skipped_ingredient(self):
+        test = open(os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests",
+                                 "StartCookingQATests.swift")).read()
+        self.assertIn('shot: "' + self.SKIPPED + ' (\\(skipped))"', test)
+
+
 if __name__ == "__main__":
     unittest.main()

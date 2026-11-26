@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"math/big"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -367,6 +368,10 @@ type IngredientState struct {
 	// meal kit's 1 tsp turmeric packet with "Stir in ¼ tsp turmeric". Nil
 	// otherwise.
 	LeftOver *Measure
+	// Used is what the steps use of it, read the way LeftOver is, when
+	// LeftOver is set: Used and LeftOver make up the whole amount, so the
+	// Save Some for Later card says the same as Have Ready.
+	Used *Measure
 }
 
 // Component is a specialty ingredient (a sauce, crema, paste, or blend) as the
@@ -525,6 +530,9 @@ type mention struct {
 	// wedges is set for a lime or lemon the recipe cuts into wedges, so a
 	// squeeze or half of it reads in wedges.
 	wedges bool
+	// halves is set for a lime or lemon the recipe halves and never cuts
+	// into wedges, so a squeeze of it is a half, not a wedge it never had.
+	halves bool
 	// packaged is set for a plural name counted in ones ("1 Black Beans"): a
 	// can or a package, so a step doesn't count it.
 	packaged bool
@@ -601,6 +609,7 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 			}
 		}
 		m.wedges = wedgeCitrus(ing.Name) != "" && cutIntoWedges(r.Steps, ing.Name)
+		m.halves = wedgeCitrus(ing.Name) != "" && !m.wedges && cutInHalves(r.Steps, ing.Name)
 		m.packaged = m.baseAmount != nil && m.baseAmount.Unit == "count" &&
 			(m.baseAmount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) <= 0 && singularize(ing.Name) != ing.Name ||
 				// "1 Marinara Cup" is the container: "add 1 marinara" would be wrong.
@@ -711,6 +720,12 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 	for i, m := range mentions {
 		if i < len(out.Ingredients) && !amounts.usedUnknown[i] {
 			out.Ingredients[i].LeftOver = leftOver(m, amounts.used[i])
+			if out.Ingredients[i].LeftOver != nil {
+				// What leftOf leaves of the whole once the rest is gone is
+				// what the steps used, read in the same measure.
+				rest := new(big.Rat).Sub(m.amount.Quantity.Rat(), amounts.used[i])
+				out.Ingredients[i].Used = leftOf(m, rest)
+			}
 		}
 	}
 	out.Checklist = buildChecklist(r, out)
@@ -808,6 +823,27 @@ func cutIntoWedges(steps []Step, name string) bool {
 		}
 	}
 	return false
+}
+
+// cutInHalves reports whether a step halves the citrus ("Halve lime",
+// "Halve 1 lime", "Cut the lemon in half").
+func cutInHalves(steps []Step, name string) bool {
+	re := halvedCitrus[wedgeCitrus(name)]
+	if re == nil {
+		return false
+	}
+	for _, st := range steps {
+		if re.MatchString(strings.ToLower(st.Text)) {
+			return true
+		}
+	}
+	return false
+}
+
+var halvedCitrus = map[string]*regexp.Regexp{"lime": halvedRe("lime"), "lemon": halvedRe("lemon")}
+
+func halvedRe(citrus string) *regexp.Regexp {
+	return regexp.MustCompile(`\bhalve (?:the |both |[0-9½¼¾⅓⅔]+ )?` + citrus + `s?\b|\b` + citrus + `s? in half\b|\b` + citrus + ` halves\b`)
 }
 
 // smallest is the smallest serving size, the one a meal-kit card's own

@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strings"
@@ -26,6 +27,9 @@ type SaveForLater struct {
 	Name   string
 	// Use is this meal's amount ("4 oz"), empty when the recipe gave none.
 	Use string
+	// Save is the note's second sentence, what to keep for the other meals:
+	// "Save 4 oz for Beef Stir Fry on Thursday."
+	Save string
 	// Text is the whole note: "Use 4 oz. Save 4 oz for Beef Stir Fry on
 	// Thursday."
 	Text string
@@ -68,8 +72,16 @@ func saveForLaterResponses(notes []SaveForLater, in Instructions) []SaveForLater
 				r.IngredientIndex, r.IngredientKey = &index, st.IngredientKey
 				// The recipe's own word for it, unless the note reached this
 				// line through one part of it: a blend's cumin stays "Cumin".
-				if n.Name == "" || !slices.ContainsFunc(n.PartOf, func(k string) bool { return sameKey(k, st.IngredientKey) }) {
+				partOf := slices.ContainsFunc(n.PartOf, func(k string) bool { return sameKey(k, st.IngredientKey) })
+				if n.Name == "" || !partOf {
 					r.Name = st.Name
+				}
+				// The steps use less than the whole amount and Have Ready says
+				// what's left: the card's "Use" is what the steps use, so the
+				// two agree ("Use ½ Lime" beside "½ left over"; build 123,
+				// Hark's review).
+				if use := usedText(st); use != "" && n.Save != "" && !partOf {
+					r.Text = "Use " + use + ". " + n.Save
 				}
 				break
 			}
@@ -120,4 +132,36 @@ func sameKey(a, b string) bool {
 	an, aok := strings.CutPrefix(a, "name:")
 	bn, bok := strings.CutPrefix(b, "name:")
 	return aok && bok && ingredients.SameIngredientKey(an) == ingredients.SameIngredientKey(bn)
+}
+
+// usedText is what the steps use of an ingredient they don't use all of, as
+// the card says it: "½ Lime", "2 Lime wedges", "¼ tsp", "half the Cilantro".
+// Empty when the steps use all of it.
+func usedText(st IngredientState) string {
+	used := st.Used
+	if st.LeftOver == nil || used == nil || st.LeftOut != nil || st.Amount == nil {
+		return ""
+	}
+	name := cmp.Or(st.SwapName, st.Name)
+	one := ingredients.NewQuantity(1, 1)
+	switch {
+	case used.Unit == "wedge":
+		noun := " wedge"
+		if used.Quantity.Cmp(one) > 0 {
+			noun = " wedges"
+		}
+		return used.Quantity.Format() + " " + singularize(name) + noun
+	case used.Unit == "count" && st.Amount.Unit != "count":
+		// A light herb isn't weighed: "half the Cilantro".
+		if used.Quantity.Equal(ingredients.NewQuantity(1, 2)) {
+			return "half the " + name
+		}
+		return used.Quantity.Format() + " of the " + name
+	case used.Unit == "count":
+		if used.Quantity.Cmp(one) > 0 {
+			return used.Quantity.Format() + " " + countPlural(singularize(name))
+		}
+		return used.Quantity.Format() + " " + singularize(name)
+	}
+	return used.Text()
 }

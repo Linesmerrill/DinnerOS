@@ -116,6 +116,20 @@ def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:80] or "screen"
 
 
+def screen_and_detail(label):
+    """The screen an attachment shows and what it shows it with: "Start Cooking › an ingredient
+    skipped here and used later (Cilantro)" is that screen with cilantro skipped (Hark's build 123
+    review). The detail goes in the manifest; the screen name, its file name and the coverage
+    check stay the same from build to build. A trailing "(light)" or "(dark)" is the appearance,
+    which the config already says."""
+    screen = re.sub(r"\s*\((light|dark)\)$", "", label).strip()
+    detail = ""
+    m = re.match(r"^(.*\S)\s+\(([^()]+)\)$", screen)
+    if m and m.group(1) in REQUIRED:
+        screen, detail = m.group(1), m.group(2).strip()
+    return screen, detail
+
+
 def results(folders):
     """(config, test) -> xcresult path, later folders winning."""
     found = {}
@@ -220,7 +234,7 @@ def main():
                     continue
                 label = a.get("suggestedHumanReadableName", "")
                 label = re.sub(r"_\d+_[0-9A-F-]+\.png$", "", label)
-                screen = re.sub(r"\s*\((light|dark)\)$", "", label).strip()
+                screen, detail = screen_and_detail(label)
                 if not screen or screen.lower().startswith("debug"):
                     continue
                 name = f"{config}/{slug(screen)}.png"
@@ -231,7 +245,7 @@ def main():
                 os.makedirs(os.path.join(out, config), exist_ok=True)
                 shutil.copy(os.path.join(export, a["exportedFileName"]), os.path.join(out, name))
                 size = clean_png(os.path.join(out, name), orientation == "landscape")
-                manifest.append({
+                entry_out = {
                     "file": name,
                     "screen": screen,
                     "config": config,
@@ -239,7 +253,10 @@ def main():
                     "state": f"{appearance}, {orientation}",
                     "size": f"{size[0]}x{size[1]}",
                     "test": test,
-                })
+                }
+                if detail:
+                    entry_out["detail"] = detail
+                manifest.append(entry_out)
     if not manifest:
         sys.exit("No screenshots found")
     json.dump({"build": int(build), "commit": commit, "screenshots": manifest}, open(os.path.join(out, "manifest.json"), "w"), indent=1)

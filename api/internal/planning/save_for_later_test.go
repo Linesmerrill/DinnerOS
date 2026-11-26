@@ -48,6 +48,11 @@ func TestSaveForLaterNamesWhatLaterMealsNeed(t *testing.T) {
 			t.Errorf("%s: %q, want %q", name, got[name].Text, text)
 		}
 	}
+	// The second sentence on its own, so the cooking screen can say what
+	// the steps use in front of it.
+	if s := got["Garlic"].Save; s != "Save 3 cloves for Onion Soup on Thursday." {
+		t.Errorf("garlic save = %q", s)
+	}
 	if s := got["Garlic"].Short; s != "Save 3 cloves for Onion Soup" {
 		t.Errorf("garlic short = %q", s)
 	}
