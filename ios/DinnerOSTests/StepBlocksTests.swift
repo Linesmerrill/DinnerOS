@@ -146,6 +146,40 @@ struct StepBlocksTests {
         #expect(semi.lead == "Season with:")
     }
 
+    /// Hark's build 123 review: a step's prose ended on a dangling ";" where the list after it was
+    /// pulled out onto its own lines. The line ends on a "." instead, and a clause after a list's
+    /// ";" starts with a capital.
+    @Test func proseCutAtASemicolonEndsOnAFullStop() throws {
+        let step = [
+            text("Heat oil in a pan and cook "), ing("onion"), text(" 2 minutes; add "), ing("garlic"), text(", "),
+            ing("ginger"), text(", and "), ing("salt"), text("; cook until fragrant, 30 seconds."),
+        ]
+        let blocks = StepBlocks.blocks(step)
+        #expect(blocks.count == 3)
+        guard case .prose(let before) = blocks.first, case .list(let lead, let items) = blocks[1],
+            case .prose(let after) = blocks.last
+        else {
+            Issue.record("blocks = \(blocks)")
+            return
+        }
+        #expect(joined(before) == "Heat oil in a pan and cook onion 2 minutes.")
+        #expect(joined(lead) == "Add:")
+        #expect(items.map(joined) == ["garlic", "ginger", "salt"])
+        #expect(joined(after) == "Cook until fragrant, 30 seconds.")
+        for block in blocks {
+            if case .prose(let segments) = block {
+                #expect(!joined(segments).trimmingCharacters(in: .whitespaces).hasSuffix(";"))
+            }
+        }
+        // A ";" in the middle of prose stays as written.
+        let plain = StepBlocks.blocks([text("Cook 2 minutes; stir once. Serve.")])
+        guard case .prose(let only) = plain.first else {
+            Issue.record("blocks = \(plain)")
+            return
+        }
+        #expect(joined(only) == "Cook 2 minutes; stir once. Serve.")
+    }
+
     @Test func aSentenceEndingAtANameStartsTheNextOne() {
         let step = [
             text("Add "), ing("tomato paste"), text(" to pan with "), ing("beef"), text(". Season with "), ing("salt"),

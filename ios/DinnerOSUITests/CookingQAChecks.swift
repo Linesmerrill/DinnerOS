@@ -359,4 +359,6 @@ enum CookingQAChecks {
 enum QAMarkers {
     static let cookPhoto = "cook.photo"
     static let cookIngredient = "cook.ingredient"
+    /// Every ingredient thumbnail, named ("Pine Nuts") (the app's `QAMarkers.ingredientThumb`).
+    static let ingredientThumb = "ingredient.thumb"
 }

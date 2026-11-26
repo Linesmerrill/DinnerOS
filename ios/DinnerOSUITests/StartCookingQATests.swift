@@ -246,6 +246,8 @@ final class StartCookingQATests: XCTestCase {
         continueAfterFailure = true
         let tacos = QARecipeFixture.stirFryTacos, bowls = QARecipeFixture.sesamePorkBowls
         let cups = QARecipeFixture.lettuceCups
+        // The manifest names it beside the shot (Hark's build 123 review).
+        let skipped = "Cilantro"
         let own = try ownHousehold("cookskip", recipe: "") { own in
             let ids = try await own.importRecipes([tacos, bowls, cups])
             // Today and the next two nights, in this order (on a Saturday all three share it, and
@@ -253,13 +255,13 @@ final class StartCookingQATests: XCTestCase {
             for (recipe, day) in zip([tacos, bowls, cups], MenuCardsQATests.nightsFromToday()) {
                 try await own.plan(try XCTUnwrap(ids[recipe.name]), weeksAhead: 0, day: day)
             }
-            try await own.skipInDish("Cilantro", recipeID: try XCTUnwrap(ids[tacos.name]))
+            try await own.skipInDish(skipped, recipeID: try XCTUnwrap(ids[tacos.name]))
         }
         let app = launchSignedIn(as: own)
         var problems: [String] = []
 
         if let first = cookingList(
-            tacos.name, in: app, shot: "Start Cooking › an ingredient skipped here and used later")
+            tacos.name, in: app, shot: "Start Cooking › an ingredient skipped here and used later (\(skipped))")
         {
             let rows = first.rows.filter { $0.localizedCaseInsensitiveContains("cilantro") }
             if !rows.isEmpty { problems.append("\(tacos.name) skip cilantro, but its list has \(rows)") }
@@ -267,8 +269,10 @@ final class StartCookingQATests: XCTestCase {
                 if card.contains("Cilantro") {
                     problems.append("\(tacos.name)’s Save Some for Later names cilantro: \(card)")
                 }
-                if !card.contains("Lime:") {
-                    problems.append("\(tacos.name)’s Save Some for Later has no lime: \(card)")
+                // One lime story (Hark's build 123 review): step 1 halves it, step 3 squeezes
+                // half, Have Ready says ½ is left over, and the card uses ½.
+                if !card.contains("Lime: Use ½ Lime. Save 1 Lime for \(bowls.name)") {
+                    problems.append("\(tacos.name)’s Save Some for Later doesn’t use ½ lime: \(card)")
                 }
                 if !card.contains("Crispy Fried Onions: Use 1 of the 2 packs. Save 1 pack for \(bowls.name)") {
                     problems.append("\(tacos.name)’s crispy fried onions don’t read as packs: \(card)")

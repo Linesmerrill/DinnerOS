@@ -150,6 +150,7 @@ struct IngredientPhoto: View {
             .qaMarker(
                 QAMarkers.ingredientFallback, label: IngredientFallbackGlyph.markerLabel(for: name),
                 isShown: showsPlaceholder)
+            .qaMarker(QAMarkers.ingredientThumb, label: name, isShown: true)
     }
 
     /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the tile.

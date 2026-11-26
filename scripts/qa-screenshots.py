@@ -52,8 +52,10 @@ REQUIRED = ("Sign-in", "Sign-in › Face ID", "Menu", "Menu › By Day", "Shop",
             "Pantry › scrolled to Butter", "Shop › scrolled to Flour",
             # By Day at its Saturday, the typed recipe's Ingredients tab at its end, and a dish's
             # Save Some for Later with an ingredient skipped there and used later in the week, in
-            # every config (Hark's build 121 review, round 4, items 2 and 3).
+            # every config (Hark's build 121 review, round 4, items 2 and 3), and that tab's middle,
+            # so every row's thumbnail is in some shot (Hark's qa/124 review, item 5).
             "Menu › By Day › Saturday", "Recipe page › typed by hand › Ingredients › end",
+            "Recipe page › typed by hand › Ingredients › middle",
             "Start Cooking › an ingredient skipped here and used later",
             # The steps brought down to Step 3 beside "Start Cooking › Steps" at rest, and the middle
             # of the typed recipe's cooking list, where its top and end leave rows between them
@@ -114,6 +116,20 @@ def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:80] or "screen"
 
 
+def screen_and_detail(label):
+    """The screen an attachment shows and what it shows it with: "Start Cooking › an ingredient
+    skipped here and used later (Cilantro)" is that screen with cilantro skipped (Hark's build 123
+    review). The detail goes in the manifest; the screen name, its file name and the coverage
+    check stay the same from build to build. A trailing "(light)" or "(dark)" is the appearance,
+    which the config already says."""
+    screen = re.sub(r"\s*\((light|dark)\)$", "", label).strip()
+    detail = ""
+    m = re.match(r"^(.*\S)\s+\(([^()]+)\)$", screen)
+    if m and m.group(1) in REQUIRED:
+        screen, detail = m.group(1), m.group(2).strip()
+    return screen, detail
+
+
 def results(folders):
     """(config, test) -> xcresult path, later folders winning."""
     found = {}
@@ -160,6 +176,25 @@ def wrong_build(build, folders):
     return wrong
 
 
+def source_commit(folders):
+    """The one commit every run was built from, or exits: runs from different commits, or with
+    changes not committed, don't show any one build's code (Hark's qa/124 review, item 1)."""
+    commits = {}
+    for folder in folders:
+        try:
+            commits[folder] = open(os.path.join(folder, "source-commit")).read().strip()
+        except OSError:
+            commits[folder] = "none"
+    bad = [f"{f}: {c}" for f, c in commits.items() if c == "none" or c.endswith("+changes")]
+    if bad:
+        print("\n".join(bad), file=sys.stderr)
+        sys.exit("these runs weren't built from a commit: commit, then rerun")
+    if len(set(commits.values())) > 1:
+        print("\n".join(f"{f}: {c}" for f, c in commits.items()), file=sys.stderr)
+        sys.exit("these runs were built from different commits")
+    return next(iter(commits.values()))
+
+
 def main():
     if len(sys.argv) < 3 or not sys.argv[1].isdigit():
         sys.exit(__doc__)
@@ -171,6 +206,7 @@ def main():
     if wrong:
         print("\n".join(wrong), file=sys.stderr)
         sys.exit(f"these runs weren't built as {build}: rerun with BUILD_NUMBER={build}")
+    commit = source_commit(folders)
     failed = failed_tests(folders)
     if failed:
         print("\n".join(failed), file=sys.stderr)
@@ -198,7 +234,7 @@ def main():
                     continue
                 label = a.get("suggestedHumanReadableName", "")
                 label = re.sub(r"_\d+_[0-9A-F-]+\.png$", "", label)
-                screen = re.sub(r"\s*\((light|dark)\)$", "", label).strip()
+                screen, detail = screen_and_detail(label)
                 if not screen or screen.lower().startswith("debug"):
                     continue
                 name = f"{config}/{slug(screen)}.png"
@@ -209,7 +245,7 @@ def main():
                 os.makedirs(os.path.join(out, config), exist_ok=True)
                 shutil.copy(os.path.join(export, a["exportedFileName"]), os.path.join(out, name))
                 size = clean_png(os.path.join(out, name), orientation == "landscape")
-                manifest.append({
+                entry_out = {
                     "file": name,
                     "screen": screen,
                     "config": config,
@@ -217,10 +253,13 @@ def main():
                     "state": f"{appearance}, {orientation}",
                     "size": f"{size[0]}x{size[1]}",
                     "test": test,
-                })
+                }
+                if detail:
+                    entry_out["detail"] = detail
+                manifest.append(entry_out)
     if not manifest:
         sys.exit("No screenshots found")
-    json.dump({"build": int(build), "screenshots": manifest}, open(os.path.join(out, "manifest.json"), "w"), indent=1)
+    json.dump({"build": int(build), "commit": commit, "screenshots": manifest}, open(os.path.join(out, "manifest.json"), "w"), indent=1)
     configs = sorted({m["config"] for m in manifest})
     print(f"{len(manifest)} screenshots across {len(configs)} configs: {', '.join(configs)}")
     # Coverage: every config (each device in light and dark) and, per config, the screens every
@@ -263,7 +302,7 @@ def main():
 
     tag = f"qa-screenshots-{build}-{int(time.time())}"
     run("gh", "release", "create", tag, archive, "--repo", REPO, "--draft",
-        "--title", f"QA screenshots for build {build} (temporary)",
+        "--title", f"QA screenshots for build {build}, commit {commit[:7]} (temporary)",
         "--notes", "Temporary: the QA screenshots workflow publishes this as an artifact and deletes it.")
     started = time.time()
     run("gh", "workflow", "run", "qa-screenshots.yml", "--repo", REPO, "--ref", "main",
@@ -286,7 +325,7 @@ def main():
     names = [a["name"] for a in artifacts.get("artifacts", [])]
     if f"qa-screenshots-{build}" not in names:
         sys.exit(f"Run {run_id} finished without the artifact")
-    print(f"SCREENSHOTS READY build {build}, run {run_id}")
+    print(f"SCREENSHOTS READY build {build}, commit {commit[:7]}, run {run_id}")
 
 
 if __name__ == "__main__":

@@ -48,6 +48,32 @@ class WrongBuildTest(unittest.TestCase):
         self.assertEqual(wrong, [f"{other}: built as 120", f"{none}: built as none"])
 
 
+class SourceCommitTest(unittest.TestCase):
+    """The set names the one commit its app was built from (Hark's qa/124 review, item 1)."""
+
+    def folder(self, commit):
+        path = tempfile.mkdtemp()
+        if commit is not None:
+            with open(os.path.join(path, "source-commit"), "w") as f:
+                f.write(commit + "\n")
+        return path
+
+    def test_runs_from_one_commit_name_it(self):
+        self.assertEqual(qa.source_commit([self.folder("abc123"), self.folder("abc123")]), "abc123")
+
+    def test_changes_not_committed_block_the_set(self):
+        with self.assertRaises(SystemExit):
+            qa.source_commit([self.folder("abc123"), self.folder("abc123+changes")])
+
+    def test_no_commit_blocks_the_set(self):
+        with self.assertRaises(SystemExit):
+            qa.source_commit([self.folder(None)])
+
+    def test_runs_from_different_commits_block_the_set(self):
+        with self.assertRaises(SystemExit):
+            qa.source_commit([self.folder("abc123"), self.folder("def456")])
+
+
 class CoverageTest(unittest.TestCase):
     ROWS = ["Pantry › scrolled to Butter", "Shop › scrolled to Flour"]
 
@@ -60,6 +86,11 @@ class CoverageTest(unittest.TestCase):
 
     def test_every_config_needs_the_scrolled_steps_and_the_middle_of_the_typed_list(self):
         new = ["Start Cooking › Steps scrolled", "Cooking › typed by hand › middle of ingredients"]
+        for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
+            self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED) - set(new)), new)
+
+    def test_every_config_needs_the_middle_of_the_typed_recipe_page_ingredients(self):
+        new = ["Recipe page › typed by hand › Ingredients › middle"]
         for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
             self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED) - set(new)), new)
 
@@ -106,6 +137,27 @@ class CoverageTest(unittest.TestCase):
         helpers = open(os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests", "QAHelpers.swift")).read()
         self.assertIn('"Account that fits on the screen": [', helpers)
         self.assertIn('"face-id-back-from-the-background", "face-id-back-from-the-background-end",', helpers)
+
+
+class DetailTest(unittest.TestCase):
+    SKIPPED = "Start Cooking › an ingredient skipped here and used later"
+
+    def test_the_skipped_ingredient_is_named_and_the_file_name_holds(self):
+        # Hark's build 123 review: the manifest says which ingredient the shot skips.
+        screen, detail = qa.screen_and_detail(self.SKIPPED + " (Cilantro)")
+        self.assertEqual((screen, detail), (self.SKIPPED, "Cilantro"))
+        self.assertEqual(qa.slug(screen), "start-cooking-an-ingredient-skipped-here-and-used-later")
+        self.assertEqual(qa.missing_screens("ipadL-light", {screen} | set(qa.REQUIRED)), [])
+
+    def test_the_appearance_is_not_a_detail(self):
+        self.assertEqual(qa.screen_and_detail("Shop › Sauce with every item had (dark)"),
+                         ("Shop › Sauce with every item had", ""))
+        self.assertEqual(qa.screen_and_detail("Menu"), ("Menu", ""))
+
+    def test_the_test_names_the_skipped_ingredient(self):
+        test = open(os.path.join(os.path.dirname(__file__), "..", "ios", "DinnerOSUITests",
+                                 "StartCookingQATests.swift")).read()
+        self.assertIn('shot: "' + self.SKIPPED + ' (\\(skipped))"', test)
 
 
 if __name__ == "__main__":

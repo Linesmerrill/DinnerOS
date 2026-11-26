@@ -214,7 +214,10 @@ final class ScreensQATests: XCTestCase {
                 picker.isSelected || (picker.value as? String)?.contains("elected") == true,
                 "Recipe page › \(kind): the \(tab) tab isn’t selected")
             pinPicker(picker, in: app)
+            if tab == "Ingredients" { bringFirstRowUnderPicker(picker, in: app) }
             shot(app, "Recipe page › \(kind) › \(tab)")
+            // Which rows' thumbnails the tab's top shot shows whole, for the middle shot below.
+            let topPlace = tab == "Ingredients" ? MenuQAChecks.ingredientPlace(app) : nil
             // The tab's first rows start whole under the pinned picker, with nothing resting
             // half under it or the bar above it (Hark's review, build 121 round 2).
             problems += FadeQAChecks.checkRest(app, screen: "Recipe page › \(kind) › \(tab)", edges: .top)
@@ -229,10 +232,68 @@ final class ScreensQATests: XCTestCase {
                 problems += MenuQAChecks.checkIngredientPhotos(app, screen: screen)
                 // The list's end, Pine Nuts and all (Hark's build 121 review, round 4, item 3).
                 if kind == "typed by hand" {
+                    // Back to the top shot's place, then down a quarter of the screen at a time to
+                    // the end, so the middle shot can show every row the top and end shots leave
+                    // out (Hark's qa/124 review, item 5: on the Duo no shot had Pine Nuts, Olive
+                    // Oil or Garlic).
+                    scrollToTop(app)
+                    pinPicker(picker, in: app)
+                    bringFirstRowUnderPicker(picker, in: app)
+                    var places: [(place: MenuQAChecks.ListPlace, shot: QAShot)] = [
+                        (MenuQAChecks.ingredientPlace(app), capture(app))
+                    ]
+                    for _ in 0..<20 {
+                        MenuQAChecks.dragList(app, by: app.frame.height * 0.25)
+                        sleep(1)
+                        let place = MenuQAChecks.ingredientPlace(app)
+                        if place.minY.isEmpty { break }
+                        if let moved = MenuQAChecks.moved(from: places[places.count - 1].place, to: place), moved < 4 {
+                            break
+                        }
+                        places.append((place, capture(app)))
+                    }
                     FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
                     problems += FadeQAChecks.checkRest(app, screen: "\(screen) › end", edges: .bottom)
                     problems += MenuQAChecks.checkIngredientPhotos(app, screen: "\(screen) › end")
-                    keep(capture(app), "Recipe page › \(kind) › Ingredients › end (\(mode))")
+                    let endPlace = MenuQAChecks.ingredientPlace(app)
+                    let end = capture(app)
+                    keep(end, "Recipe page › \(kind) › Ingredients › end (\(mode))")
+                    // The places between the top and the end, none the same screen as either.
+                    var between = places.dropFirst().filter { !$0.shot.isSameScreen(as: end) }
+                    // A list one drag from its end has no place between: back to the top and
+                    // half the way down, so every config has its middle shot.
+                    if between.isEmpty, let travel = MenuQAChecks.moved(from: places[0].place, to: endPlace),
+                        travel > 24
+                    {
+                        scrollToTop(app)
+                        pinPicker(picker, in: app)
+                        bringFirstRowUnderPicker(picker, in: app)
+                        MenuQAChecks.dragList(app, by: travel / 2)
+                        sleep(1)
+                        let half = capture(app)
+                        if !half.isSameScreen(as: end) && !half.isSameScreen(as: places[0].shot) {
+                            between = [(MenuQAChecks.ingredientPlace(app), half)]
+                        }
+                        FadeQAChecks.scrollToEnd(app) { capture(app, settle: false) }
+                    }
+                    let picks = MenuQAChecks.middlePicks(
+                        top: topPlace?.shown ?? places[0].place.shown, end: endPlace.shown,
+                        onTheWay: between.map(\.place.shown), expected: Self.typedIngredients)
+                    let indexes = picks.indexes.isEmpty ? (between.isEmpty ? [] : [between.count / 2]) : picks.indexes
+                    for (n, index) in indexes.enumerated() {
+                        let name = n == 0 ? "middle" : "middle \(n + 1)"
+                        keep(between[index].shot, "Recipe page › \(kind) › Ingredients › \(name) (\(mode))")
+                    }
+                    if indexes.isEmpty {
+                        // The whole list shows already (the upright iPad): its middle is its end,
+                        // an allowed look-alike, so every config has the same set.
+                        keep(end, "Recipe page › \(kind) › Ingredients › middle (\(mode))")
+                    }
+                    let pick = picks
+                    if !pick.missing.isEmpty {
+                        problems.append(
+                            "\(screen): no shot shows the thumbnail of \(pick.missing.joined(separator: ", ")) whole")
+                    }
                 }
             }
             scrollToTop(app)
@@ -637,6 +698,23 @@ final class ScreensQATests: XCTestCase {
             app.swipeUp(velocity: .slow)
         }
         sleep(1)
+    }
+
+    /// After `pinPicker`: a tab whose first row went up under the pinned picker (Bow Tie Pasta
+    /// on the iPad in landscape, Hark's qa/124 review) is pulled back down so that row starts
+    /// whole under it, as a person sees the tab when they pick it.
+    @MainActor
+    private func bringFirstRowUnderPicker(_ picker: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<2 {
+            let first = MenuQAChecks.ingredientPlace(app).minY.values.min()
+            let under = picker.frame.maxY + 8
+            guard let first, first < under else { return }
+            let gap = under - first
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: gap + 12)),
+                withVelocity: .slow, thenHoldForDuration: 0.4)
+            sleep(1)
+        }
     }
 
     /// Drags the page up just far enough that the tab picker reaches the top and pins, so a

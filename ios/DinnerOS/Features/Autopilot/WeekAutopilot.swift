@@ -223,10 +223,8 @@ struct WeekAutopilotSection: View {
         } label: {
             row(
                 systemImage: "sparkles",
-                title: proposal.slots.count == 1
-                    ? String(localized: "Autopilot suggested 1 meal")
-                    : String(localized: "Autopilot suggested \(proposal.slots.count) meals"),
-                subtitle: String(localized: "Review, swap, and add them to your week."),
+                title: AutopilotPicksText.title(meals: proposal.slots.count),
+                subtitle: AutopilotPicksText.subtitle(meals: proposal.slots.count),
                 trailing: String(localized: "Review"))
         }
         .accessibilityHint("Opens the suggestions")

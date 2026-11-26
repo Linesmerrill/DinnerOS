@@ -114,11 +114,29 @@ final class AuthSession {
         }
 
         if isBiometricSignInOn {
-            // Behind Face ID: nothing is read until a check passes. A missing item (faces
-            // changed, or the Keychain was reset) means normal sign-in.
+            // Signed out on purpose: the sign-in screen, with its Face ID button. A missing item
+            // (faces changed, or the Keychain was reset) means normal sign-in.
+            if biometricSetting.isSignedOut {
+                if protectedStore?.hasItem() == true {
+                    state = .signedOut
+                } else {
+                    Self.logger.notice("Face ID sign-in item missing; signing out")
+                    clearLocalSession()
+                }
+                return
+            }
+            // Signed in: Face ID is only a way to sign in (decision 767), so the session in the
+            // normal Keychain item opens the app with no check, also after iOS ended the app in
+            // the background.
+            if let stored = loadStored() {
+                await adopt(stored)
+                return
+            }
+            // Builds up to 121 kept a signed-in session only behind Face ID: one check at this
+            // launch moves it to the normal item, and later launches never ask.
             if protectedStore?.hasItem() == true {
-                // Signed out on purpose: the sign-in screen, with its Face ID button.
-                state = biometricSetting.isSignedOut ? .signedOut : .locked
+                Self.logger.notice("Session only behind Face ID; one check moves it")
+                state = .locked
             } else {
                 Self.logger.notice("Face ID sign-in item missing; signing out")
                 clearLocalSession()
@@ -126,14 +144,16 @@ final class AuthSession {
             return
         }
 
-        let stored: StoredSession?
+        await adopt(loadStored())
+    }
+
+    private func loadStored() -> StoredSession? {
         do {
-            stored = try store.load()
+            return try store.load()
         } catch {
             Self.logger.error("Keychain read failed: \(String(describing: error), privacy: .public)")
-            stored = nil
+            return nil
         }
-        await adopt(stored)
     }
 
     /// Reads the session behind Face ID after a check passed. `false` when it's gone or expired,
@@ -148,6 +168,8 @@ final class AuthSession {
             stored = nil
         }
         await adopt(stored)
+        // Kept in the normal item from now on, so no later launch asks.
+        if let tokens, let user = currentUser { saveSignedIn(StoredSession(tokens: tokens, user: user)) }
         return currentUser != nil
     }
 
@@ -184,6 +206,8 @@ final class AuthSession {
         biometricNotice = nil
         state = .signedIn(stored.user)
         wasSignedInThisLaunch = true
+        // Signed in: the next launch opens without Face ID.
+        saveSignedIn(stored)
         do {
             _ = try await refreshTokens(replacing: stored.tokens.accessToken)
         } catch {
@@ -266,11 +290,7 @@ final class AuthSession {
         try protectedStore.save(StoredSession(tokens: tokens, user: user))
         biometricSetting.turnOn(enrollmentState: enrollmentState)
         isBiometricSignInOn = true
-        do {
-            try store.clear()
-        } catch {
-            Self.logger.error("Keychain clear failed: \(String(describing: error), privacy: .public)")
-        }
+        // The normal item stays while signed in, so launches never ask (decision 767).
         Self.logger.info("Face ID sign-in on")
     }
 
@@ -483,8 +503,13 @@ final class AuthSession {
                 unsavedProtectedSession = session
                 Self.logger.error("Face ID item write failed: \(String(describing: error), privacy: .public)")
             }
-            return
         }
+        // Signed in, the session is also in the normal item, with Face ID on or off: a launch
+        // with a valid session never asks (decision 767).
+        saveSignedIn(session)
+    }
+
+    private func saveSignedIn(_ session: StoredSession) {
         do {
             try store.save(session)
         } catch {

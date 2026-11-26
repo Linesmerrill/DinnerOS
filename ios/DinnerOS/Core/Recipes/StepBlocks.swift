@@ -45,14 +45,34 @@ nonisolated enum StepBlocks {
         var prose: [InstructionSegment] = []
         for sentence in sentences(paragraph) {
             if let (list, after) = list(sentence) {
-                if !prose.isEmpty { out.append(.prose(prose)) }
+                if !prose.isEmpty { out.append(.prose(closed(prose))) }
                 prose = after
                 out.append(list)
             } else {
-                prose += sentence
+                // A sentence after a ";" that now starts a line under a list starts with a capital.
+                prose += prose.isEmpty && !out.isEmpty ? capitalized(sentence) : sentence
             }
         }
-        if !prose.isEmpty { out.append(.prose(prose)) }
+        if !prose.isEmpty { out.append(.prose(closed(prose))) }
+        return out
+    }
+
+    /// Prose that ends a block on a ";" ("Cook 2 minutes;" over a list) ends on a "." instead.
+    private static func closed(_ prose: [InstructionSegment]) -> [InstructionSegment] {
+        guard let i = prose.indices.last, !prose[i].isIngredient else { return prose }
+        let text = trimmedEnd(prose[i].text)
+        guard text.last == ";" else { return prose }
+        var out = prose
+        out[i] = InstructionSegment(kind: .text, text: String(text.dropLast()) + ".")
+        return out
+    }
+
+    private static func capitalized(_ sentence: [InstructionSegment]) -> [InstructionSegment] {
+        guard let i = sentence.indices.first, !sentence[i].isIngredient, let first = sentence[i].text.first,
+            first.isLowercase
+        else { return sentence }
+        var out = sentence
+        out[i] = InstructionSegment(kind: .text, text: first.uppercased() + sentence[i].text.dropFirst())
         return out
     }
 

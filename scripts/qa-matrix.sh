@@ -60,6 +60,14 @@ RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
 RUNTIME_DUO=${RUNTIME_DUO:-com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4}
 mkdir -p "$OUT"
 [ -n "${PLAN_ONLY:-}" ] || echo "$BUILD_NUMBER" >"$OUT/build-number"
+# The commit the app is built from, so the published set names the code it shows (Hark's qa/124
+# review, item 1: the set only named the commit its publishing workflow ran on). "+changes" when
+# the app, API or scripts have changes not yet committed; the publisher refuses those.
+if [ -z "${PLAN_ONLY:-}" ]; then
+    commit=$(git rev-parse HEAD)
+    [ -z "$(git status --porcelain -- ios api scripts)" ] || commit="$commit+changes"
+    echo "$commit" >"$OUT/source-commit"
+fi
 : >"$OUT/summary.txt"
 rm -f "$OUT/STOP"
 

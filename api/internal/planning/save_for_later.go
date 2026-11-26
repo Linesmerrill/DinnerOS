@@ -188,11 +188,12 @@ func saveForLaterNote(item grocery.Item, recipeID string, meals mealOrder, also 
 		}
 		parts = append(parts, part)
 	}
-	text := "Use " + use + ". Save " + joinAnd(parts) + "."
+	save := "Save " + joinAnd(parts) + "."
+	text := "Use " + use + ". " + save
 	if len(parts) > 1 {
 		short = "Save some for later meals"
 	}
-	return recipes.SaveForLater{Keys: keys, PartOf: partOf, Name: item.Name, Use: use, Text: text, Short: short}, true
+	return recipes.SaveForLater{Keys: keys, PartOf: partOf, Name: item.Name, Use: use, Save: save, Text: text, Short: short}, true
 }
 
 // mealOrder is each planned recipe's first day and place in the week.

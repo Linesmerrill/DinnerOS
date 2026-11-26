@@ -201,6 +201,13 @@ enum QAShotCompare {
         "Ingredients that fit on the screen": [
             "recipe-page-typed-by-hand-ingredients", "recipe-page-typed-by-hand-ingredients-end",
         ],
+        // Where the whole list fits (the upright iPad), its middle is its end (Hark's qa/124 review).
+        "Ingredients that fit, middle and end": [
+            "recipe-page-typed-by-hand-ingredients-middle", "recipe-page-typed-by-hand-ingredients-end",
+        ],
+        "Ingredients that fit, top and middle": [
+            "recipe-page-typed-by-hand-ingredients", "recipe-page-typed-by-hand-ingredients-middle",
+        ],
         // Account fits on a large iPhone's and an iPad's screen: its end is the screen as it opens.
         "Account that fits on the screen": [
             "face-id-back-from-the-background", "face-id-back-from-the-background-end",

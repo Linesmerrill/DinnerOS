@@ -3,6 +3,7 @@ package recipes
 import (
 	"math/big"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -516,6 +517,34 @@ func allNote(text []rune) (int, int, bool) {
 	return n, len([]rune(m[0])), true
 }
 
+// useAllRe is a card's note for its bigger box, later in the step: "(use
+// all the cannellini and kidney beans and 4 cups water for 4 servings)".
+var useAllRe = regexp.MustCompile(`(?i)\(use all (?:of )?the ([^)]*?) for (\d+)(?: servings)?\)`)
+
+// useAllFor is the serving size from which a "(use all the …)" note later in
+// text uses all of name, or 0 when no such note names it.
+func useAllFor(text, name string) int {
+	words := strings.Fields(strings.ToLower(name))
+	if len(words) == 0 {
+		return 0
+	}
+	// "cannellini" for Cannellini Beans, "thyme" for Dried Thyme.
+	names := []string{words[0]}
+	if len(words) > 1 && (words[0] == "dried" || words[0] == "fresh" || words[0] == "ground") {
+		names = append(names, strings.Join(words[1:], " "))
+	}
+	for _, m := range useAllRe.FindAllStringSubmatch(text, -1) {
+		named := " " + strings.NewReplacer(",", " ", ";", " ").Replace(strings.ToLower(m[1])) + " "
+		if !slices.ContainsFunc(names, func(n string) bool { return strings.Contains(named, " "+n+" ") }) {
+			continue
+		}
+		if n, err := strconv.Atoi(m[2]); err == nil {
+			return n
+		}
+	}
+	return 0
+}
+
 // wedgesOf is n lime or lemon wedges.
 func wedgesOf(n ingredients.Quantity) *Measure {
 	return &Measure{Quantity: n, Unit: "wedge"}
@@ -795,6 +824,16 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		// A share is used whether or not it's an amount anyone measures ("half
 		// the cilantro" of ¼ oz): what's left later depends on it.
 		fractionUsed := isFraction && m.amount != nil && !m.leftOut && !shownBefore
+		// "half the tomatoes (all for 4 servings)", "half the cannellini
+		// beans … (use all the cannellini and kidney beans … for 4
+		// servings)": the bigger box uses all of it, so none is left over.
+		allFrom, allLen, allNext := allNote(runes[i+length:])
+		if !allNext {
+			allFrom, allLen = useAllFor(string(runes[i+length:]), m.name), 0
+		}
+		if isFraction && allFrom > 0 && amounts.servings >= allFrom {
+			fraction = big.NewRat(1, 1)
+		}
 		if isFraction {
 			amount = nil
 			if m.amount != nil && countedUnit(m.amount.Unit) && !m.leftOut && !shownBefore {
@@ -807,16 +846,13 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 				} else {
 					inText = false
 				}
-				amount, part = share, true
+				amount, part = share, fraction.Cmp(big.NewRat(1, 1)) != 0
 				amountShown[hit] = true
 			} else if m.amount != nil && measuredUnits[m.amount.Unit] && !lightWeight(*m.amount) && !m.leftOut && !shownBefore && !m.swapped {
 				// "Stir in half the curry powder (all for 4 servings)": this
 				// step's share, as an amount to measure.
-				if n, noteLen, ok := allNote(runes[i+length:]); ok {
-					skipAfter = noteLen
-					if amounts.servings >= n {
-						fraction = big.NewRat(1, 1)
-					}
+				if allNext {
+					skipAfter = allLen
 				}
 				share := kitchenSpoon(tidySpoons(Measure{Quantity: m.amount.Quantity.MulRat(fraction), Unit: m.amount.Unit}))
 				plain = plain[:len(plain)-fractionLen]
@@ -863,6 +899,24 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			if !m.leftOut && !shownBefore && !amountShown[hit] {
 				whole := *m.amount
 				amount = &whole
+			}
+		}
+		// A lime the card halved and never cut into wedges: the squeeze is
+		// one half for the card's smallest box, so the list and the steps
+		// agree on what's left (build 123, Hark's review: "Halve 1 lime" then
+		// "squeeze 1 wedge").
+		if squeeze && m.halves && m.amount != nil && m.amount.Unit == "count" {
+			squeeze = false
+			n := ingredients.NewQuantity(1, 2)
+			if amounts.base > 0 && amounts.servings > 0 {
+				n = n.MulRat(big.NewRat(int64(amounts.servings), int64(amounts.base)))
+			}
+			if n.Cmp(m.amount.Quantity) > 0 {
+				n = m.amount.Quantity
+			}
+			amount, part = &Measure{Quantity: n, Unit: "count"}, n.Cmp(m.amount.Quantity) != 0
+			if m.leftOut || shownBefore {
+				amount = nil
 			}
 		}
 		if squeeze {

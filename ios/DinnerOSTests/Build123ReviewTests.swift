@@ -40,4 +40,12 @@ struct Build123ReviewTests {
             ShopHandoffText.nothingNewText(notice: skipped, needsProduct: 2, store: "Walmart", listPage: false)
                 == skipped)
     }
+
+    /// "Autopilot suggested 1 meal" said "add them" (Hark's build 123 review): one meal is "it".
+    @Test func autopilotsPicksSayItForOneMeal() {
+        #expect(AutopilotPicksText.title(meals: 1) == "Autopilot suggested 1 meal")
+        #expect(AutopilotPicksText.subtitle(meals: 1) == "Review, swap, and add it to your week.")
+        #expect(AutopilotPicksText.title(meals: 4) == "Autopilot suggested 4 meals")
+        #expect(AutopilotPicksText.subtitle(meals: 4) == "Review, swap, and add them to your week.")
+    }
 }

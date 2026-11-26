@@ -98,4 +98,45 @@ final class CookingQAChecksTests: XCTestCase {
         let shown: Set<String> = ["8 oz Bow Tie Pasta", "1 cup Grape Tomatoes"]
         XCTAssertTrue(CookingQAChecks.missing(ScreensQATests.typedIngredients, from: shown).contains("Basil Pesto"))
     }
+
+    /// The recipe page's middle Ingredients shots (Hark's qa/124 review, item 5): on the Duo the
+    /// top shot ended at Lemon and the end shot began at Fresh Basil.
+    func testTheMiddleShotsShowTheRowsTheTopAndEndLeaveOut() {
+        let top: Set = ["Bow Tie Pasta", "Basil Pesto", "Grape Tomatoes", "Baby Spinach", "Parmesan Cheese", "Lemon"]
+        let end: Set = ["Fresh Basil", "Red Pepper Flakes", "Salt", "Black Pepper"]
+        let onTheWay: [Set<String>] = [
+            ["Parmesan Cheese", "Lemon", "Olive Oil"],
+            ["Lemon", "Olive Oil", "Garlic", "Pine Nuts"],
+            ["Pine Nuts", "Fresh Basil"],
+        ]
+        let one = MenuQAChecks.middlePicks(
+            top: top, end: end, onTheWay: onTheWay, expected: ScreensQATests.typedIngredients)
+        XCTAssertEqual(one.indexes, [1])
+        XCTAssertEqual(one.missing, [])
+        // A short screen (the SE): two places, each with rows the other lacks.
+        let two = MenuQAChecks.middlePicks(
+            top: top.subtracting(["Parmesan Cheese", "Lemon"]), end: end,
+            onTheWay: [["Parmesan Cheese", "Lemon"], ["Olive Oil", "Garlic", "Pine Nuts"]],
+            expected: ScreensQATests.typedIngredients)
+        XCTAssertEqual(two.indexes, [0, 1])
+        XCTAssertEqual(two.missing, [])
+        // A row no place shows whole is named.
+        let gap = MenuQAChecks.middlePicks(
+            top: top, end: end, onTheWay: [["Olive Oil", "Garlic"]], expected: ScreensQATests.typedIngredients)
+        XCTAssertEqual(gap.indexes, [0])
+        XCTAssertEqual(gap.missing, ["Pine Nuts"])
+        // Nothing left out: no pick, nothing missing.
+        let all = MenuQAChecks.middlePicks(
+            top: top.union(["Olive Oil", "Garlic", "Pine Nuts"]), end: end, onTheWay: [["Lemon"]],
+            expected: ScreensQATests.typedIngredients)
+        XCTAssertEqual(all.indexes, [])
+        XCTAssertEqual(all.missing, [])
+    }
+
+    func testHowFarTheListMovedIsTheMiddleOfItsThumbnailsMoves() {
+        let a = MenuQAChecks.ListPlace(shown: [], minY: ["Lemon": 500, "Garlic": 600, "Salt": 700])
+        let b = MenuQAChecks.ListPlace(shown: [], minY: ["Lemon": 300, "Garlic": 401, "Pine Nuts": 500])
+        XCTAssertEqual(MenuQAChecks.moved(from: a, to: b), 200)
+        XCTAssertNil(MenuQAChecks.moved(from: a, to: MenuQAChecks.ListPlace(shown: [], minY: ["Basil": 1])))
+    }
 }
