@@ -169,7 +169,7 @@ func TestStarterDescriptionsArePlain(t *testing.T) {
 			seenSentence[k] = d.Name
 		}
 	}
-	for _, f := range []string{"descriptions/build-124.json"} {
+	for _, f := range []string{"descriptions/build-122.json"} {
 		if _, err := loadDescriptions(f); err != nil {
 			t.Errorf("loadDescriptions(%s): %v", f, err)
 		}

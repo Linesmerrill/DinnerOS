@@ -33,7 +33,7 @@
 //	  go run ./cmd/ownstarters -rewrites 'out-*.json'                  # dry run
 //	  go run ./cmd/ownstarters -images https://dinneros.app/img/recipes -image-ids ids.txt -apply
 //	  go run ./cmd/ownstarters -fixes cmd/ownstarters/fixes/build-122.json -labels -apply
-//	  go run ./cmd/ownstarters -descriptions cmd/ownstarters/descriptions/build-124.json   # dry run
+//	  go run ./cmd/ownstarters -descriptions cmd/ownstarters/descriptions/build-122.json   # dry run
 //
 // It never prints the URI or any recipe text.
 package main
