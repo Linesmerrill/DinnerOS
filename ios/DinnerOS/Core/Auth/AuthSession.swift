@@ -132,7 +132,7 @@ final class AuthSession {
                 await adopt(stored)
                 return
             }
-            // Builds before 124 kept a signed-in session only behind Face ID: one check at this
+            // Builds up to 121 kept a signed-in session only behind Face ID: one check at this
             // launch moves it to the normal item, and later launches never ask.
             if protectedStore?.hasItem() == true {
                 Self.logger.notice("Session only behind Face ID; one check moves it")

@@ -105,6 +105,11 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 5), "Not on the Account screen")
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for seconds: UInt32 in [8] {
+            let failuresBefore = testRun?.totalFailureCount ?? 0
+            defer {
+                let passed = (testRun?.totalFailureCount ?? 0) == failuresBefore
+                print("QA-FACEID-STEP: \(passed ? "passed" : "FAILED"), no Face ID prompt after \(seconds)s in the background (\(mode))")
+            }
             XCUIDevice.shared.press(.home)
             sleep(seconds)
             app.activate()
@@ -164,6 +169,12 @@ final class BiometricSignInQATests: XCTestCase {
     /// Signed in and nothing asking: no lock screen, no system prompt, not signed out.
     @MainActor
     private func assertOpenWithoutFaceID(_ app: XCUIApplication, after: String) {
+        let failuresBefore = testRun?.totalFailureCount ?? 0
+        // One line per step in the log, so a review can see each one passed in each config.
+        defer {
+            let passed = (testRun?.totalFailureCount ?? 0) == failuresBefore
+            print("QA-FACEID-STEP: \(passed ? "passed" : "FAILED"), no Face ID prompt after \(after) (\(mode))")
+        }
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         // Long enough for a launch's restore and any ask to show.
         XCTAssertFalse(app.buttons["lock.anotherWay"].waitForExistence(timeout: 6), "Face ID was asked after \(after)")

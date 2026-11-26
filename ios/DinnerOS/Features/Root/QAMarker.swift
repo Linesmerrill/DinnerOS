@@ -20,6 +20,9 @@ nonisolated enum QAMarkers {
     /// An ingredient thumbnail's no-photo tile, labeled with the name and its letter
     /// ("Pine Nuts: P").
     static let ingredientFallback = "ingredient.fallback"
+    /// Every ingredient thumbnail, photo or tile, labeled with the name ("Pine Nuts"), so a test
+    /// can tell which rows' thumbnails a screenshot shows whole.
+    static let ingredientThumb = "ingredient.thumb"
     /// The recipe's photo at the top of the cooking screen, where it sits, so a test can check its
     /// pixels: a photo drawn invisible left a blank band there on TestFlight 120.
     static let cookPhoto = "cook.photo"

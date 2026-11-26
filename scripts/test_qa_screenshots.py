@@ -48,6 +48,32 @@ class WrongBuildTest(unittest.TestCase):
         self.assertEqual(wrong, [f"{other}: built as 120", f"{none}: built as none"])
 
 
+class SourceCommitTest(unittest.TestCase):
+    """The set names the one commit its app was built from (Hark's qa/124 review, item 1)."""
+
+    def folder(self, commit):
+        path = tempfile.mkdtemp()
+        if commit is not None:
+            with open(os.path.join(path, "source-commit"), "w") as f:
+                f.write(commit + "\n")
+        return path
+
+    def test_runs_from_one_commit_name_it(self):
+        self.assertEqual(qa.source_commit([self.folder("abc123"), self.folder("abc123")]), "abc123")
+
+    def test_changes_not_committed_block_the_set(self):
+        with self.assertRaises(SystemExit):
+            qa.source_commit([self.folder("abc123"), self.folder("abc123+changes")])
+
+    def test_no_commit_blocks_the_set(self):
+        with self.assertRaises(SystemExit):
+            qa.source_commit([self.folder(None)])
+
+    def test_runs_from_different_commits_block_the_set(self):
+        with self.assertRaises(SystemExit):
+            qa.source_commit([self.folder("abc123"), self.folder("def456")])
+
+
 class CoverageTest(unittest.TestCase):
     ROWS = ["Pantry › scrolled to Butter", "Shop › scrolled to Flour"]
 
@@ -60,6 +86,11 @@ class CoverageTest(unittest.TestCase):
 
     def test_every_config_needs_the_scrolled_steps_and_the_middle_of_the_typed_list(self):
         new = ["Start Cooking › Steps scrolled", "Cooking › typed by hand › middle of ingredients"]
+        for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
+            self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED) - set(new)), new)
+
+    def test_every_config_needs_the_middle_of_the_typed_recipe_page_ingredients(self):
+        new = ["Recipe page › typed by hand › Ingredients › middle"]
         for config in ("small-light", "duo-dark", "large-light", "ipadL-light", "ipadP-dark"):
             self.assertEqual(qa.missing_screens(config, set(qa.REQUIRED) - set(new)), new)
 

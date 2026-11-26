@@ -540,3 +540,64 @@ enum MenuQAChecks {
         return card.staticTexts.firstMatch.exists ? card.staticTexts.firstMatch.label : card.identifier
     }
 }
+
+// MARK: - Every ingredient row's thumbnail in a kept shot (Hark's qa/124 review, item 5)
+
+extension MenuQAChecks {
+    /// What the list shows at one place on the way down: the thumbnails resting whole in the
+    /// clear band, and where each one is, to tell how far the list moved since.
+    struct ListPlace {
+        var shown: Set<String>
+        var minY: [String: CGFloat]
+    }
+
+    /// The thumbnails resting whole between the bars and fades the app reports at the top and
+    /// at the bottom. On the Duo the typed recipe's top shot ended at Lemon and its end shot began
+    /// at Fresh Basil, so Pine Nuts, Olive Oil and Garlic were in no shot.
+    @MainActor
+    static func ingredientPlace(_ app: XCUIApplication) -> ListPlace {
+        let screen = app.frame
+        let covers = FadeQAChecks.covers(app) ?? []
+        let top = covers.filter { $0.frame.midY < screen.midY }.map(\.frame.maxY).max() ?? screen.minY
+        let bottom = covers.filter { $0.frame.midY >= screen.midY }.map(\.frame.minY).min() ?? screen.maxY
+        var place = ListPlace(shown: [], minY: [:])
+        for thumb in app.descendants(matching: .any).matching(identifier: QAMarkers.ingredientThumb)
+            .allElementsBoundByIndex
+        {
+            let frame = thumb.frame
+            guard !frame.isEmpty, screen.intersects(frame) else { continue }
+            place.minY[thumb.label] = frame.minY
+            if frame.minY >= top - 1 && frame.maxY <= bottom + 1 { place.shown.insert(thumb.label) }
+        }
+        return place
+    }
+
+    /// How far the list moved up from `a` to `b`: the middle of the moves of the thumbnails on both.
+    static func moved(from a: ListPlace, to b: ListPlace) -> CGFloat? {
+        let moves = a.minY.compactMap { name, y in b.minY[name].map { y - $0 } }.sorted()
+        return moves.isEmpty ? nil : moves[moves.count / 2]
+    }
+
+    /// The place on the way (an index into `onTheWay`) to keep as the middle shot: the one that
+    /// shows the most of `expected` the top and end shots don't, the nearer the list's middle on a
+    /// tie. Nil when none shows any. `missing` is what still shows in no shot with that middle.
+    static func middlePick(
+        top: Set<String>, end: Set<String>, onTheWay: [Set<String>], expected: [String]
+    ) -> (index: Int?, missing: [String]) {
+        let wanted = Set(expected.map { $0.lowercased() })
+        func lower(_ set: Set<String>) -> Set<String> { Set(set.map { $0.lowercased() }) }
+        let left = wanted.subtracting(lower(top)).subtracting(lower(end))
+        var best: (index: Int, gain: Int, distance: Double)?
+        let middle = Double(onTheWay.count - 1) / 2
+        for (i, shown) in onTheWay.enumerated() {
+            let gain = left.intersection(lower(shown)).count
+            let distance = abs(Double(i) - middle)
+            if gain > 0, best == nil || gain > best!.gain || (gain == best!.gain && distance < best!.distance) {
+                best = (i, gain, distance)
+            }
+        }
+        let covered = best.map { lower(onTheWay[$0.index]) } ?? []
+        let missing = expected.filter { left.contains($0.lowercased()) && !covered.contains($0.lowercased()) }
+        return (best?.index, missing)
+    }
+}
