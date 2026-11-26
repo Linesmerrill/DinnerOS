@@ -285,7 +285,9 @@ final class ScreensQATests: XCTestCase {
                         keep(between[index].shot, "Recipe page › \(kind) › Ingredients › \(name) (\(mode))")
                     }
                     if indexes.isEmpty {
-                        print("QA-SKIP: “Recipe page › \(kind) › Ingredients › middle” left out: the list moves only to its end")
+                        // The whole list shows already (the upright iPad): its middle is its end,
+                        // an allowed look-alike, so every config has the same set.
+                        keep(end, "Recipe page › \(kind) › Ingredients › middle (\(mode))")
                     }
                     let pick = picks
                     if !pick.missing.isEmpty {

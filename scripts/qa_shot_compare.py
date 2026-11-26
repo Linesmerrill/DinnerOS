@@ -54,6 +54,11 @@ ALLOWED_PAIRS = {
     "By Day with Saturday in view": frozenset({"menu-by-day", "menu-by-day-saturday"}),
     "Ingredients that fit on the screen": frozenset(
         {"recipe-page-typed-by-hand-ingredients", "recipe-page-typed-by-hand-ingredients-end"}),
+    # Where the whole list fits (the upright iPad), its middle is its end (Hark's qa/124 review).
+    "Ingredients that fit, middle and end": frozenset(
+        {"recipe-page-typed-by-hand-ingredients-middle", "recipe-page-typed-by-hand-ingredients-end"}),
+    "Ingredients that fit, top and middle": frozenset(
+        {"recipe-page-typed-by-hand-ingredients", "recipe-page-typed-by-hand-ingredients-middle"}),
     # Two searches, one result card each: on an iPad the rest of the Menu is the same.
     "Menu search, one card each": frozenset({"menu-search-typed-imported", "menu-search-typed-typed-by-hand"}),
     # A household without Plus differs only in its name, initials and Plus line.
