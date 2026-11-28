@@ -79,9 +79,11 @@ final class StoreScreenshotsQATests: XCTestCase {
                 XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15))
                 sleep(4)
                 // Nothing resting faded under the plan bar (Hark's store review, item 5).
-                lift(
-                    app.staticTexts["Swap the protein or double it."].firstMatch, in: app,
-                    to: app.buttons["Start Cooking"].firstMatch.frame.minY - 70)
+                // The first Customize choice whole, clear of the plan bar's fade (Hark's store
+                // review, round 3).
+                let choice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'boneless chicken thighs'"))
+                    .firstMatch
+                lift(choice, in: app, to: app.buttons["Start Cooking"].firstMatch.frame.minY - 64)
                 full(app, "05-recipe")
                 cook(app, prefix: "")
             } else {
@@ -103,13 +105,17 @@ final class StoreScreenshotsQATests: XCTestCase {
         full(app, "household-1-tab")
         open(app, "DinnerOS Plus", shot: "08-your-plus") {
             // No card sliced by the bottom edge (Hark's store review, item 8).
-            let card = app.staticTexts["DinnerOS Plus"].firstMatch
-            // The Plus card (about 20 points above its title) stays clear of the page's title.
+            // The page is taller than the Duo's cover screen, so the Plus card goes up under the
+            // title and the Free Months card shows whole (Hark's store review, round 3).
             let title = app.staticTexts["Your Plus"].firstMatch
-            let header = title.exists ? title.frame.maxY + 4 : 4
+            let header = title.exists ? title.frame.maxY + 4 : 60
+            let since = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Plus since'")).firstMatch
             self.settle(
                 app, above: app.frame.maxY, band: 4, top: header,
-                atMost: card.exists ? max(0, card.frame.minY - 20 - header) : 0)
+                atLeast: since.exists ? since.frame.maxY + 72 - header : 0, atMost: 900)
+            // The card's shadow reaches about six points past it.
+            MenuQAChecks.dragList(app, by: 17)
+            sleep(1)
             self.full(app, "08-your-plus-settled")
         }
         open(app, "Members", shot: "household-2-members")
@@ -285,10 +291,11 @@ final class StoreScreenshotsQATests: XCTestCase {
     /// finger, so each drag after the first adds what the last one fell short by.
     @MainActor
     private func settle(
-        _ app: XCUIApplication, above limit: CGFloat, band: CGFloat, top: CGFloat? = nil, atMost cap: CGFloat = 240
+        _ app: XCUIApplication, above limit: CGFloat, band: CGFloat, top: CGFloat? = nil, atLeast floor: CGFloat = 0,
+        atMost cap: CGFloat = 240
     ) {
         var movedSoFar: CGFloat = 0
-        var shortBy: CGFloat = 0
+        var shortBy: CGFloat = 10  // a drag loses about ten points before the content moves
         for attempt in 0..<4 {
             // A bar's own buttons at or under the limit stay put; leave them out.
             let frames = scrolledFrames(app, barTop: limit)
@@ -305,10 +312,10 @@ final class StoreScreenshotsQATests: XCTestCase {
                 print("QA-NOTE: settled after \(attempt) drags")
                 return
             }
-            let most: CGFloat = attempt == 0 ? 240 : 80
+            let most: CGFloat = attempt == 0 ? max(240, floor + 240) : 80
             // Up first; back down only once the content has moved.
             let tries = stride(from: CGFloat(2), through: most, by: 2).flatMap { attempt == 0 ? [$0] : [$0, -$0] }
-            guard let d = tries.first(where: { clear($0) && movedSoFar + $0 <= cap }) else {
+            guard let d = tries.first(where: { clear($0) && movedSoFar + $0 <= cap && movedSoFar + $0 >= floor }) else {
                 print("QA-NOTE: no clear place within \(Int(most)) points")
                 return
             }
