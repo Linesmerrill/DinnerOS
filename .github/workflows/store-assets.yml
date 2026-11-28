@@ -1,0 +1,60 @@
+name: Store assets
+
+# App Store marketing images (screenshots, product page header) for Hark to review before
+# anything goes into App Store Connect. They are never committed: the zip is attached to a
+# temporary draft release, this workflow publishes its contents as the named artifact, and
+# deletes the draft release. Same flow as qa-screenshots.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Artifact name, e.g. store-assets-duo-header"
+        required: true
+        type: string
+      release:
+        description: "Tag of the draft release holding the zip"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: store-assets-${{ inputs.name }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: Upload ${{ inputs.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE: ${{ inputs.release }}
+      NAME: ${{ inputs.name }}
+    steps:
+      - name: Check the inputs
+        run: |
+          [[ "$NAME" =~ ^store-assets-[a-z0-9-]+$ ]] || { echo "unexpected artifact name"; exit 1; }
+          [[ "$RELEASE" =~ ^store-assets-[0-9]+$ ]] || { echo "unexpected release tag"; exit 1; }
+
+      - name: Download the zip
+        run: |
+          gh release download "$RELEASE" --repo "$GITHUB_REPOSITORY" --pattern '*.zip' --dir zip
+          mkdir assets
+          unzip -q zip/*.zip -d assets
+          test -f assets/manifest.json
+          echo "PNGs: $(find assets -name '*.png' | wc -l)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.name }}
+          path: assets
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Delete the draft release
+        if: always()
+        run: gh release delete "$RELEASE" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
