@@ -36,6 +36,17 @@ final class StoreScreenshotsQATests: XCTestCase {
                 if add.waitForExistence(timeout: 30) {
                     sleep(4)
                     full(app, "03-autopilot")
+                    let times = app.descendants(matching: .any).matching(
+                        NSPredicate(format: "label CONTAINS ' min' OR label CONTAINS 'Unknown' OR label CONTAINS ' hr'")
+                    ).allElementsBoundByIndex.map {
+                        "\($0.elementType.rawValue):\($0.label)@\(Int($0.frame.minX)),\(Int($0.frame.minY)) w\(Int($0.frame.width))"
+                    }
+                    print("QA-NOTE: autopilot times: \(times)")
+                    // Each pick's cook time shows next to its clock, not the clock alone.
+                    let shown = app.staticTexts.matching(
+                        NSPredicate(format: "label MATCHES %@", "^[0-9]+ (min|hr)( [0-9]+ min)?$")
+                    ).allElementsBoundByIndex.filter { $0.frame.width > 24 }
+                    XCTAssertGreaterThanOrEqual(shown.count, 2, "Autopilot's picks show a clock with no time")
                     add.tap()
                     sleep(3)
                 } else {
@@ -53,6 +64,13 @@ final class StoreScreenshotsQATests: XCTestCase {
 
             app.buttons["Shop"].firstMatch.tap()
             sleep(5)
+            // No row cut or faded at the bottom edge, and the Walmart button kept whole under the
+            // week's header (Hark's store review).
+            let header = app.staticTexts["This Week"].firstMatch.frame.maxY + 6
+            let walmart = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Choose '")).firstMatch
+            settle(
+                app, above: app.frame.maxY, band: 30, top: header,
+                atMost: walmart.exists ? max(0, walmart.frame.minY - header) : 240)
             full(app, "04-shop")
 
             showMenu(app)
@@ -65,6 +83,14 @@ final class StoreScreenshotsQATests: XCTestCase {
                 card.tap()
                 XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15))
                 sleep(4)
+                // Nothing resting faded under the plan bar (Hark's store review, item 5).
+                // The end of the Customize list: every choice whole and nothing under the plan
+                // bar's fade (Hark's store review, round 4).
+                scrollToEnd(app)
+                let tabs = app.buttons["Customize"].firstMatch
+                settle(
+                    app, above: app.buttons["Start Cooking"].firstMatch.frame.minY, band: 64,
+                    top: tabs.exists ? tabs.frame.maxY + 6 : 120, atLeast: -400, downFirst: true)
                 full(app, "05-recipe")
                 cook(app, prefix: "")
             } else {
@@ -84,7 +110,35 @@ final class StoreScreenshotsQATests: XCTestCase {
         (household.waitForExistence(timeout: 5) ? household : app.buttons["Household"].firstMatch).tap()
         sleep(3)
         full(app, "household-1-tab")
-        open(app, "DinnerOS Plus", shot: "08-your-plus")
+        open(app, "DinnerOS Plus", shot: "08-your-plus") {
+            // No card sliced by the bottom edge (Hark's store review, item 8).
+            // The page is taller than the Duo's cover screen, so the Plus card goes up under the
+            // title and the Free Months card shows whole (Hark's store review, round 3).
+            let title = app.staticTexts["Your Plus"].firstMatch
+            let header = title.exists ? title.frame.maxY + 4 : 60
+            let since = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Plus since'")).firstMatch
+            self.settle(
+                app, above: app.frame.maxY, band: 4, top: header,
+                atLeast: since.exists ? since.frame.maxY + 72 - header : 0, atMost: 900)
+            // The card's shadow reaches about six points past it.
+            MenuQAChecks.dragList(app, by: 17)
+            sleep(1)
+            self.full(app, "08-your-plus-settled")
+            // The cover screen is too short for the whole page, so the stats' heading goes just
+            // off the top (the cards start at the edge) and the history shows under its heading
+            // (Hark's store review, round 4).
+            let heading = app.descendants(matching: .any).matching(
+                NSPredicate(format: "label ==[c] %@", "What Plus did for you")
+            ).firstMatch
+            for _ in 0..<3 where heading.exists {
+                let off = heading.frame.maxY + 3
+                if abs(off) <= 2 { break }
+                MenuQAChecks.dragList(app, by: off + (off > 0 ? 10 : -10))
+                sleep(1)
+            }
+            print("QA-NOTE: stats heading ends at \(heading.exists ? Int(heading.frame.maxY) : 999)")
+            self.full(app, "08-your-plus-history")
+        }
         open(app, "Members", shot: "household-2-members")
         open(app, "Give a Free Month", shot: "household-3-give-a-free-month") {
             let share = app.buttons["Share Your Code"].firstMatch
@@ -134,9 +188,15 @@ final class StoreScreenshotsQATests: XCTestCase {
         sleep(1)
         if app.buttons["Steps"].firstMatch.exists { app.buttons["Steps"].firstMatch.tap() }
         sleep(2)
+        // The end of the steps: no line cut by the bottom edge, and the timer floats over the
+        // room after the last step rather than a step's heading (Hark's store review, items 6-7).
+        if prefix.isEmpty { scrollToEnd(app) }
         full(app, prefix + "06-cook-steps")
-        // A step's time opens the timer.
-        let time = app.buttons.matching(NSPredicate(format: "label CONTAINS 'minutes'")).firstMatch
+        // A step's time opens the timer: one on screen.
+        let times = app.buttons.matching(NSPredicate(format: "label CONTAINS 'minute'")).allElementsBoundByIndex
+        let time =
+            times.last { $0.isHittable && $0.frame.maxY < app.frame.maxY - 40 }
+            ?? app.buttons.matching(NSPredicate(format: "label CONTAINS 'minutes'")).firstMatch
         if time.waitForExistence(timeout: 3) {
             time.tap()
             sleep(2)
@@ -226,6 +286,118 @@ final class StoreScreenshotsQATests: XCTestCase {
         if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn’t open after sign-in")
         return app
+    }
+
+    /// Text, images and buttons that scroll: the Duo's side bar and the status bar left out.
+    @MainActor
+    private func scrolledFrames(_ app: XCUIApplication, barTop: CGFloat? = nil) -> [CGRect] {
+        let screen = app.frame
+        var out: [CGRect] = []
+        for type in [XCUIElement.ElementType.staticText, .image, .button] {
+            for e in app.descendants(matching: type).allElementsBoundByIndex {
+                let f = e.frame
+                guard !f.isEmpty, f.height < screen.height * 0.6, f.midX < screen.width * 0.84, f.minY > 60 else {
+                    continue
+                }
+                if type == .button, let barTop, f.midY >= barTop { continue }
+                out.append(f)
+            }
+        }
+        return out
+    }
+
+    /// Moves the content by the least that leaves nothing resting in the `band` points above
+    /// `limit` or cut by it, and nothing cut by `top`: no line sliced by an edge and nothing
+    /// faded under a bar (Hark's store review). A drag moves the content a little less than the
+    /// finger, so each drag after the first adds what the last one fell short by.
+    @MainActor
+    private func settle(
+        _ app: XCUIApplication, above limit: CGFloat, band: CGFloat, top: CGFloat? = nil, atLeast floor: CGFloat = 0,
+        downFirst: Bool = false,
+        atMost cap: CGFloat = 240
+    ) {
+        var movedSoFar: CGFloat = 0
+        var shortBy: CGFloat = 10  // a drag loses about ten points before the content moves
+        for attempt in 0..<4 {
+            // A bar's own buttons at or under the limit stay put; leave them out.
+            let frames = scrolledFrames(app, barTop: limit)
+            func clear(_ d: CGFloat) -> Bool {
+                !frames.contains { f in
+                    let minY = f.minY - d
+                    let maxY = f.maxY - d
+                    if maxY > limit - band && minY < limit { return true }
+                    if let top, minY < top && maxY > top { return true }
+                    return false
+                }
+            }
+            if clear(0) {
+                print("QA-NOTE: settled after \(attempt) drags")
+                return
+            }
+            let most: CGFloat = attempt == 0 ? max(240, floor + 240) : 80
+            // Up first; back down only once the content has moved.
+            let tries = stride(from: CGFloat(2), through: most, by: 2).flatMap {
+                downFirst ? [-$0] : attempt == 0 ? [$0] : [$0, -$0]
+            }
+            guard let d = tries.first(where: { clear($0) && movedSoFar + $0 <= cap && movedSoFar + $0 >= floor }) else {
+                print("QA-NOTE: no clear place within \(Int(most)) points")
+                return
+            }
+            let before = textTops(app)
+            let finger = d + (d >= 0 ? shortBy : -shortBy)
+            MenuQAChecks.dragList(app, by: finger)
+            sleep(1)
+            if let moved = medianMove(from: before, to: textTops(app)) {
+                shortBy = max(0, abs(finger) - abs(moved))
+                movedSoFar += moved
+                print("QA-NOTE: settle wanted \(Int(d)), dragged \(Int(finger)), moved \(Int(moved))")
+            }
+        }
+        print("QA-NOTE: not settled after 4 drags")
+    }
+
+    /// Moves the content up so `element` ends at `y`, clear of the bar's fade below it: one drag,
+    /// plus the ten or so points a drag loses before the content starts to move.
+    @MainActor
+    private func lift(_ element: XCUIElement, in app: XCUIApplication, to y: CGFloat) {
+        guard element.exists else { return }
+        let need = element.frame.maxY - y
+        guard need > 2, need < 200 else {
+            print("QA-NOTE: lift skipped, needs \(Int(need))")
+            return
+        }
+        MenuQAChecks.dragList(app, by: need + 10)
+        sleep(1)
+        print("QA-NOTE: lift wanted \(Int(need)), now \(Int(element.frame.maxY - y)) over")
+    }
+
+    /// Where each text with a label of its own starts.
+    @MainActor
+    private func textTops(_ app: XCUIApplication) -> [String: CGFloat] {
+        var tops: [String: CGFloat] = [:]
+        var twice: Set<String> = []
+        for e in app.staticTexts.allElementsBoundByIndex where !e.label.isEmpty {
+            if tops[e.label] != nil { twice.insert(e.label) } else { tops[e.label] = e.frame.minY }
+        }
+        for label in twice { tops[label] = nil }
+        return tops
+    }
+
+    /// How far the content moved up between two readings, by its texts' middle move.
+    private func medianMove(from a: [String: CGFloat], to b: [String: CGFloat]) -> CGFloat? {
+        let moves = a.compactMap { label, y in b[label].map { y - $0 } }.sorted()
+        return moves.isEmpty ? nil : moves[moves.count / 2]
+    }
+
+    /// Scrolls to the end: until a swipe moves nothing.
+    @MainActor
+    private func scrollToEnd(_ app: XCUIApplication) {
+        for _ in 0..<12 {
+            let before = scrolledFrames(app).map(\.minY)
+            app.swipeUp(velocity: .fast)
+            sleep(1)
+            if scrolledFrames(app).map(\.minY) == before { return }
+        }
     }
 
     @MainActor

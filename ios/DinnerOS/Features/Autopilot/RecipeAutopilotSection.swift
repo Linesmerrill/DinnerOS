@@ -29,6 +29,9 @@ struct RecipeAutopilotSection: View {
             if let attributes {
                 HStack(spacing: DS.Space.s) {
                     Label(AutopilotFormat.cookTime(attributes.cookMinutes), systemImage: "clock")
+                        // Its title shows even where the sheet would draw labels as icons only (Hark's
+                        // store screenshot review: the clock had no time next to it).
+                        .labelStyle(.titleAndIcon)
                     TimeBandBadge(band: attributes.timeBand)
                 }
                 .foregroundStyle(.secondary)

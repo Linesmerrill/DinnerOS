@@ -324,6 +324,9 @@ struct ProposalSlotRow: View {
     private var facts: some View {
         // Short facts keep their natural width; otherwise "20 min" wraps onto two lines.
         Label(AutopilotFormat.cookTime(slot.cookMinutes), systemImage: "clock")
+            // Its title shows even where the sheet would draw labels as icons only (Hark's
+            // store screenshot review: the clock had no time next to it).
+            .labelStyle(.titleAndIcon)
             .font(.caption)
             .foregroundStyle(Color.secondary)
             .lineLimit(1)
