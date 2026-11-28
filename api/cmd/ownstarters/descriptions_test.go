@@ -21,7 +21,7 @@ const porkSausageMealKit = "Are you the type of person who only goes to baseball
 
 func loadAllDescriptions(t *testing.T) []Description {
 	t.Helper()
-	files, err := filepath.Glob("descriptions/*.json")
+	files, err := filepath.Glob("../../internal/starterdescs/*.json")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no description files: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestStarterDescriptionsArePlain(t *testing.T) {
 			seenSentence[k] = d.Name
 		}
 	}
-	for _, f := range []string{"descriptions/build-122.json"} {
+	for _, f := range []string{"../../internal/starterdescs/build-122.json"} {
 		if _, err := loadDescriptions(f); err != nil {
 			t.Errorf("loadDescriptions(%s): %v", f, err)
 		}

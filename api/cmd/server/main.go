@@ -51,6 +51,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
+	"github.com/Linesmerrill/DinnerOS/api/migrations"
 )
 
 const (
@@ -147,6 +148,16 @@ func run() error {
 	}
 	cancelStartup()
 	logger.Info("mongodb connected", "database", cfg.MongoDatabase)
+	// One-time data changes (migrations/), recorded in schema_migrations so
+	// each runs once. In the background so the dyno binds its port in time;
+	// a failure is logged and tried again on the next start.
+	go func() {
+		mctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
+		defer cancel()
+		if err := migrations.Run(mctx, db.Database(), migrations.All(cfg.StarterRecipesHouseholdID, time.Now), logger, time.Now); err != nil {
+			logger.Error("migrations stopped", "error", err)
+		}
+	}()
 
 	userService := users.NewService(users.NewMongoStore(db.Database()))
 	tokens, err := auth.NewTokenService(auth.NewMongoSessionStore(db.Database()), auth.TokenOptions{

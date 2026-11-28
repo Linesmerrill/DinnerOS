@@ -16,5 +16,11 @@ Rules:
 2. Never delete user data in a migration without an explicit, reviewed plan.
 3. Migrations must not contain personal data or credentials.
 
-The runner is introduced with the first migration that needs it (Phase 1 sets up
-index management).
+`runner.go` runs them in the background when the API starts (`cmd/server`). Each
+is claimed in `schema_migrations` (`running`, then `done` or `failed`); a failed
+or stalled one runs again on the next start, and a done one never does. Each
+logs one line: `migration <id> done: ...`.
+
+| id | what |
+|---|---|
+| `starter-descriptions-768` | Starter descriptions in DinnerOS's own words (decision 768), after copying `recipes` and `recipe_catalog` into dated backup collections. |
