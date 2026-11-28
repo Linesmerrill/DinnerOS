@@ -167,6 +167,27 @@ func TestUnquantifiedLinesAreKeptWithoutInventingAmounts(t *testing.T) {
 	}
 }
 
+// A number typed with no unit is a count, so the row shows it: "4 salmon fillets" and
+// "1 lemon" showed no amount on the Shop list (Hark's store screenshot review). A line
+// with no number stays unquantified.
+func TestANumberWithNoUnitIsACount(t *testing.T) {
+	l := mustAggregate(t, []RecipeSelection{
+		{RecipeID: "a", RecipeServings: 4, TargetServings: 4, Lines: []Line{
+			line("salmon", "salmon fillets", "seafood", q(4, 1), ""),
+			line("lemon", "lemon", "produce", q(1, 1), ""),
+		}},
+		{RecipeID: "b", RecipeServings: 4, TargetServings: 2, Lines: []Line{
+			line("lemon", "lemon", "produce", q(2, 1), "count"),
+			line("pepper", "black pepper", "spices", nil, ""),
+		}},
+	}, nil)
+	for key, want := range map[string]string{"salmon": "4 count", "lemon": "2 count", "pepper": "to taste"} {
+		if got := amountString(find(t, l, key)); got != want {
+			t.Errorf("%s = %s, want %s", key, got, want)
+		}
+	}
+}
+
 func TestPantryStatus(t *testing.T) {
 	hinted := line("salt", "Salt", "spices", nil, "")
 	hinted.PantryStaple = true

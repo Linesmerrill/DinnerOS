@@ -627,14 +627,20 @@ func accumulate(acc map[string]*accumulator, accKey, key string, line Line, line
 		shares = append(shares, sh)
 	}
 
-	if line.Quantity == nil || line.Quantity.IsZero() || line.UnitCode == "" {
+	unitCode := line.UnitCode
+	// A number with no unit is a count: "4 salmon fillets" or "1 lemon" as typed by hand
+	// (Hark's store screenshot review: those rows showed no amount).
+	if unitCode == "" && line.Quantity != nil && !line.Quantity.IsZero() {
+		unitCode = "count"
+	}
+	if line.Quantity == nil || line.Quantity.IsZero() || unitCode == "" {
 		a.unquantified = true
 		for _, sh := range shares {
 			sh.unquantified = true
 		}
 		return nil
 	}
-	unit, err := ingredients.LookupUnit(line.UnitCode)
+	unit, err := ingredients.LookupUnit(unitCode)
 	if err != nil {
 		return fmt.Errorf("%w: recipe %q ingredient %q: %w", ErrInvalidSelection, sel.RecipeID, line.Name, err)
 	}

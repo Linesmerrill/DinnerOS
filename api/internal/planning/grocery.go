@@ -210,8 +210,14 @@ func groceryLines(r recipes.Recipe, servings int) []grocery.Line {
 				continue
 			}
 			if q, ok := a.ExactQuantity(); ok && !q.IsZero() {
-				if _, err := ingredients.LookupUnit(a.Unit); err == nil {
-					line.Quantity, line.UnitCode = &q, a.Unit
+				unit := a.Unit
+				// A number with no unit is a count: "4 salmon fillets" typed by hand, which
+				// showed no amount on the Shop list (Hark's store screenshot review).
+				if unit == "" {
+					unit = "count"
+				}
+				if _, err := ingredients.LookupUnit(unit); err == nil {
+					line.Quantity, line.UnitCode = &q, unit
 				}
 			}
 			break

@@ -174,6 +174,36 @@ func TestGroceryLinesWithoutUsableAmounts(t *testing.T) {
 	}
 }
 
+// A number typed with no unit is a count: "4 salmon fillets" and "1 lemon" showed no amount
+// on the Shop list (Hark's store screenshot review).
+func TestGroceryLinesCountANumberWithNoUnit(t *testing.T) {
+	r := recipes.Recipe{
+		ID: recipeTacos, Name: "Salmon", Servings: []int{4},
+		Ingredients: []recipes.RecipeIngredient{
+			ingredientLine(ingChicken, "salmon fillets", "meat-seafood", false, amt(4, "4", "")),
+			ingredientLine(ingOnion, "lemon", "produce", false, amt(4, "1", "")),
+		},
+	}
+	lines := groceryLines(r, 4)
+	for i, want := range []string{"4", "1"} {
+		if l := lines[i]; l.Quantity == nil || l.Quantity.String() != want || l.UnitCode != "count" {
+			t.Errorf("%s = %v %q, want %s count", l.Name, l.Quantity, l.UnitCode, want)
+		}
+	}
+	g, err := grocery.Aggregate([]grocery.RecipeSelection{{RecipeID: r.ID, RecipeName: r.Name, RecipeServings: 4, TargetServings: 4, Lines: lines}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range g.Items {
+		if it.Unquantified || len(it.Amounts) != 1 {
+			t.Errorf("%s = %+v, want one amount", it.Name, it.Amounts)
+		}
+		if got := newGroceryItemResponse(it).QuantityText; got != "4" && got != "1" {
+			t.Errorf("%s shows %q", it.Name, got)
+		}
+	}
+}
+
 // A line's note ("minced") is how to prepare it, not what to buy, so the
 // grocery item is the name alone and garlic from two recipes stays one item.
 func TestGroceryLinesLeaveTheNoteOut(t *testing.T) {
