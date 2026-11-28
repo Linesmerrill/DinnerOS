@@ -79,13 +79,17 @@ final class StoreScreenshotsQATests: XCTestCase {
                 XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15))
                 sleep(4)
                 // Nothing resting faded under the plan bar (Hark's store review, item 5).
-                // The end of the Customize list: every choice whole and nothing under the plan
-                // bar's fade (Hark's store review, round 4).
-                scrollToEnd(app)
-                let tabs = app.buttons["Customize"].firstMatch
-                settle(
-                    app, above: app.buttons["Start Cooking"].firstMatch.frame.minY, band: 64,
-                    top: tabs.exists ? tabs.frame.maxY + 6 : 120, atLeast: -400, downFirst: true)
+                // The Description tab: the page fits above the plan bar, so nothing is cut (Hark's
+                // store review, round 5).
+                let description = app.buttons["Description"].firstMatch
+                if description.exists {
+                    description.tap()
+                    sleep(2)
+                }
+                let words = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Chicken thighs marinated'"))
+                    .firstMatch
+                // Just clear of the bar's 40-point fade, with the next heading still under the bar.
+                lift(words, in: app, to: app.buttons["Start Cooking"].firstMatch.frame.minY - 46)
                 full(app, "05-recipe")
                 cook(app, prefix: "")
             } else {
@@ -116,22 +120,31 @@ final class StoreScreenshotsQATests: XCTestCase {
                 app, above: app.frame.maxY, band: 4, top: header,
                 atLeast: since.exists ? since.frame.maxY + 72 - header : 0, atMost: 900)
             // The card's shadow reaches about six points past it.
-            MenuQAChecks.dragList(app, by: 17)
+            MenuQAChecks.dragList(app, by: 12)
             sleep(1)
             self.full(app, "08-your-plus-settled")
             // The cover screen is too short for the whole page, so the stats' heading goes just
             // off the top (the cards start at the edge) and the history shows under its heading
             // (Hark's store review, round 4).
-            let heading = app.descendants(matching: .any).matching(
-                NSPredicate(format: "label ==[c] %@", "What Plus did for you")
-            ).firstMatch
-            for _ in 0..<3 where heading.exists {
-                let off = heading.frame.maxY + 3
-                if abs(off) <= 2 { break }
-                MenuQAChecks.dragList(app, by: off + (off > 0 ? 10 : -10))
+            let tile = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'meals planned'"))
+                .allElementsBoundByIndex.first { $0.frame.height > 60 }
+            // The last move is upward: moving down brings the page's floating title back.
+            if let tile, tile.frame.minY < 4 {
+                MenuQAChecks.dragList(app, by: tile.frame.minY - 4 - 40)
                 sleep(1)
             }
-            print("QA-NOTE: stats heading ends at \(heading.exists ? Int(heading.frame.maxY) : 999)")
+            for _ in 0..<4 {
+                guard let tile else { break }
+                let off = tile.frame.minY - 4
+                if off <= 2 { break }
+                MenuQAChecks.dragList(app, by: off + 10)
+                sleep(1)
+            }
+            let trial = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Trial started'"))
+                .allElementsBoundByIndex.first { $0.frame.height > 40 }
+            print(
+                "QA-NOTE: stats card top \(tile.map { Int($0.frame.minY) } ?? 999), "
+                    + "history row bottom \(trial.map { Int($0.frame.maxY) } ?? 999)")
             self.full(app, "08-your-plus-history")
         }
         open(app, "Members", shot: "household-2-members")
