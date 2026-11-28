@@ -79,11 +79,13 @@ final class StoreScreenshotsQATests: XCTestCase {
                 XCTAssertTrue(app.buttons["Start Cooking"].firstMatch.waitForExistence(timeout: 15))
                 sleep(4)
                 // Nothing resting faded under the plan bar (Hark's store review, item 5).
-                // The first Customize choice whole, clear of the plan bar's fade (Hark's store
-                // review, round 3).
-                let choice = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'boneless chicken thighs'"))
-                    .firstMatch
-                lift(choice, in: app, to: app.buttons["Start Cooking"].firstMatch.frame.minY - 64)
+                // The end of the Customize list: every choice whole and nothing under the plan
+                // bar's fade (Hark's store review, round 4).
+                scrollToEnd(app)
+                let tabs = app.buttons["Customize"].firstMatch
+                settle(
+                    app, above: app.buttons["Start Cooking"].firstMatch.frame.minY, band: 64,
+                    top: tabs.exists ? tabs.frame.maxY + 6 : 120, atLeast: -400, downFirst: true)
                 full(app, "05-recipe")
                 cook(app, prefix: "")
             } else {
@@ -117,6 +119,20 @@ final class StoreScreenshotsQATests: XCTestCase {
             MenuQAChecks.dragList(app, by: 17)
             sleep(1)
             self.full(app, "08-your-plus-settled")
+            // The cover screen is too short for the whole page, so the stats' heading goes just
+            // off the top (the cards start at the edge) and the history shows under its heading
+            // (Hark's store review, round 4).
+            let heading = app.descendants(matching: .any).matching(
+                NSPredicate(format: "label ==[c] %@", "What Plus did for you")
+            ).firstMatch
+            for _ in 0..<3 where heading.exists {
+                let off = heading.frame.maxY + 3
+                if abs(off) <= 2 { break }
+                MenuQAChecks.dragList(app, by: off + (off > 0 ? 10 : -10))
+                sleep(1)
+            }
+            print("QA-NOTE: stats heading ends at \(heading.exists ? Int(heading.frame.maxY) : 999)")
+            self.full(app, "08-your-plus-history")
         }
         open(app, "Members", shot: "household-2-members")
         open(app, "Give a Free Month", shot: "household-3-give-a-free-month") {
@@ -292,6 +308,7 @@ final class StoreScreenshotsQATests: XCTestCase {
     @MainActor
     private func settle(
         _ app: XCUIApplication, above limit: CGFloat, band: CGFloat, top: CGFloat? = nil, atLeast floor: CGFloat = 0,
+        downFirst: Bool = false,
         atMost cap: CGFloat = 240
     ) {
         var movedSoFar: CGFloat = 0
@@ -314,7 +331,9 @@ final class StoreScreenshotsQATests: XCTestCase {
             }
             let most: CGFloat = attempt == 0 ? max(240, floor + 240) : 80
             // Up first; back down only once the content has moved.
-            let tries = stride(from: CGFloat(2), through: most, by: 2).flatMap { attempt == 0 ? [$0] : [$0, -$0] }
+            let tries = stride(from: CGFloat(2), through: most, by: 2).flatMap {
+                downFirst ? [-$0] : attempt == 0 ? [$0] : [$0, -$0]
+            }
             guard let d = tries.first(where: { clear($0) && movedSoFar + $0 <= cap && movedSoFar + $0 >= floor }) else {
                 print("QA-NOTE: no clear place within \(Int(most)) points")
                 return
